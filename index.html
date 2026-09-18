@@ -3752,6 +3752,17 @@ const RSVP_BASE_URL = 'https://ritamatosdoliveira-creator.github.io/weddy-premiu
 let rsvpResponses = {};
 let rsvpResponsesLoaded = false;
 let rsvpLoadingResponses = false;
+let lastRSVPSyncSummary = null;
+function normName(s){ return (s||'').toString().trim().toLowerCase(); }
+// Duas idades "combinam" se forem iguais, ou se pelo menos uma delas ainda
+// não estiver preenchida (não obriga a idade a bater certo se uma das
+// partes ainda não a escreveu em lado nenhum).
+function agesCompatible(a,b){
+  const na = (a===undefined||a===null||a==='') ? null : Number(a);
+  const nb = (b===undefined||b===null||b==='') ? null : Number(b);
+  if(na===null || nb===null) return true;
+  return na===nb;
+}
 function generateRSVPToken(){
   return 'r'+Date.now().toString(36)+Math.random().toString(36).slice(2,10);
 }
@@ -3815,12 +3826,129 @@ function loadRSVPResponses(){
     rsvpResponses = next;
     rsvpResponsesLoaded = true;
     rsvpLoadingResponses = false;
+    applyRSVPResponsesToState();
     render();
   }).catch(err=>{
     console.error('Weddy RSVP load error:', err.code, err.message);
     rsvpLoadingResponses = false;
     render();
   });
+}
+// A posição (idx) de um convidado pode mudar depois de outras listas serem
+// alteradas nesta mesma sincronização (ex: crianças a serem acrescentadas
+// ou removidas da mesma categoria) — por isso nunca se guarda um idx, vai-se
+// sempre buscar a posição atual pela referência do próprio objeto.
+function liveGuestKeyFor(side, catId, entry){
+  const arr = getGuestNames(side, catId) || [];
+  const idx = arr.indexOf(entry);
+  return idx>=0 ? guestKey(side, catId, idx) : null;
+}
+// Aplica as respostas de RSVP já recebidas (rsvpResponses) ao estado local:
+// 1) Sim/Não do convidado principal atualiza a marca de "confirmado" que já
+//    existia na página de Convidados, e — se responder "Não" e já tivesse
+//    lugar atribuído numa mesa — liberta esse lugar.
+// 2) As crianças que a pessoa declarar no link (nome + idade + se vão) são
+//    refletidas na categoria "Crianças" do mesmo lado, para contarem nos
+//    números de convidados e poderem ser sentadas às mesas como qualquer
+//    outra pessoa; se deixarem de vir, são removidas dali (libertando
+//    também o lugar que tivessem, se já estivesse atribuído).
+function applyRSVPResponsesToState(){
+  const guests = flattenAllGuestsForRSVP();
+  let changed = false;
+  const summary = { confirmedChanged:0, seatsFreed:0, childrenAdded:0, childrenLinked:0, childrenUnlinked:0 };
+
+  guests.forEach(item=>{
+    const token = item.entry.rsvpToken;
+    if(!token) return;
+    const resp = rsvpResponses[token];
+    if(!resp) return;
+
+    if(resp.attending===true || resp.attending===false){
+      const gk = liveGuestKeyFor(item.side, item.catId, item.entry);
+      if(gk){
+        const wasConfirmed = !!state.confirmed[gk];
+        const nowConfirmed = resp.attending===true;
+        if(wasConfirmed !== nowConfirmed){
+          if(nowConfirmed) state.confirmed[gk] = true; else delete state.confirmed[gk];
+          changed = true;
+          summary.confirmedChanged++;
+        }
+        if(resp.attending===false){
+          const seatKey = findGuestSeatKey(gk, null);
+          if(seatKey){ delete state.seating.assignments[seatKey]; changed = true; summary.seatsFreed++; }
+        }
+      }
+    }
+
+    // Crianças declaradas neste convite específico (identificadas por
+    // "token#índice-na-resposta"). Isto é o ponto delicado: a criança já
+    // pode ter sido acrescentada à mão antes do convite ser enviado — por
+    // isso NUNCA se cria uma linha nova sem antes tentar "adotar" uma já
+    // existente (ainda sem RSVP ligado) cujo nome e idade façam match. Só
+    // quando não há nenhum match é que se cria mesmo uma linha nova.
+    const side = item.side;
+    if(!state.guests[side].custom) state.guests[side].custom = [];
+    let criancasCat = state.guests[side].custom.find(c=>c.id==='criancas');
+    if(!criancasCat){ criancasCat = { id:'criancas', label:'Crianças', names:[] }; state.guests[side].custom.push(criancasCat); }
+
+    const declared = Array.isArray(resp.children) ? resp.children : [];
+    const stillWanted = declared
+      .map((c,i)=>({ name:c.name, age:c.age, attending:c.attending, ref: token+'#'+i }))
+      .filter(c=>c.attending!==false);
+    const wantedRefs = new Set(stillWanted.map(c=>c.ref));
+
+    // 1) Uma criança já ligada a este convite que deixou de constar da
+    //    resposta atual: se a linha tiver sido criada por nós (rsvpCreated),
+    //    remove-se mesmo (e liberta o lugar, se tivesse). Se era uma criança
+    //    que já existia antes de qualquer RSVP (só foi "adotada"), NUNCA se
+    //    apaga — só se desliga do convite, voltando a ser uma entrada normal.
+    for(let idx=criancasCat.names.length-1; idx>=0; idx--){
+      const n = criancasCat.names[idx];
+      if(n && n.rsvpChildOf && n.rsvpChildOf.indexOf(token+'#')===0 && !wantedRefs.has(n.rsvpChildOf)){
+        if(n.rsvpCreated){
+          const gk2 = guestKey(side,'criancas',idx);
+          const seatKey2 = findGuestSeatKey(gk2, null);
+          if(seatKey2) delete state.seating.assignments[seatKey2];
+          criancasCat.names.splice(idx,1);
+        } else {
+          delete n.rsvpChildOf;
+          delete n.rsvpCreated;
+        }
+        changed = true;
+        summary.childrenUnlinked++;
+      }
+    }
+
+    // 2) Para cada criança ainda desejada nesta resposta.
+    stillWanted.forEach(c=>{
+      const existing = criancasCat.names.find(n=>n && n.rsvpChildOf===c.ref);
+      if(existing){
+        if(existing.name!==c.name || existing.age!==c.age){ existing.name=c.name; existing.age=c.age; changed=true; }
+        return;
+      }
+      // Tenta adotar uma criança já existente (sem ligação a nenhum RSVP)
+      // com o mesmo nome e idade compatível — evita duplicar quem o casal
+      // já tinha posto na lista antes de mandar o convite.
+      const candidate = criancasCat.names.find(n =>
+        n && !n.rsvpChildOf && normName(n.name)===normName(c.name) && agesCompatible(n.age, c.age)
+      );
+      if(candidate){
+        candidate.rsvpChildOf = c.ref;
+        if((candidate.age===undefined || candidate.age==='') && c.age!==undefined && c.age!==null && c.age!==''){
+          candidate.age = c.age;
+        }
+        changed = true;
+        summary.childrenLinked++;
+      } else {
+        criancasCat.names.push({ id:generateGuestId(), name:c.name||'Criança', age:(c.age===undefined||c.age===null)?'':c.age, payingPct:0, rsvpChildOf:c.ref, rsvpCreated:true });
+        changed = true;
+        summary.childrenAdded++;
+      }
+    });
+  });
+
+  lastRSVPSyncSummary = summary;
+  return changed;
 }
 
 /* --- Assistente Weddy (simulado — sem chave de API configurada) --- */
@@ -3862,6 +3990,18 @@ function viewDefPremiumLocked(title){
   `;
 }
 
+// Resume, em português simples, o que a última sincronização de respostas
+// mudou — para não ser preciso confiar às cegas que os números e as mesas
+// ficaram mesmo atualizados.
+function rsvpSyncSummaryText(s){
+  const partes = [];
+  if(s.confirmedChanged) partes.push(`${s.confirmedChanged} confirmaç${s.confirmedChanged===1?'ão':'ões'} atualizada${s.confirmedChanged===1?'':'s'}`);
+  if(s.seatsFreed) partes.push(`${s.seatsFreed} lugar${s.seatsFreed===1?'':'es'} libertado${s.seatsFreed===1?'':'s'} nas mesas`);
+  if(s.childrenAdded) partes.push(`${s.childrenAdded} criança${s.childrenAdded===1?'':'s'} nova${s.childrenAdded===1?'':'s'} em "Crianças"`);
+  if(s.childrenLinked) partes.push(`${s.childrenLinked} criança${s.childrenLinked===1?'':'s'} já existente${s.childrenLinked===1?'':'s'} associada${s.childrenLinked===1?'':'s'} ao RSVP`);
+  if(s.childrenUnlinked) partes.push(`${s.childrenUnlinked} criança${s.childrenUnlinked===1?'':'s'} desassociada${s.childrenUnlinked===1?'':'s'} do RSVP`);
+  return partes.length ? `Última atualização: ${partes.join(', ')}.` : 'Última atualização: sem alterações novas.';
+}
 function viewDefRSVP(){
   if(!hasActiveSubscription()) return viewDefPremiumLocked('Convites RSVP');
   if(!rsvpResponsesLoaded && !rsvpLoadingResponses) loadRSVPResponses();
@@ -3887,6 +4027,10 @@ function viewDefRSVP(){
     } else {
       actionsHtml = `<button class="visit-action-btn" style="flex:1;" data-rsvpgerar="${item.side}|${item.catId}|${item.idx}">${ICONS.mail} Gerar link</button>`;
     }
+    const declaredChildren = (resp && Array.isArray(resp.children)) ? resp.children : [];
+    const childrenHtml = declaredChildren.length
+      ? `<div class="visit-detail">Crianças: ${declaredChildren.map(c=>`${escapeHTML(c.name||'?')}${c.age!==undefined&&c.age!==null&&c.age!==''?' ('+escapeHTML(String(c.age))+' anos)':''}${c.attending===false?' — não vai':''}`).join(', ')}</div>`
+      : '';
     return `
     <div class="list-row" style="flex-direction:column; align-items:stretch; gap:8px;">
       <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
@@ -3894,6 +4038,7 @@ function viewDefRSVP(){
         ${statusHtml}
       </div>
       <div class="visit-detail">${item.side==='noiva'?'Noiva':'Noivo'} · ${escapeHTML(item.catLabel)}</div>
+      ${childrenHtml}
       <div style="display:flex; gap:8px;">${actionsHtml}</div>
     </div>`;
   }).join('');
@@ -3908,8 +4053,10 @@ function viewDefRSVP(){
     <span>Convidados</span>
     <button class="visit-action-btn" id="rsvp-refresh-respostas" style="width:auto; padding:6px 12px;">${rsvpLoadingResponses? 'A atualizar…' : 'Atualizar respostas'}</button>
   </div>
+  ${lastRSVPSyncSummary ? `<div class="empty-note" style="margin:0 16px 10px; font-style:normal;">${rsvpSyncSummaryText(lastRSVPSyncSummary)}</div>` : ''}
   ${guests.length? `<div class="list-group" style="margin-bottom:16px;">${rows}</div>` : `<div class="empty-note" style="margin:0 16px 24px;">Ainda não tens convidados guardados em "Convidados".</div>`}
-  <div class="empty-note" style="margin:0 16px 28px;">Cada link é só desse convidado — nunca mostra a lista toda nem o orçamento do casamento.</div>
+  <div class="empty-note" style="margin:0 16px 6px;">Cada link é só desse convidado — nunca mostra a lista toda nem o orçamento do casamento.</div>
+  <div class="empty-note" style="margin:0 16px 28px;">Quando alguém responde "Não vou", o lugar à mesa (se já estivesse atribuído) fica automaticamente livre. As crianças que a pessoa declarar no link aparecem em "Convidados → Crianças", já contadas e prontas a sentar às mesas.</div>
   `;
 }
 

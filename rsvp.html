@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Confirma a tua presença</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --cream:#FAF8F5; --card:#FFFDFC; --ink:#302C29; --ink-soft:#8E8780;
+  --rust:#B96752; --rust-dark:#9A4F3D; --sage:#7C8A6E; --sage-dark:#5F7355;
+  --line:rgba(48,44,41,0.09); --shadow:0 2px 12px rgba(48,44,41,0.055), 0 1px 2px rgba(48,44,41,0.04);
+}
+*{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+body{ margin:0; min-height:100vh; background:var(--cream); font-family:'Manrope',sans-serif; color:var(--ink); display:flex; align-items:center; justify-content:center; padding:24px; }
+.card{ width:100%; max-width:420px; background:var(--card); border-radius:26px; box-shadow:var(--shadow); padding:36px 26px; text-align:center; }
+.eyebrow{ font-size:11.5px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:var(--rust); margin-bottom:8px; }
+h1{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:30px; color:var(--rust-dark); margin:0 0 6px; }
+.sub{ font-size:13px; color:var(--ink-soft); margin-bottom:26px; }
+.guest-name{ font-family:'Cormorant Garamond',serif; font-size:24px; font-weight:600; color:var(--ink); margin-bottom:26px; }
+.question{ font-size:14.5px; font-weight:600; margin-bottom:12px; text-align:left; }
+.seg{ display:flex; gap:10px; margin-bottom:22px; }
+.seg button{ all:unset; box-sizing:border-box; flex:1; text-align:center; padding:13px 0; border-radius:14px; border:1.6px solid var(--line); font-size:14px; font-weight:600; color:var(--ink); cursor:pointer; }
+.seg button.active{ background:var(--rust); border-color:var(--rust); color:#fff; }
+.field{ text-align:left; margin-bottom:18px; }
+.field label{ display:block; font-size:12px; color:var(--ink-soft); margin-bottom:6px; font-weight:600; }
+.field select, .field textarea, .field input{ width:100%; border:1.6px solid var(--line); background:#fff; border-radius:12px; padding:11px 12px; font-size:14.5px; color:var(--ink); font-family:inherit; outline:none; }
+.field textarea{ resize:vertical; min-height:70px; }
+.extra-fields{ display:none; }
+.extra-fields.show{ display:block; }
+.btn-send{ all:unset; box-sizing:border-box; display:block; width:100%; text-align:center; padding:15px 0; border-radius:16px; background:var(--rust); color:#fff; font-size:15px; font-weight:700; cursor:pointer; margin-top:6px; }
+.btn-send:active{ opacity:.85; }
+.btn-send:disabled{ opacity:.5; }
+.msg{ font-size:13px; margin-top:12px; min-height:18px; }
+.msg.error{ color:var(--rust-dark); }
+.msg.success{ color:var(--sage-dark); }
+.children-block{ text-align:left; margin-bottom:20px; }
+.children-block > label{ display:block; font-size:12px; color:var(--ink-soft); margin-bottom:10px; font-weight:600; }
+.child-row{ display:flex; gap:8px; align-items:flex-start; margin-bottom:10px; }
+.child-row .child-name{ flex:1.4; }
+.child-row .child-age{ flex:0.7; }
+.child-row input{ width:100%; border:1.6px solid var(--line); background:#fff; border-radius:12px; padding:10px 11px; font-size:13.5px; color:var(--ink); font-family:inherit; outline:none; }
+.child-seg{ display:flex; gap:5px; flex:1; }
+.child-seg button{ all:unset; box-sizing:border-box; flex:1; text-align:center; padding:10px 0; border-radius:10px; border:1.6px solid var(--line); font-size:12px; font-weight:600; color:var(--ink); cursor:pointer; }
+.child-seg button.active{ background:var(--sage); border-color:var(--sage); color:#fff; }
+.child-remove{ all:unset; box-sizing:border-box; width:34px; height:34px; flex-shrink:0; display:flex; align-items:center; justify-content:center; border-radius:10px; background:rgba(154,79,61,0.1); color:var(--rust-dark); cursor:pointer; font-size:16px; margin-top:1px; }
+.add-child-btn{ all:unset; box-sizing:border-box; display:block; width:100%; text-align:center; padding:11px 0; border-radius:12px; border:1.6px dashed var(--line); font-size:13px; font-weight:600; color:var(--rust); cursor:pointer; }
+.state-hidden{ display:none; }
+.success-icon{ width:56px; height:56px; margin:0 auto 16px; color:var(--sage-dark); }
+.footer-logo{ margin-top:28px; font-family:'Cormorant Garamond',serif; font-weight:600; font-size:15px; color:var(--rust); opacity:.75; }
+.loading{ padding:60px 0; color:var(--ink-soft); font-size:13.5px; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div id="loading-state" class="loading">A carregar…</div>
+
+    <div id="error-state" class="state-hidden">
+      <h1>Não encontrámos este convite</h1>
+      <div class="sub">O link pode estar incompleto ou já não é válido. Verifica se copiaste o link inteiro, ou pede aos noivos para reenviarem.</div>
+    </div>
+
+    <div id="form-state" class="state-hidden">
+      <div class="eyebrow" id="wedding-dateline"></div>
+      <h1 id="wedding-names"></h1>
+      <div class="sub" id="wedding-venue"></div>
+      <div class="guest-name" id="guest-name"></div>
+
+      <div class="question">Vais poder estar presente?</div>
+      <div class="seg" id="attend-seg">
+        <button type="button" data-attend="yes">Sim, vou! 🎉</button>
+        <button type="button" data-attend="no">Não vou poder</button>
+      </div>
+
+      <div class="extra-fields" id="extra-fields">
+        <div class="field">
+          <label>Escolha de refeição</label>
+          <select id="meal-select">
+            <option value="">Escolhe uma opção</option>
+            <option value="carne">Carne</option>
+            <option value="peixe">Peixe</option>
+            <option value="carne-peixe">Carne &amp; Peixe</option>
+            <option value="vegetariano">Vegetariano</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Restrições alimentares ou alergias (opcional)</label>
+          <textarea id="dietary-text" placeholder="Ex: alergia a marisco, sem glúten…"></textarea>
+        </div>
+
+        <div class="children-block">
+          <label>Vais trazer crianças?</label>
+          <div id="children-list"></div>
+          <button type="button" class="add-child-btn" id="add-child-btn">+ Adicionar criança</button>
+        </div>
+      </div>
+
+      <button class="btn-send" id="send-btn" disabled>Enviar resposta</button>
+      <div class="msg" id="form-msg"></div>
+    </div>
+
+    <div id="done-state" class="state-hidden">
+      <svg class="success-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="9.5"/><path d="M8 12.5l2.5 2.5 5.5-6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <h1 id="done-title">Obrigado pela resposta!</h1>
+      <div class="sub" id="done-sub"></div>
+    </div>
+
+    <div class="footer-logo">weddy</div>
+  </div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script>
+(function(){
+  const firebaseConfig = {
+    apiKey: "AIzaSyDkRmmtgKXuM9pUq2sT3AlYTT2-VzgvLIU",
+    authDomain: "weddy-premium-teste.firebaseapp.com",
+    projectId: "weddy-premium-teste",
+    storageBucket: "weddy-premium-teste.firebasestorage.app",
+    messagingSenderId: "319051198074",
+    appId: "1:319051198074:web:f4a3f7ed8d8a0dc4c015c3"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.firestore();
+
+  function show(id){
+    ['loading-state','error-state','form-state','done-state'].forEach(s=>{
+      document.getElementById(s).classList.toggle('state-hidden', s!==id);
+    });
+  }
+
+  function formatDatePT(dateStr){
+    if(!dateStr) return '';
+    const meses = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+    const d = new Date(dateStr+'T00:00:00');
+    if(isNaN(d)) return '';
+    return `${d.getDate()} de ${meses[d.getMonth()]} de ${d.getFullYear()}`;
+  }
+
+  const params = new URLSearchParams(location.search);
+  const guestToken = params.get('g');
+  let guestData = null, selectedAttend = null;
+  // Lista de crianças que a pessoa vai declarar neste convite — cada uma
+  // com nome, idade e se vai ou não. Guardada aqui em memória e só escrita
+  // no Firestore quando a pessoa envia a resposta.
+  let children = [];
+
+  function renderChildren(){
+    const list = document.getElementById('children-list');
+    if(!children.length){
+      list.innerHTML = '';
+      return;
+    }
+    list.innerHTML = children.map((c,i)=>`
+      <div class="child-row" data-childrow="${i}">
+        <input class="child-name" type="text" placeholder="Nome da criança" data-childfield="name" data-idx="${i}" value="${(c.name||'').replace(/"/g,'&quot;')}">
+        <input class="child-age" type="number" min="0" max="17" placeholder="Idade" data-childfield="age" data-idx="${i}" value="${c.age===undefined||c.age===null?'':c.age}">
+        <div class="child-seg">
+          <button type="button" data-childattend="yes" data-idx="${i}" class="${c.attending===true?'active':''}">Vai</button>
+          <button type="button" data-childattend="no" data-idx="${i}" class="${c.attending===false?'active':''}">Não vai</button>
+        </div>
+        <button type="button" class="child-remove" data-childremove="${i}">×</button>
+      </div>
+    `).join('');
+    list.querySelectorAll('[data-childfield]').forEach(el=>{
+      el.addEventListener('input', e=>{
+        const idx = Number(e.target.dataset.idx);
+        const field = e.target.dataset.childfield;
+        children[idx][field] = field==='age' ? (e.target.value===''? '' : Number(e.target.value)) : e.target.value;
+      });
+    });
+    list.querySelectorAll('[data-childattend]').forEach(btn=>{
+      btn.addEventListener('click', e=>{
+        const idx = Number(e.target.dataset.idx);
+        children[idx].attending = e.target.dataset.childattend==='yes';
+        renderChildren();
+      });
+    });
+    list.querySelectorAll('[data-childremove]').forEach(btn=>{
+      btn.addEventListener('click', e=>{
+        const idx = Number(e.target.dataset.childremove);
+        children.splice(idx,1);
+        renderChildren();
+      });
+    });
+  }
+  document.getElementById('add-child-btn').addEventListener('click', ()=>{
+    children.push({ name:'', age:'', attending:true });
+    renderChildren();
+  });
+
+  // IMPORTANTE: esta página lê APENAS o documento do próprio convidado
+  // (guests/{token}). Nunca lê o documento do casamento (weddings/{id}),
+  // que contém a lista completa de convidados e o orçamento — isso seria
+  // uma fuga de privacidade grave. Tudo o que este convite precisa mostrar
+  // (nomes dos noivos, data, local) já vem copiado para dentro do próprio
+  // documento do convidado, no momento em que o convite é criado.
+  if(!guestToken){
+    show('error-state');
+  } else {
+    db.collection('guests').doc(guestToken).get().then(guestSnap=>{
+      if(!guestSnap.exists){ show('error-state'); return; }
+      guestData = guestSnap.data();
+      renderForm();
+    }).catch(()=>{ show('error-state'); });
+  }
+
+  function renderForm(){
+    document.getElementById('wedding-dateline').textContent = formatDatePT(guestData.weddingDate);
+    document.getElementById('wedding-names').textContent = `${guestData.coupleName1 || ''} & ${guestData.coupleName2 || ''}`;
+    document.getElementById('wedding-venue').textContent = guestData.venue || '';
+    document.getElementById('guest-name').textContent = guestData.name || '';
+
+    // se a pessoa já tinha respondido antes, mostra logo a resposta guardada
+    if(guestData.attending===true || guestData.attending===false){
+      selectedAttend = guestData.attending ? 'yes' : 'no';
+      document.querySelectorAll('#attend-seg button').forEach(b=>{
+        b.classList.toggle('active', b.dataset.attend===selectedAttend);
+      });
+      if(selectedAttend==='yes'){
+        document.getElementById('extra-fields').classList.add('show');
+        document.getElementById('meal-select').value = guestData.meal || '';
+        document.getElementById('dietary-text').value = guestData.dietary || '';
+        children = Array.isArray(guestData.children) ? guestData.children.map(c=>({ name:c.name||'', age:c.age===undefined?'':c.age, attending: c.attending!==false })) : [];
+        renderChildren();
+      }
+      document.getElementById('send-btn').disabled = false;
+      document.getElementById('send-btn').textContent = 'Atualizar resposta';
+    }
+
+    show('form-state');
+  }
+
+  document.querySelectorAll('#attend-seg button').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      selectedAttend = btn.dataset.attend;
+      document.querySelectorAll('#attend-seg button').forEach(b=>b.classList.toggle('active', b===btn));
+      document.getElementById('extra-fields').classList.toggle('show', selectedAttend==='yes');
+      document.getElementById('send-btn').disabled = false;
+    });
+  });
+
+  document.getElementById('send-btn').addEventListener('click', ()=>{
+    const msgEl = document.getElementById('form-msg');
+    const btn = document.getElementById('send-btn');
+    if(!selectedAttend){ return; }
+    const attending = selectedAttend === 'yes';
+    const meal = attending ? document.getElementById('meal-select').value : '';
+    const dietary = attending ? document.getElementById('dietary-text').value.trim() : '';
+    // Só guarda crianças com nome preenchido — uma linha vazia deixada a
+    // meio não deve ser enviada como se fosse uma criança real.
+    const childrenToSend = attending ? children
+      .filter(c => (c.name||'').trim())
+      .map(c => ({ name: c.name.trim(), age: c.age===''||c.age===undefined ? null : Number(c.age), attending: c.attending!==false }))
+      : [];
+    if(attending && !meal){
+      msgEl.textContent = 'Escolhe uma refeição antes de enviar.';
+      msgEl.className = 'msg error';
+      return;
+    }
+    btn.disabled = true;
+    msgEl.textContent = 'A enviar…';
+    msgEl.className = 'msg';
+    db.collection('guests').doc(guestToken).update({
+      attending: attending,
+      meal: meal,
+      dietary: dietary,
+      children: childrenToSend,
+      respondedAt: firebase.firestore.FieldValue.serverTimestamp()
+    }).then(()=>{
+      document.getElementById('done-title').textContent = attending ? 'Obrigado pela resposta! 🎉' : 'Obrigado por nos avisares.';
+      document.getElementById('done-sub').textContent = attending
+        ? 'Já registámos que vais estar presente. Até lá!'
+        : 'Ficamos tristes por não poderes vir, mas obrigado por responderes.';
+      show('done-state');
+    }).catch(()=>{
+      msgEl.textContent = 'Não foi possível enviar. Verifica a internet e tenta novamente.';
+      msgEl.className = 'msg error';
+      btn.disabled = false;
+    });
+  });
+})();
+</script>
+</body>
+</html>
