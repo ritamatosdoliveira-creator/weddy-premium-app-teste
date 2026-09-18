@@ -555,6 +555,21 @@ html{
 .visit-action-btn svg{ width:14px; height:14px; }
 .visit-action-btn.danger{ background:rgba(193,88,62,0.1); color:var(--rust-dark); }
 .visit-action-btn:active{ opacity:.75; }
+/* --- Weddy Premium: RSVP --- */
+.rsvp-pill{ font-size:11px; font-weight:600; padding:4px 10px; border-radius:20px; white-space:nowrap; flex-shrink:0; }
+.rsvp-pill-pending{ background:rgba(20,20,20,0.07); color:var(--ink-soft); }
+.rsvp-pill-yes{ background:rgba(122,150,105,0.18); color:var(--sage-dark); }
+.rsvp-pill-no{ background:rgba(193,88,62,0.12); color:var(--rust-dark); }
+/* --- Weddy Premium: Assistente --- */
+.assist-chat-log{ margin:0 16px 12px; min-height:180px; max-height:52vh; overflow-y:auto; display:flex; flex-direction:column; gap:8px; padding:4px 2px; }
+.assist-msg{ max-width:82%; padding:10px 13px; border-radius:16px; font-size:13.5px; line-height:1.45; }
+.assist-msg-user{ align-self:flex-end; background:var(--rust); color:#fff; border-bottom-right-radius:4px; }
+.assist-msg-bot{ align-self:flex-start; background:var(--card); border:1px solid var(--line); color:var(--ink); border-bottom-left-radius:4px; }
+.assist-input-row{ display:flex; align-items:center; gap:8px; margin:0 16px 28px; padding:6px 6px 6px 14px; background:var(--card); border:1px solid var(--line); border-radius:22px; }
+.assist-input-row input{ flex:1; border:none; outline:none; background:transparent; font-size:14px; color:var(--ink); font-family:inherit; }
+.assist-input-row button{ all:unset; box-sizing:border-box; width:34px; height:34px; border-radius:50%; background:var(--rust); color:#fff; display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; }
+.assist-input-row button svg{ width:15px; height:15px; }
+.assist-input-row button:active{ opacity:.8; }
 /* --- Ficha completa do fornecedor --- */
 .supd-card{ display:flex; align-items:center; gap:13px; margin:2px 16px 16px; padding:16px; background:var(--card); border:1px solid var(--line); border-radius:18px; box-shadow:var(--shadow); }
 .supd-photo-wrap{ position:relative; width:64px; height:64px; border-radius:16px; flex-shrink:0; cursor:pointer; }
@@ -1186,8 +1201,17 @@ let currentWeddingOwners = [];
 let currentWeddingCreator = null;
 let currentLastLogins = {};
 let currentUidByEmail = {};
+let currentSubscription = null;
+// Weddy Premium (chatbot + RSVP) só fica disponível a quem tiver
+// subscrição ativa — este campo vem do documento do casamento
+// (data.subscription), capturado em attachFirestoreSync().
+function hasActiveSubscription(){ return !!(currentSubscription && currentSubscription.active); }
 const WEDDINGS = () => db.collection('weddings');
 const CURRENT_DOC = () => db.collection('weddings').doc(currentWeddingId);
+// Coleção separada dos convites RSVP — nunca contém o casamento inteiro,
+// só o que é estritamente necessário para cada convidado responder ao
+// seu próprio convite (ver comentário completo nas regras do Firestore).
+const GUESTS = () => db.collection('guests');
 
 
 /* ============================================================
@@ -1248,7 +1272,9 @@ const ICONS = {
   lock:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="10.5" width="15" height="10" rx="2"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/></svg>',
   trash:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 7h15M9.5 7V5a1.5 1.5 0 0 1 1.5-1.5h2A1.5 1.5 0 0 1 14.5 5v2M18 7l-.8 12a2 2 0 0 1-2 1.9H8.8a2 2 0 0 1-2-1.9L6 7"/><path d="M10 11v6M14 11v6"/></svg>',
   question:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9.3 9.2a2.7 2.7 0 1 1 3.9 2.4c-1 .5-1.7 1.2-1.7 2.4v.3"/><circle cx="11.5" cy="17.7" r=".15" fill="currentColor" stroke-width="2.0"/></svg>',
-  briefcase:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3.2" y="7.3" width="17.6" height="12" rx="1.8"/><path d="M8.6 7.3V5.7a1.8 1.8 0 0 1 1.8-1.8h3.2a1.8 1.8 0 0 1 1.8 1.8v1.6"/><path d="M3.2 12.6h17.6"/></svg>'
+  briefcase:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3.2" y="7.3" width="17.6" height="12" rx="1.8"/><path d="M8.6 7.3V5.7a1.8 1.8 0 0 1 1.8-1.8h3.2a1.8 1.8 0 0 1 1.8 1.8v1.6"/><path d="M3.2 12.6h17.6"/></svg>',
+  chat:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5h16v10.5a1.5 1.5 0 0 1-1.5 1.5H9.5L5 21v-3.5H5.5A1.5 1.5 0 0 1 4 16V5.5Z"/><path d="M8 9.8h8M8 13h5"/></svg>',
+  sparkle:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.5c.6 3.6 2.2 5.7 6.5 6.5-4.3.8-5.9 2.9-6.5 6.5-.6-3.6-2.2-5.7-6.5-6.5 4.3-.8 5.9-2.9 6.5-6.5Z"/><path d="M19 15.2c.3 1.7 1 2.5 3 2.8-2 .3-2.7 1.1-3 2.8-.3-1.7-1-2.5-3-2.8 2-.3 2.7-1.1 3-2.8Z" opacity=".75"/></svg>'
 };
 /* --- ícones da barra de separadores: outline (inativo) vs. preenchido (ativo), como no iOS --- */
 const TAB_ICONS = {
@@ -3715,6 +3741,196 @@ function bindFornecedorDetalheHandlers(){
 /* ============================================================
    VIEW: Definições
 ============================================================ */
+/* ============================================================
+   WEDDY PREMIUM — RSVP + Assistente
+   ⚠️ Aponta para o mesmo projeto de testes (weddy-premium-teste).
+   Muda esta URL quando publicares a página pública de RSVP
+   (app/rsvp.html) noutro sítio — é para aí que aponta cada link
+   individual de convidado, nunca para dentro desta app.
+============================================================ */
+const RSVP_BASE_URL = 'https://ritamatosdoliveira-creator.github.io/weddy-premium-rsvp-teste/';
+let rsvpResponses = {};
+let rsvpResponsesLoaded = false;
+let rsvpLoadingResponses = false;
+function generateRSVPToken(){
+  return 'r'+Date.now().toString(36)+Math.random().toString(36).slice(2,10);
+}
+// Junta os convidados dos dois lados, todas as categorias (fixas e
+// criadas pela pessoa), numa lista plana pronta para a lista de RSVP.
+// Cada entrada guarda a referência direta ao objeto do convidado (para
+// se poder escrever o rsvpToken nele) e a "morada" completa (side/cat/id)
+// para depois se conseguir marcar como confirmado na lista de Convidados.
+function flattenAllGuestsForRSVP(){
+  const out = [];
+  ['noiva','noivo'].forEach(side=>{
+    allGuestCategoriesOf(side).forEach(c=>{
+      const arr = getGuestNames(side, c.id);
+      if(!Array.isArray(arr)) return;
+      arr.forEach((entry, idx)=>{
+        if(!entry || typeof entry!=='object') return;
+        out.push({ side, catId:c.id, catLabel:c.label, idx, entry, name: entry.name||'' });
+      });
+    });
+  });
+  return out;
+}
+// Garante que este convidado tem um link de RSVP: se já tiver token,
+// devolve-o; caso contrário gera um, grava-o no próprio convidado (dentro
+// do state, sincronizado como o resto da app) e cria o documento público
+// "guests/{token}" na coleção separada — com só o que o convidado precisa
+// de ver, nunca a lista toda nem o orçamento (ver firestore.rules).
+function ensureRSVPLink(item){
+  if(item.entry.rsvpToken){
+    return Promise.resolve(item.entry.rsvpToken);
+  }
+  const token = generateRSVPToken();
+  const s = weddingSettings;
+  return GUESTS().doc(token).set({
+    weddingId: currentWeddingId,
+    guestId: item.entry.id || null,
+    name: item.name,
+    coupleName1: s.coupleName1 || '',
+    coupleName2: s.coupleName2 || '',
+    weddingDate: s.weddingDate || '',
+    venue: s.venue || '',
+    attending: null,
+    meal: '',
+    dietary: '',
+    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+  }).then(()=>{
+    item.entry.rsvpToken = token;
+    render();
+    return token;
+  });
+}
+// Vai buscar todas as respostas já dadas para os convidados deste
+// casamento (a query só é permitida às regras do Firestore para o(s)
+// dono(s) autenticados do próprio casamento — nunca para um convidado).
+function loadRSVPResponses(){
+  if(!FIREBASE_READY || !currentWeddingId) return Promise.resolve();
+  rsvpLoadingResponses = true;
+  return GUESTS().where('weddingId','==',currentWeddingId).get().then(qs=>{
+    const next = {};
+    qs.forEach(doc=>{ next[doc.id] = doc.data(); });
+    rsvpResponses = next;
+    rsvpResponsesLoaded = true;
+    rsvpLoadingResponses = false;
+    render();
+  }).catch(err=>{
+    console.error('Weddy RSVP load error:', err.code, err.message);
+    rsvpLoadingResponses = false;
+    render();
+  });
+}
+
+/* --- Assistente Weddy (simulado — sem chave de API configurada) --- */
+let assistChatHistory = [];
+// Respostas simuladas: usam sempre os dados reais deste casamento
+// (guardados em `state`/`weddingSettings`), só o "cérebro" que escreve a
+// frase é que está fixo em vez de vir de um modelo de linguagem real.
+function respostaSimuladaAssistente(pergunta){
+  const p = pergunta.toLowerCase();
+  const totalConvidados = countGuests('noiva') + countGuests('noivo');
+  const totalConfirmados = countConfirmed('noiva') + countConfirmed('noivo');
+  const gasto = totalExpenseValue();
+  const pago = totalExpensePaid();
+  const orcamento = state.budget && state.budget.total ? state.budget.total : 0;
+  if(/convidad/.test(p)){
+    return `Tens ${fmtGuestCount(totalConvidados)} convidados na lista, dos quais ${fmtGuestCount(totalConfirmados)} já confirmaram presença (contando pelo peso de cada um — crianças e staff podem contar meio ou nada, consoante o que definiste).`;
+  }
+  if(/orçamento|orcamento|gast|dinheiro|pago|paguei/.test(p)){
+    return `O orçamento definido é de ${fmtEUR(orcamento)}. Já tens ${fmtEUR(gasto)} em despesas registadas, das quais ${fmtEUR(pago)} já foram pagas.`;
+  }
+  if(/data|dias|falta/.test(p) && weddingSettings.weddingDate){
+    const dias = daysUntil(weddingSettings.weddingDate);
+    return dias>=0 ? `Faltam ${dias} dias para o grande dia (${formatDatePT(weddingSettings.weddingDate)}).` : `O casamento foi a ${formatDatePT(weddingSettings.weddingDate)}. Espero que tenha corrido tudo lindamente!`;
+  }
+  if(/mesa/.test(p)){
+    const nTables = (state.seating && state.seating.tables) ? state.seating.tables.length : 0;
+    return `Tens ${nTables} mesas configuradas na secção de Mesas.`;
+  }
+  return `Ainda estou em modo de demonstração (sem ligação a um modelo de IA real), mas já consigo responder sobre convidados, orçamento, datas e mesas — pergunta-me, por exemplo, "quantos convidados já confirmaram?".`;
+}
+
+function viewDefPremiumLocked(title){
+  return `
+  ${defSubHeader(title)}
+  <div class="empty-note" style="margin:40px 16px; text-align:center;">
+    ${ICONS.lock}
+    <div style="margin-top:10px;">Esta funcionalidade faz parte da Weddy Premium.<br>A tua conta de testes ainda não tem subscrição ativa.</div>
+  </div>
+  `;
+}
+
+function viewDefRSVP(){
+  if(!hasActiveSubscription()) return viewDefPremiumLocked('Convites RSVP');
+  if(!rsvpResponsesLoaded && !rsvpLoadingResponses) loadRSVPResponses();
+  const guests = flattenAllGuestsForRSVP();
+  const totalGuests = guests.length;
+  let responded = 0, confirmedYes = 0;
+  const rows = guests.map(item=>{
+    const token = item.entry.rsvpToken;
+    const resp = token ? rsvpResponses[token] : null;
+    let statusHtml, actionsHtml;
+    if(resp && (resp.attending===true || resp.attending===false)){
+      responded++;
+      if(resp.attending===true) confirmedYes++;
+      statusHtml = resp.attending===true
+        ? `<span class="rsvp-pill rsvp-pill-yes">Vai${resp.meal? ' · '+escapeHTML(resp.meal):''}</span>`
+        : `<span class="rsvp-pill rsvp-pill-no">Não vai</span>`;
+    } else {
+      statusHtml = `<span class="rsvp-pill rsvp-pill-pending">Por responder</span>`;
+    }
+    if(token){
+      const link = RSVP_BASE_URL + '?g=' + token;
+      actionsHtml = `<button class="visit-action-btn" style="flex:1;" data-rsvpcopy="${escapeHTML(link)}">${ICONS.mail} Copiar link</button>`;
+    } else {
+      actionsHtml = `<button class="visit-action-btn" style="flex:1;" data-rsvpgerar="${item.side}|${item.catId}|${item.idx}">${ICONS.mail} Gerar link</button>`;
+    }
+    return `
+    <div class="list-row" style="flex-direction:column; align-items:stretch; gap:8px;">
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
+        <div class="title">${escapeHTML(item.name)}</div>
+        ${statusHtml}
+      </div>
+      <div class="visit-detail">${item.side==='noiva'?'Noiva':'Noivo'} · ${escapeHTML(item.catLabel)}</div>
+      <div style="display:flex; gap:8px;">${actionsHtml}</div>
+    </div>`;
+  }).join('');
+  return `
+  ${defSubHeader('Convites RSVP')}
+  <div class="stats-row">
+    <div class="stat-card"><div class="l" style="margin:0 0 4px;">Convidados</div><div class="n">${fmtGuestCount(totalGuests)}</div></div>
+    <div class="stat-card"><div class="l" style="margin:0 0 4px;">Responderam</div><div class="n">${fmtGuestCount(responded)}</div></div>
+    <div class="stat-card"><div class="l" style="margin:0 0 4px;">Confirmados</div><div class="n">${fmtGuestCount(confirmedYes)}</div></div>
+  </div>
+  <div class="section-label" style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
+    <span>Convidados</span>
+    <button class="visit-action-btn" id="rsvp-refresh-respostas" style="width:auto; padding:6px 12px;">${rsvpLoadingResponses? 'A atualizar…' : 'Atualizar respostas'}</button>
+  </div>
+  ${guests.length? `<div class="list-group" style="margin-bottom:16px;">${rows}</div>` : `<div class="empty-note" style="margin:0 16px 24px;">Ainda não tens convidados guardados em "Convidados".</div>`}
+  <div class="empty-note" style="margin:0 16px 28px;">Cada link é só desse convidado — nunca mostra a lista toda nem o orçamento do casamento.</div>
+  `;
+}
+
+function viewDefAssistente(){
+  if(!hasActiveSubscription()) return viewDefPremiumLocked('Assistente Weddy');
+  const bubbles = assistChatHistory.map(m=>`
+    <div class="assist-msg ${m.role==='user' ? 'assist-msg-user' : 'assist-msg-bot'}">${escapeHTML(m.text)}</div>
+  `).join('');
+  return `
+  ${defSubHeader('Assistente Weddy')}
+  <div class="empty-note" style="margin:0 16px 12px;">${ICONS.sparkle} Modo de demonstração — as respostas usam já os teus dados reais, mas ainda não vêm de um modelo de IA real.</div>
+  <div class="assist-chat-log" id="assist-chat-log">
+    ${bubbles || `<div class="empty-note" style="margin:20px 0; text-align:center;">Pergunta-me algo sobre o teu casamento — convidados, orçamento, mesas ou a data.</div>`}
+  </div>
+  <div class="assist-input-row">
+    <input type="text" id="assist-chat-input" placeholder="Escreve a tua pergunta…" autocomplete="off">
+    <button id="assist-chat-send" aria-label="Enviar">${ICONS.arrowright}</button>
+  </div>
+  `;
+}
+
 function viewDefinicoes(){
   if(definicoesSection==='casamento') return viewDefCasamento();
   if(definicoesSection==='design') return viewDefDesign();
@@ -3725,6 +3941,8 @@ function viewDefinicoes(){
   if(definicoesSection==='sobre') return viewDefSobre();
   if(definicoesSection==='exportar') return viewDefExportar();
   if(definicoesSection==='reportar') return viewDefReportar();
+  if(definicoesSection==='rsvp') return viewDefRSVP();
+  if(definicoesSection==='assistente') return viewDefAssistente();
   return viewDefMenu();
 }
 
@@ -3743,6 +3961,12 @@ function viewDefMenu(){
   const weddingInfo = [weddingSettings.coupleName1&&weddingSettings.coupleName2? `${weddingSettings.coupleName1} & ${weddingSettings.coupleName2}`:'', weddingSettings.weddingDate? formatDatePT(weddingSettings.weddingDate):'', weddingSettings.venue||''].filter(Boolean).join(' · ') || 'Ainda por definir';
   return `
   ${pageHeader('def-back', 'Definições', 'Personaliza a tua experiência na Weddy<br>e gere o teu casamento.', `<div class="def-header-botanical">${ICONS.botanical}</div>`)}
+
+  <div class="section-label-caps">Weddy Premium</div>
+  <div class="list-group">
+    ${defMenuRow('rsvp', ICONS.mail, 6, 'Convites RSVP', hasActiveSubscription() ? 'Envia e acompanha as respostas dos convidados' : 'Subscrição necessária')}
+    ${defMenuRow('assistente', ICONS.chat, 4, 'Assistente Weddy', hasActiveSubscription() ? 'Tira dúvidas sobre o teu casamento' : 'Subscrição necessária')}
+  </div>
 
   <div class="section-label-caps">O casamento</div>
   <div class="list-group">
@@ -4665,6 +4889,60 @@ function bindHandlers(){
   if(exportExcelBtn) exportExcelBtn.addEventListener('click', exportToExcel);
   const exportPdfBtn = document.getElementById('export-pdf-btn');
   if(exportPdfBtn) exportPdfBtn.addEventListener('click', exportToPDF);
+
+  // Weddy Premium — Convites RSVP
+  document.querySelectorAll('[data-rsvpgerar]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      const [side, catId, idxStr] = e.currentTarget.dataset.rsvpgerar.split('|');
+      const idx = Number(idxStr);
+      const arr = getGuestNames(side, catId);
+      const entry = arr && arr[idx];
+      if(!entry){ alert('Não foi possível encontrar este convidado (a lista pode ter mudado). Tenta atualizar a página.'); return; }
+      btn.disabled = true;
+      btn.textContent = 'A gerar…';
+      ensureRSVPLink({ side, catId, idx, entry, name: entry.name||'' }).catch(err=>{
+        console.error('Weddy RSVP gerar link error:', err.code, err.message);
+        alert('Não foi possível gerar o link. Confirma que as regras do Firestore já foram atualizadas e tenta novamente.');
+        render();
+      });
+    });
+  });
+  document.querySelectorAll('[data-rsvpcopy]').forEach(btn=>{
+    btn.addEventListener('click', async e=>{
+      const link = e.currentTarget.dataset.rsvpcopy;
+      try{
+        await navigator.clipboard.writeText(link);
+        const original = btn.innerHTML;
+        btn.innerHTML = `${ICONS.check} Copiado!`;
+        setTimeout(()=>{ btn.innerHTML = original; }, 1600);
+      }catch(err){
+        prompt('Copia este link manualmente:', link);
+      }
+    });
+  });
+  const rsvpRefreshBtn = document.getElementById('rsvp-refresh-respostas');
+  if(rsvpRefreshBtn) rsvpRefreshBtn.addEventListener('click', ()=>{ loadRSVPResponses(); });
+
+  // Weddy Premium — Assistente
+  const assistInput = document.getElementById('assist-chat-input');
+  const assistSendBtn = document.getElementById('assist-chat-send');
+  const sendAssistMessage = ()=>{
+    if(!assistInput) return;
+    const texto = assistInput.value.trim();
+    if(!texto) return;
+    assistChatHistory.push({ role:'user', text:texto });
+    assistChatHistory.push({ role:'bot', text: respostaSimuladaAssistente(texto) });
+    assistInput.value = '';
+    _origRender();
+    const log = document.getElementById('assist-chat-log');
+    if(log) log.scrollTop = log.scrollHeight;
+  };
+  if(assistSendBtn) assistSendBtn.addEventListener('click', sendAssistMessage);
+  if(assistInput) assistInput.addEventListener('keydown', e=>{
+    if(e.key==='Enter'){ e.preventDefault(); sendAssistMessage(); }
+  });
+  const assistLog = document.getElementById('assist-chat-log');
+  if(assistLog) assistLog.scrollTop = assistLog.scrollHeight;
 
   // O grande dia
   const addEventBtn = document.getElementById('add-event-btn');
@@ -6659,6 +6937,7 @@ function attachFirestoreSync(){
       if(data.creatorEmail) currentWeddingCreator = data.creatorEmail;
       if(data.lastLoginByEmail) currentLastLogins = data.lastLoginByEmail;
       if(data.uidByEmail) currentUidByEmail = data.uidByEmail;
+      if(data.subscription !== undefined) currentSubscription = data.subscription;
     }
     let renderNeeded = changed || !firstSyncDone;
     if(renderNeeded && isEditingTextField()){
