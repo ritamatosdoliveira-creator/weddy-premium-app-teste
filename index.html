@@ -555,21 +555,60 @@ html{
 .visit-action-btn svg{ width:14px; height:14px; }
 .visit-action-btn.danger{ background:rgba(193,88,62,0.1); color:var(--rust-dark); }
 .visit-action-btn:active{ opacity:.75; }
+/* --- Weddy Premium: página para subscrever --- */
+.premium-upsell{ margin:20px 16px 32px; text-align:center; }
+.premium-upsell-icon{ width:44px; height:44px; margin:0 auto 12px; color:var(--rust); }
+.premium-upsell-icon svg{ width:100%; height:100%; }
+.premium-upsell-title{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:24px; color:var(--heading); margin-bottom:8px; }
+.premium-upsell-text{ font-size:13px; color:var(--ink-soft); line-height:1.5; margin-bottom:18px; }
+.premium-upsell-list{ list-style:none; margin:0 0 22px; padding:0; text-align:left; display:flex; flex-direction:column; gap:10px; }
+.premium-upsell-list li{ display:flex; align-items:center; gap:10px; font-size:13.5px; color:var(--ink); background:var(--card); border:1px solid var(--line); border-radius:12px; padding:10px 12px; }
+.premium-upsell-list li svg{ width:17px; height:17px; color:var(--rust); flex-shrink:0; }
 /* --- Weddy Premium: RSVP --- */
 .rsvp-pill{ font-size:11px; font-weight:600; padding:4px 10px; border-radius:20px; white-space:nowrap; flex-shrink:0; }
 .rsvp-pill-pending{ background:rgba(20,20,20,0.07); color:var(--ink-soft); }
 .rsvp-pill-yes{ background:rgba(122,150,105,0.18); color:var(--sage-dark); }
 .rsvp-pill-no{ background:rgba(193,88,62,0.12); color:var(--rust-dark); }
 /* --- Weddy Premium: Assistente --- */
-.assist-chat-log{ margin:0 16px 12px; min-height:180px; max-height:52vh; overflow-y:auto; display:flex; flex-direction:column; gap:8px; padding:4px 2px; }
-.assist-msg{ max-width:82%; padding:10px 13px; border-radius:16px; font-size:13.5px; line-height:1.45; }
-.assist-msg-user{ align-self:flex-end; background:var(--rust); color:#fff; border-bottom-right-radius:4px; }
-.assist-msg-bot{ align-self:flex-start; background:var(--card); border:1px solid var(--line); color:var(--ink); border-bottom-left-radius:4px; }
+.assist-hero{ text-align:center; padding:18px 20px 20px; margin:0 0 14px; background:linear-gradient(180deg, rgba(185,103,82,0.10), rgba(185,103,82,0) 85%); border-radius:0 0 26px 26px; }
+.assist-hero-icon{ width:52px; height:52px; margin:0 auto 10px; color:var(--rust-dark); }
+.assist-hero-icon svg{ width:100%; height:100%; }
+.assist-hero-eyebrow{ font-size:10.5px; color:var(--rust-dark); font-weight:600; letter-spacing:.14em; text-transform:uppercase; margin-bottom:8px; }
+.assist-hero-title{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:21px; line-height:1.2; color:var(--heading); margin-bottom:8px; }
+.assist-hero-text{ font-size:12.5px; color:var(--ink-soft); line-height:1.5; }
+.assist-chat-log{ margin:0 16px 12px; min-height:120px; max-height:44vh; overflow-y:auto; display:flex; flex-direction:column; gap:10px; padding:4px 2px; }
+.assist-msg-row{ display:flex; align-items:flex-end; gap:8px; }
+.assist-msg-row.assist-msg-row-user{ flex-direction:row-reverse; }
+.assist-msg-avatar{ width:26px; height:26px; border-radius:50%; background:#F3E2DC; color:var(--rust-dark); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.assist-msg-avatar svg{ width:15px; height:15px; }
+.assist-msg{ max-width:78%; padding:10px 13px; border-radius:16px; font-size:13.5px; line-height:1.45; }
+.assist-msg-user{ background:var(--rust); color:#fff; border-bottom-right-radius:4px; }
+.assist-msg-bot{ background:var(--card); border:1px solid var(--line); color:var(--ink); border-bottom-left-radius:4px; }
+.assist-msg-time{ font-size:10px; color:var(--ink-soft); text-align:right; margin-top:4px; }
+.assist-chips{ display:flex; flex-direction:column; gap:8px; margin:0 16px 14px; }
+.assist-chips[hidden]{ display:none; }
+.assist-chip{ all:unset; box-sizing:border-box; display:flex; align-items:center; justify-content:space-between; gap:8px; padding:11px 15px; background:var(--card); border:1px solid var(--line); border-radius:14px; font-size:13px; color:var(--ink); cursor:pointer; }
+.assist-chip svg{ width:13px; height:13px; color:var(--rust); flex-shrink:0; }
+.assist-chip:active{ background:rgba(20,20,20,0.035); }
 .assist-input-row{ display:flex; align-items:center; gap:8px; margin:0 16px 28px; padding:6px 6px 6px 14px; background:var(--card); border:1px solid var(--line); border-radius:22px; }
 .assist-input-row input{ flex:1; border:none; outline:none; background:transparent; font-size:14px; color:var(--ink); font-family:inherit; }
 .assist-input-row button{ all:unset; box-sizing:border-box; width:34px; height:34px; border-radius:50%; background:var(--rust); color:#fff; display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; }
 .assist-input-row button svg{ width:15px; height:15px; }
 .assist-input-row button:active{ opacity:.8; }
+/* --- Weddy Premium: RSVP (linhas de convidado) --- */
+.rsvp-refresh-btn{ all:unset; box-sizing:border-box; display:flex; align-items:center; justify-content:center; gap:8px; width:calc(100% - 32px); margin:0 16px 6px; padding:13px 0; border-radius:14px; background:#F3E2DC; color:var(--rust-dark); font-size:13.5px; font-weight:600; cursor:pointer; }
+.rsvp-refresh-btn svg{ width:15px; height:15px; }
+.rsvp-refresh-btn:active{ opacity:.8; }
+.rsvp-refresh-btn[disabled]{ opacity:.6; }
+.rsvp-updated-note{ font-size:11.5px; color:var(--ink-soft); margin:0 16px 14px; }
+.rsvp-row-top{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.rsvp-row-name{ font-size:15px; color:var(--ink); font-weight:600; min-width:0; overflow-wrap:anywhere; }
+.rsvp-row-meta{ font-size:11.5px; color:var(--ink-soft); margin-top:1px; }
+.rsvp-row-actions{ display:flex; align-items:center; gap:8px; }
+.rsvp-copy-btn{ all:unset; box-sizing:border-box; flex:1; display:flex; align-items:center; justify-content:center; gap:7px; padding:10px 0; border-radius:12px; border:1px solid var(--line); background:var(--cream); color:var(--rust-dark); font-size:12.5px; font-weight:600; cursor:pointer; }
+.rsvp-copy-btn svg{ width:13px; height:13px; }
+.rsvp-copy-btn:active{ opacity:.75; }
+.rsvp-row-chev{ color:var(--ink-soft); flex-shrink:0; opacity:.6; }
 /* --- Ficha completa do fornecedor --- */
 .supd-card{ display:flex; align-items:center; gap:13px; margin:2px 16px 16px; padding:16px; background:var(--card); border:1px solid var(--line); border-radius:18px; box-shadow:var(--shadow); }
 .supd-photo-wrap{ position:relative; width:64px; height:64px; border-radius:16px; flex-shrink:0; cursor:pointer; }
@@ -687,6 +726,28 @@ html{
 .home-icon-btn{ all:unset; box-sizing:border-box; width:34px; height:34px; border-radius:50%; background:var(--card); border:1px solid var(--line); display:flex; align-items:center; justify-content:center; color:var(--rust); cursor:pointer; flex-shrink:0;  line-height:1;}
 .home-icon-btn svg{ width:15px; height:15px; }
 .home-icon-btn:active{ background:var(--line); }
+/* Botão redondo do Assistente Weddy — só aparece no Início. A 50% de opacidade
+   enquanto não há subscrição ativa (continua a poder tocar-se, mas abre a
+   página para subscrever em vez do chat). */
+.chat-fab{ all:unset; box-sizing:border-box; position:fixed; right:16px; bottom:calc(78px + env(safe-area-inset-bottom,0px)); width:52px; height:52px; border-radius:50%; background:var(--rust); color:#fff; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 14px rgba(154,79,61,0.35); cursor:pointer; z-index:25; }
+.chat-fab svg{ width:23px; height:23px; }
+.chat-fab.locked{ opacity:.5; }
+.chat-fab:active{ transform:scale(0.93); }
+/* Janela flutuante do Assistente (pequena, por cima do ecrã atual — nunca
+   ocupa a página toda, e o fundo continua visível por trás). */
+.chat-panel-backdrop{ position:fixed; inset:0; background:rgba(48,44,41,0.14); z-index:26; }
+.chat-panel{ position:fixed; right:16px; bottom:calc(78px + env(safe-area-inset-bottom,0px) + 62px); left:16px; max-width:360px; margin-left:auto; max-height:min(72vh, 560px); background:var(--card); border-radius:20px; box-shadow:0 12px 32px rgba(48,44,41,0.22); z-index:27; display:flex; flex-direction:column; overflow:hidden; }
+.chat-panel[hidden]{ display:none; }
+.chat-panel-header{ display:flex; align-items:center; justify-content:space-between; padding:14px 8px 14px 16px; border-bottom:1px solid var(--line); font-family:'Cormorant Garamond',serif; font-weight:600; font-size:17px; color:var(--heading); flex-shrink:0; }
+.chat-panel-close{ all:unset; box-sizing:border-box; width:30px; height:30px; border-radius:50%; display:flex; align-items:center; justify-content:center; color:var(--ink-soft); cursor:pointer; font-size:13px; }
+.chat-panel-close:active{ background:var(--line); }
+.chat-panel-body{ flex:1; min-height:0; overflow-y:auto; padding:0 0 10px; }
+.chat-panel-body .assist-hero{ padding:16px 18px 16px; border-radius:0; }
+.chat-panel-body .assist-hero-icon{ width:38px; height:38px; }
+.chat-panel-body .assist-hero-title{ font-size:17px; }
+.chat-panel-body .assist-chat-log{ margin:0 14px 10px; max-height:none; }
+.chat-panel-body .assist-chips{ margin:0 14px 12px; }
+.chat-panel-body .assist-input-row{ margin:0 14px; position:sticky; bottom:0; }
 
 /* Início — cartão herói com fotografia */
 .hero-photo-card{ position:relative; margin:2px 16px 20px; border-radius:22px; overflow:hidden; box-shadow:var(--shadow); height:230px; }
@@ -802,6 +863,7 @@ html{
 .btn-cancel:active, .btn-save:active{ opacity:.75; }
 
 .empty-note{ padding:14px; font-size:12.5px; color:var(--ink-soft); font-style:italic; text-align:center; }
+.empty-note svg{ width:14px; height:14px; vertical-align:-2px; }
 
 /* Tab bar */
 .tabbar{ position:absolute; left:0; right:0; bottom:0; z-index:20; display:flex; padding:8px 0 calc(env(safe-area-inset-bottom) + 6px); background:rgba(250,248,245,0.92); backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px); border-top:1px solid var(--line); }
@@ -1073,6 +1135,26 @@ html.rotate-blocked .rotate-lock-overlay{ display:flex; }
 
   <div class="tabbar" id="tabbar"></div>
 
+  <!-- Botão redondo do Assistente Weddy: fica fora dos separadores/ecrãs de
+       propósito, para se manter sempre visível e fixo no mesmo sítio,
+       acompanhando o scroll, seja qual for o ecrã em que se está. O seu
+       conteúdo (ícone) e estado (bloqueado/desbloqueado) são atualizados
+       depois de cada render(), não é reconstruído com o resto da app. -->
+  <button class="chat-fab" id="chat-fab" aria-label="Assistente Weddy" hidden></button>
+
+  <!-- Janela flutuante do Assistente Weddy: um cartão pequeno por cima do
+       ecrã atual (não uma página inteira) — dá para ver o resto da app por
+       trás. Mostra o chat quando há subscrição ativa, ou o convite para
+       subscrever quando não há. -->
+  <div class="chat-panel-backdrop" id="chat-panel-backdrop" hidden></div>
+  <div class="chat-panel" id="chat-panel" hidden>
+    <div class="chat-panel-header">
+      <span>Assistente Weddy</span>
+      <button class="chat-panel-close" id="chat-panel-close" aria-label="Fechar">✕</button>
+    </div>
+    <div class="chat-panel-body" id="chat-panel-body"></div>
+  </div>
+
   <div class="login-screen" id="login-screen">
     <div class="login-inner" id="login-inner">
       
@@ -1274,7 +1356,9 @@ const ICONS = {
   question:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9.3 9.2a2.7 2.7 0 1 1 3.9 2.4c-1 .5-1.7 1.2-1.7 2.4v.3"/><circle cx="11.5" cy="17.7" r=".15" fill="currentColor" stroke-width="2.0"/></svg>',
   briefcase:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3.2" y="7.3" width="17.6" height="12" rx="1.8"/><path d="M8.6 7.3V5.7a1.8 1.8 0 0 1 1.8-1.8h3.2a1.8 1.8 0 0 1 1.8 1.8v1.6"/><path d="M3.2 12.6h17.6"/></svg>',
   chat:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5h16v10.5a1.5 1.5 0 0 1-1.5 1.5H9.5L5 21v-3.5H5.5A1.5 1.5 0 0 1 4 16V5.5Z"/><path d="M8 9.8h8M8 13h5"/></svg>',
-  sparkle:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.5c.6 3.6 2.2 5.7 6.5 6.5-4.3.8-5.9 2.9-6.5 6.5-.6-3.6-2.2-5.7-6.5-6.5 4.3-.8 5.9-2.9 6.5-6.5Z"/><path d="M19 15.2c.3 1.7 1 2.5 3 2.8-2 .3-2.7 1.1-3 2.8-.3-1.7-1-2.5-3-2.8 2-.3 2.7-1.1 3-2.8Z" opacity=".75"/></svg>'
+  sparkle:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.5c.6 3.6 2.2 5.7 6.5 6.5-4.3.8-5.9 2.9-6.5 6.5-.6-3.6-2.2-5.7-6.5-6.5 4.3-.8 5.9-2.9 6.5-6.5Z"/><path d="M19 15.2c.3 1.7 1 2.5 3 2.8-2 .3-2.7 1.1-3 2.8-.3-1.7-1-2.5-3-2.8 2-.3 2.7-1.1 3-2.8Z" opacity=".75"/></svg>',
+  refresh:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11A8 8 0 1 0 18.3 16"/><path d="M20 5.5V11h-5.5"/></svg>',
+  mascot:'<svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M10 34v-4a22 22 0 0 1 44 0v4"/><rect x="4.5" y="30" width="9" height="14" rx="4"/><rect x="50.5" y="30" width="9" height="14" rx="4"/><circle cx="32" cy="34" r="15" fill="var(--card)"/><path d="M25.5 33.5c0-1.6.9-2.6 2-2.6s2 1 2 2.6M34.5 33.5c0-1.6.9-2.6 2-2.6s2 1 2 2.6" stroke-width="2.3"/><path d="M25.5 40c2 2.2 11 2.2 13 0"/><path d="M44 39c1.8 3.5 1.4 7-1 9.5" opacity=".55"/><g fill="currentColor" stroke="none"><path d="M50 8c.35 2.1 1.3 3.3 3.8 3.8-2.5.5-3.45 1.7-3.8 3.8-.35-2.1-1.3-3.3-3.8-3.8 2.5-.5 3.45-1.7 3.8-3.8Z"/><path d="M56.5 15.5c.2 1.15.7 1.8 2.1 2.1-1.4.3-1.9.95-2.1 2.1-.2-1.15-.7-1.8-2.1-2.1 1.4-.3 1.9-.95 2.1-2.1Z" opacity=".75"/></g></svg>'
 };
 /* --- ícones da barra de separadores: outline (inativo) vs. preenchido (ativo), como no iOS --- */
 const TAB_ICONS = {
@@ -2074,9 +2158,34 @@ function render(){
   bindHandlers();
   syncMesa3DPanel();
   maybeShowPaymentAlert();
+  updateChatFab();
   const newScroll = document.querySelector('.tabpanel.active .scroll');
   if(newScroll && savedScrollTop) newScroll.scrollTop = savedScrollTop;
 }
+// O botão do Assistente Weddy vive fora dos separadores (ver HTML), para se
+// manter sempre no mesmo sítio do ecrã por cima de qualquer página, mesmo a
+// dar scroll — só o seu conteúdo/estado é que é atualizado aqui, a cada
+// render. Só aparece depois de haver sessão com dados carregados.
+function updateChatFab(){
+  const fab = document.getElementById('chat-fab');
+  if(!fab) return;
+  fab.hidden = !(typeof firstSyncDone!=='undefined' && firstSyncDone);
+  fab.classList.toggle('locked', !hasActiveSubscription());
+  fab.innerHTML = ICONS.chat;
+  const panel = document.getElementById('chat-panel');
+  if(panel && !panel.hidden) renderChatPanelBody();
+}
+// Este botão vive fora do que render() reconstrói a cada vez (ver HTML), por
+// isso o clique é ligado UMA ÚNICA VEZ aqui — nunca dentro de bindHandlers(),
+// que corre a cada render e duplicaria o listener no mesmo elemento.
+(function bindChatFabOnce(){
+  const fab = document.getElementById('chat-fab');
+  if(fab) fab.addEventListener('click', ()=>{ openChatPanel(); });
+  const backdrop = document.getElementById('chat-panel-backdrop');
+  if(backdrop) backdrop.addEventListener('click', ()=>{ closeChatPanel(); });
+  const closeBtn = document.getElementById('chat-panel-close');
+  if(closeBtn) closeBtn.addEventListener('click', ()=>{ closeChatPanel(); });
+})();
 let paymentAlertDismissed = false;
 try{ paymentAlertDismissed = localStorage.getItem('weddy-payment-alert-dismissed-date') === new Date().toDateString(); }catch(e){}
 function maybeShowPaymentAlert(){
@@ -3748,11 +3857,26 @@ function bindFornecedorDetalheHandlers(){
    (app/rsvp.html) noutro sítio — é para aí que aponta cada link
    individual de convidado, nunca para dentro desta app.
 ============================================================ */
-const RSVP_BASE_URL = 'https://ritamatosdoliveira-creator.github.io/weddy-premium-rsvp-teste/';
+const RSVP_BASE_URL = 'https://ritamatosdoliveira-creator.github.io/weddy-premium-app-teste/rsvp.html';
 let rsvpResponses = {};
 let rsvpResponsesLoaded = false;
 let rsvpLoadingResponses = false;
 let lastRSVPSyncSummary = null;
+let rsvpSearchQuery = '';
+let rsvpStatusFilter = 'all'; // all | yes | pending | no
+let rsvpFilterChipsOpen = false;
+let lastRSVPRefreshAt = null;
+function fmtRelativeTime(date){
+  if(!date) return '';
+  const diffMin = Math.round((Date.now() - date.getTime())/60000);
+  if(diffMin < 1) return 'agora mesmo';
+  if(diffMin < 5) return 'há poucos minutos';
+  if(diffMin < 60) return `há ${diffMin} minutos`;
+  const diffH = Math.round(diffMin/60);
+  if(diffH < 24) return diffH===1 ? 'há 1 hora' : `há ${diffH} horas`;
+  const diffD = Math.round(diffH/24);
+  return diffD===1 ? 'há 1 dia' : `há ${diffD} dias`;
+}
 function normName(s){ return (s||'').toString().trim().toLowerCase(); }
 // Duas idades "combinam" se forem iguais, ou se pelo menos uma delas ainda
 // não estiver preenchida (não obriga a idade a bater certo se uma das
@@ -3826,6 +3950,7 @@ function loadRSVPResponses(){
     rsvpResponses = next;
     rsvpResponsesLoaded = true;
     rsvpLoadingResponses = false;
+    lastRSVPRefreshAt = new Date();
     applyRSVPResponsesToState();
     render();
   }).catch(err=>{
@@ -3983,9 +4108,16 @@ function respostaSimuladaAssistente(pergunta){
 function viewDefPremiumLocked(title){
   return `
   ${defSubHeader(title)}
-  <div class="empty-note" style="margin:40px 16px; text-align:center;">
-    ${ICONS.lock}
-    <div style="margin-top:10px;">Esta funcionalidade faz parte da Weddy Premium.<br>A tua conta de testes ainda não tem subscrição ativa.</div>
+  <div class="premium-upsell">
+    <div class="premium-upsell-icon">${ICONS.sparkle}</div>
+    <div class="premium-upsell-title">Weddy Premium</div>
+    <div class="premium-upsell-text">"${title}" e as restantes funcionalidades Premium ficam disponíveis assim que teres uma subscrição ativa.</div>
+    <ul class="premium-upsell-list">
+      <li>${ICONS.mail} Convites RSVP com link individual por convidado</li>
+      <li>${ICONS.chat} Assistente Weddy para tirar dúvidas sobre o teu casamento</li>
+    </ul>
+    <button class="login-btn" id="premium-subscribe-btn" style="max-width:none;">Subscrever Weddy Premium</button>
+    <div class="empty-note" style="margin:10px 0 0;">(Esta conta é de testes — a subscrição real ainda não está ligada a nenhum pagamento.)</div>
   </div>
   `;
 }
@@ -4000,47 +4132,67 @@ function rsvpSyncSummaryText(s){
   if(s.childrenAdded) partes.push(`${s.childrenAdded} criança${s.childrenAdded===1?'':'s'} nova${s.childrenAdded===1?'':'s'} em "Crianças"`);
   if(s.childrenLinked) partes.push(`${s.childrenLinked} criança${s.childrenLinked===1?'':'s'} já existente${s.childrenLinked===1?'':'s'} associada${s.childrenLinked===1?'':'s'} ao RSVP`);
   if(s.childrenUnlinked) partes.push(`${s.childrenUnlinked} criança${s.childrenUnlinked===1?'':'s'} desassociada${s.childrenUnlinked===1?'':'s'} do RSVP`);
-  return partes.length ? `Última atualização: ${partes.join(', ')}.` : 'Última atualização: sem alterações novas.';
+  return partes.length ? `O que mudou: ${partes.join(', ')}.` : 'Sem alterações novas desde a última vez.';
 }
 function viewDefRSVP(){
   if(!hasActiveSubscription()) return viewDefPremiumLocked('Convites RSVP');
   if(!rsvpResponsesLoaded && !rsvpLoadingResponses) loadRSVPResponses();
-  const guests = flattenAllGuestsForRSVP();
-  const totalGuests = guests.length;
+  const allGuests = flattenAllGuestsForRSVP();
+  const totalGuests = allGuests.length;
   let responded = 0, confirmedYes = 0;
-  const rows = guests.map(item=>{
+  // Calcula o estado de cada convidado uma vez (para as estatísticas do
+  // topo contarem sempre TODOS os convidados, mesmo com a pesquisa/filtro
+  // ativos a esconder linhas da lista).
+  const withStatus = allGuests.map(item=>{
     const token = item.entry.rsvpToken;
     const resp = token ? rsvpResponses[token] : null;
-    let statusHtml, actionsHtml;
+    let status = 'pending';
     if(resp && (resp.attending===true || resp.attending===false)){
       responded++;
-      if(resp.attending===true) confirmedYes++;
-      statusHtml = resp.attending===true
-        ? `<span class="rsvp-pill rsvp-pill-yes">Vai${resp.meal? ' · '+escapeHTML(resp.meal):''}</span>`
-        : `<span class="rsvp-pill rsvp-pill-no">Não vai</span>`;
-    } else {
-      statusHtml = `<span class="rsvp-pill rsvp-pill-pending">Por responder</span>`;
+      if(resp.attending===true){ confirmedYes++; status = 'yes'; } else status = 'no';
     }
+    return { item, token, resp, status };
+  });
+  const q = normName(rsvpSearchQuery);
+  const visible = withStatus.filter(({item, status})=>{
+    if(rsvpStatusFilter!=='all' && status!==rsvpStatusFilter) return false;
+    if(q && !normName(item.name).includes(q)) return false;
+    return true;
+  });
+  const rows = visible.map(({item, token, resp, status})=>{
+    const statusHtml = status==='yes'
+      ? `<span class="rsvp-pill rsvp-pill-yes">Vai${resp.meal? ' · '+escapeHTML(resp.meal):''}</span>`
+      : status==='no'
+        ? `<span class="rsvp-pill rsvp-pill-no">Não vai</span>`
+        : `<span class="rsvp-pill rsvp-pill-pending">Por responder</span>`;
+    let actionsHtml;
     if(token){
       const link = RSVP_BASE_URL + '?g=' + token;
-      actionsHtml = `<button class="visit-action-btn" style="flex:1;" data-rsvpcopy="${escapeHTML(link)}">${ICONS.mail} Copiar link</button>`;
+      actionsHtml = `<button class="rsvp-copy-btn" data-rsvpcopy="${escapeHTML(link)}">${ICONS.mail} Copiar link</button>`;
     } else {
-      actionsHtml = `<button class="visit-action-btn" style="flex:1;" data-rsvpgerar="${item.side}|${item.catId}|${item.idx}">${ICONS.mail} Gerar link</button>`;
+      actionsHtml = `<button class="rsvp-copy-btn" data-rsvpgerar="${item.side}|${item.catId}|${item.idx}">${ICONS.mail} Gerar link</button>`;
     }
     const declaredChildren = (resp && Array.isArray(resp.children)) ? resp.children : [];
     const childrenHtml = declaredChildren.length
       ? `<div class="visit-detail">Crianças: ${declaredChildren.map(c=>`${escapeHTML(c.name||'?')}${c.age!==undefined&&c.age!==null&&c.age!==''?' ('+escapeHTML(String(c.age))+' anos)':''}${c.attending===false?' — não vai':''}`).join(', ')}</div>`
       : '';
     return `
-    <div class="list-row" style="flex-direction:column; align-items:stretch; gap:8px;">
-      <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
-        <div class="title">${escapeHTML(item.name)}</div>
+    <div class="list-row" style="flex-direction:column; align-items:stretch; gap:7px;">
+      <div class="rsvp-row-top">
+        <div class="rsvp-row-name">${escapeHTML(item.name)}</div>
         ${statusHtml}
       </div>
-      <div class="visit-detail">${item.side==='noiva'?'Noiva':'Noivo'} · ${escapeHTML(item.catLabel)}</div>
+      <div class="rsvp-row-meta">${item.side==='noiva'?'Noiva':'Noivo'} · ${escapeHTML(item.catLabel)}</div>
       ${childrenHtml}
-      <div style="display:flex; gap:8px;">${actionsHtml}</div>
+      <div class="rsvp-row-actions">${actionsHtml}<span class="rsvp-row-chev">${ICONS.chev}</span></div>
     </div>`;
+  }).join('');
+  const filterChips = [
+    ['all','Todos'], ['yes','Confirmados'], ['pending','Por responder'], ['no','Não vai']
+  ].map(([key,label])=>{
+    const active = rsvpStatusFilter===key;
+    const style = `padding:8px 13px; font-size:12px;${active? ' background:var(--rust); color:#fff; border-color:var(--rust);':''}`;
+    return `<button class="assist-chip" style="${style}" data-rsvpfilter="${key}">${escapeHTML(label)}</button>`;
   }).join('');
   return `
   ${defSubHeader('Convites RSVP')}
@@ -4049,33 +4201,136 @@ function viewDefRSVP(){
     <div class="stat-card"><div class="l" style="margin:0 0 4px;">Responderam</div><div class="n">${fmtGuestCount(responded)}</div></div>
     <div class="stat-card"><div class="l" style="margin:0 0 4px;">Confirmados</div><div class="n">${fmtGuestCount(confirmedYes)}</div></div>
   </div>
-  <div class="section-label" style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
-    <span>Convidados</span>
-    <button class="visit-action-btn" id="rsvp-refresh-respostas" style="width:auto; padding:6px 12px;">${rsvpLoadingResponses? 'A atualizar…' : 'Atualizar respostas'}</button>
-  </div>
+  <button class="rsvp-refresh-btn" id="rsvp-refresh-respostas" ${rsvpLoadingResponses?'disabled':''}>${ICONS.refresh} ${rsvpLoadingResponses? 'A atualizar…' : 'Atualizar respostas'}</button>
+  <div class="rsvp-updated-note">${lastRSVPRefreshAt? `Última atualização: ${fmtRelativeTime(lastRSVPRefreshAt)}.` : 'Ainda não atualizaste as respostas.'}</div>
   ${lastRSVPSyncSummary ? `<div class="empty-note" style="margin:0 16px 10px; font-style:normal;">${rsvpSyncSummaryText(lastRSVPSyncSummary)}</div>` : ''}
-  ${guests.length? `<div class="list-group" style="margin-bottom:16px;">${rows}</div>` : `<div class="empty-note" style="margin:0 16px 24px;">Ainda não tens convidados guardados em "Convidados".</div>`}
+  <div class="search-bar" style="display:flex; gap:8px;">
+    ${ICONS.search}<input type="text" id="rsvp-search" placeholder="Pesquisar convidado…" value="${escapeHTML(rsvpSearchQuery)}">
+    <button id="rsvp-filter-toggle" style="all:unset; box-sizing:border-box; width:26px; height:26px; display:flex; align-items:center; justify-content:center; color:${rsvpStatusFilter!=='all'?'var(--rust)':'var(--ink-soft)'}; cursor:pointer; flex-shrink:0;">${ICONS.filter}</button>
+  </div>
+  <div class="assist-chips" style="flex-direction:row; flex-wrap:wrap; margin:0 16px 12px;" id="rsvp-filter-chips" ${rsvpFilterChipsOpen? '':'hidden'}>${filterChips}</div>
+  ${visible.length? `<div class="list-group" style="margin-bottom:16px;">${rows}</div>` : `<div class="empty-note" style="margin:0 16px 24px;">${totalGuests? 'Nenhum convidado corresponde à pesquisa/filtro.' : 'Ainda não tens convidados guardados em "Convidados".'}</div>`}
   <div class="empty-note" style="margin:0 16px 6px;">Cada link é só desse convidado — nunca mostra a lista toda nem o orçamento do casamento.</div>
   <div class="empty-note" style="margin:0 16px 28px;">Quando alguém responde "Não vou", o lugar à mesa (se já estivesse atribuído) fica automaticamente livre. As crianças que a pessoa declarar no link aparecem em "Convidados → Crianças", já contadas e prontas a sentar às mesas.</div>
   `;
 }
 
-function viewDefAssistente(){
-  if(!hasActiveSubscription()) return viewDefPremiumLocked('Assistente Weddy');
-  const bubbles = assistChatHistory.map(m=>`
-    <div class="assist-msg ${m.role==='user' ? 'assist-msg-user' : 'assist-msg-bot'}">${escapeHTML(m.text)}</div>
-  `).join('');
+// Conteúdo do Assistente Weddy, usado dentro da janela flutuante (nunca
+// como página inteira). Mostra o convite para subscrever quando ainda não
+// há subscrição ativa, ou o chat quando já há.
+function buildChatPanelBody(){
+  if(!hasActiveSubscription()){
+    return `
+    <div class="premium-upsell" style="margin:2px 0 0;">
+      <div class="premium-upsell-icon" style="width:36px; height:36px;">${ICONS.sparkle}</div>
+      <div class="premium-upsell-title" style="font-size:19px;">Weddy Premium</div>
+      <div class="premium-upsell-text">O Assistente Weddy e os Convites RSVP ficam disponíveis assim que tiveres uma subscrição ativa.</div>
+      <button class="login-btn" id="premium-subscribe-btn" style="max-width:none;">Subscrever Weddy Premium</button>
+      <div class="empty-note" style="margin:10px 0 0;">(Conta de testes — ainda sem pagamento real ligado.)</div>
+    </div>`;
+  }
+  const nowHHMM = new Date().toTimeString().slice(0,5);
+  const greetingName = weddingSettings.coupleName1 ? `, ${escapeHTML(weddingSettings.coupleName1)}` : '';
+  const history = assistChatHistory.length ? assistChatHistory : [
+    { role:'bot', text:`Olá${greetingName}! 👋 Sou a assistente da Weddy e estou aqui para ajudar-te com tudo o que precisares sobre o teu casamento.` },
+    { role:'bot', text:'Podes perguntar-me sobre fornecedores, listas de convidados, orçamento, checklist, funcionalidades da app e muito mais!\n\nComo posso ajudar-te hoje?' }
+  ];
+  const bubbles = history.map((m,i)=>{
+    const isUser = m.role==='user';
+    const isLastBot = !isUser && i===history.length-1;
+    return `
+    <div class="assist-msg-row ${isUser?'assist-msg-row-user':''}">
+      ${isUser? '' : `<div class="assist-msg-avatar">${ICONS.mascot}</div>`}
+      <div>
+        <div class="assist-msg ${isUser ? 'assist-msg-user' : 'assist-msg-bot'}">${escapeHTML(m.text).replace(/\n/g,'<br>')}</div>
+        ${isLastBot? `<div class="assist-msg-time">${nowHHMM}</div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+  const chipsHtml = assistChatHistory.length ? '' : `
+  <div class="assist-chips">
+    <button class="assist-chip" data-assistchip="Quero saber sobre fornecedores">Quero saber sobre fornecedores ${ICONS.arrowright}</button>
+    <button class="assist-chip" data-assistchip="Como funciona o RSVP?">Como funciona o RSVP? ${ICONS.arrowright}</button>
+    <button class="assist-chip" data-assistchip="Tenho uma dúvida sobre a app">Tenho uma dúvida sobre a app ${ICONS.arrowright}</button>
+    <button class="assist-chip" data-assistchip="Quero ver novas funcionalidades">Quero ver novas funcionalidades ${ICONS.arrowright}</button>
+  </div>`;
   return `
-  ${defSubHeader('Assistente Weddy')}
-  <div class="empty-note" style="margin:0 16px 12px;">${ICONS.sparkle} Modo de demonstração — as respostas usam já os teus dados reais, mas ainda não vêm de um modelo de IA real.</div>
-  <div class="assist-chat-log" id="assist-chat-log">
-    ${bubbles || `<div class="empty-note" style="margin:20px 0; text-align:center;">Pergunta-me algo sobre o teu casamento — convidados, orçamento, mesas ou a data.</div>`}
+  <div class="assist-hero">
+    <div class="assist-hero-icon">${ICONS.mascot}</div>
+    <div class="assist-hero-eyebrow">Assistente Weddy</div>
+    <div class="assist-hero-title">O seu aliado no<br>planeamento do casamento</div>
+    <div class="assist-hero-text">Tire as suas dúvidas, receba sugestões<br>e tenha tudo mais simples.</div>
   </div>
+  <div class="assist-chat-log" id="assist-chat-log">${bubbles}</div>
+  ${chipsHtml}
   <div class="assist-input-row">
     <input type="text" id="assist-chat-input" placeholder="Escreve a tua pergunta…" autocomplete="off">
     <button id="assist-chat-send" aria-label="Enviar">${ICONS.arrowright}</button>
   </div>
   `;
+}
+function renderChatPanelBody(){
+  const body = document.getElementById('chat-panel-body');
+  if(!body) return;
+  body.innerHTML = buildChatPanelBody();
+  bindChatPanelHandlers();
+  const log = document.getElementById('assist-chat-log');
+  if(log) log.scrollTop = log.scrollHeight;
+}
+function openChatPanel(){
+  const backdrop = document.getElementById('chat-panel-backdrop');
+  const panel = document.getElementById('chat-panel');
+  if(!backdrop || !panel) return;
+  backdrop.hidden = false;
+  panel.hidden = false;
+  renderChatPanelBody();
+}
+function closeChatPanel(){
+  const backdrop = document.getElementById('chat-panel-backdrop');
+  const panel = document.getElementById('chat-panel');
+  if(backdrop) backdrop.hidden = true;
+  if(panel) panel.hidden = true;
+}
+// O conteúdo da janela é substituído a cada mensagem/subscrição, por isso os
+// seus próprios botões são ligados aqui de cada vez — ao contrário do
+// botão e do fundo (esses vivem sempre no DOM, ligados uma única vez).
+function bindChatPanelHandlers(){
+  const subscribeBtn = document.getElementById('premium-subscribe-btn');
+  if(subscribeBtn) subscribeBtn.addEventListener('click', ()=>{
+    if(!FIREBASE_READY || !currentWeddingId){ alert('Sem ligação — tenta novamente.'); return; }
+    subscribeBtn.disabled = true;
+    subscribeBtn.textContent = 'A ativar…';
+    CURRENT_DOC().update({
+      subscription: { active:true, plan:'premium-mensal-simulado', updatedAt: firebase.firestore.FieldValue.serverTimestamp() }
+    }).then(()=>{
+      currentSubscription = { active:true, plan:'premium-mensal-simulado' };
+      renderChatPanelBody();
+      updateChatFab();
+    }).catch(err=>{
+      console.error('Weddy subscribe error:', err.code, err.message);
+      subscribeBtn.disabled = false;
+      subscribeBtn.textContent = 'Subscrever Weddy Premium';
+      alert('Não foi possível ativar a subscrição. Tenta novamente.');
+    });
+  });
+  const assistInput = document.getElementById('assist-chat-input');
+  const assistSendBtn = document.getElementById('assist-chat-send');
+  const sendAssistMessage = (presetText)=>{
+    const texto = (presetText!==undefined ? presetText : (assistInput? assistInput.value : '')).trim();
+    if(!texto) return;
+    assistChatHistory.push({ role:'user', text:texto });
+    assistChatHistory.push({ role:'bot', text: respostaSimuladaAssistente(texto) });
+    renderChatPanelBody();
+    const freshInput = document.getElementById('assist-chat-input');
+    if(freshInput) freshInput.focus();
+  };
+  if(assistSendBtn) assistSendBtn.addEventListener('click', ()=>sendAssistMessage());
+  if(assistInput) assistInput.addEventListener('keydown', e=>{
+    if(e.key==='Enter'){ e.preventDefault(); sendAssistMessage(); }
+  });
+  document.querySelectorAll('[data-assistchip]').forEach(btn=>{
+    btn.addEventListener('click', ()=> sendAssistMessage(btn.getAttribute('data-assistchip')));
+  });
 }
 
 function viewDefinicoes(){
@@ -4089,7 +4344,6 @@ function viewDefinicoes(){
   if(definicoesSection==='exportar') return viewDefExportar();
   if(definicoesSection==='reportar') return viewDefReportar();
   if(definicoesSection==='rsvp') return viewDefRSVP();
-  if(definicoesSection==='assistente') return viewDefAssistente();
   return viewDefMenu();
 }
 
@@ -4112,7 +4366,6 @@ function viewDefMenu(){
   <div class="section-label-caps">Weddy Premium</div>
   <div class="list-group">
     ${defMenuRow('rsvp', ICONS.mail, 6, 'Convites RSVP', hasActiveSubscription() ? 'Envia e acompanha as respostas dos convidados' : 'Subscrição necessária')}
-    ${defMenuRow('assistente', ICONS.chat, 4, 'Assistente Weddy', hasActiveSubscription() ? 'Tira dúvidas sobre o teu casamento' : 'Subscrição necessária')}
   </div>
 
   <div class="section-label-caps">O casamento</div>
@@ -4464,6 +4717,27 @@ function bindHandlers(){
   });
   const btnLogout = document.getElementById('btn-logout');
   if(btnLogout) btnLogout.addEventListener('click', ()=>{ if(typeof auth!=='undefined' && auth) auth.signOut(); });
+  // Botão "Subscrever Weddy Premium" na página de upsell — como ainda não
+  // há pagamentos reais ligados, isto ativa já a subscrição de teste desta
+  // conta diretamente no Firestore, para poderes experimentar a funcionalidade
+  // completa sem teres de correr scripts à parte.
+  const subscribeBtn = document.getElementById('premium-subscribe-btn');
+  if(subscribeBtn) subscribeBtn.addEventListener('click', ()=>{
+    if(!FIREBASE_READY || !currentWeddingId){ alert('Sem ligação — tenta novamente.'); return; }
+    subscribeBtn.disabled = true;
+    subscribeBtn.textContent = 'A ativar…';
+    CURRENT_DOC().update({
+      subscription: { active:true, plan:'premium-mensal-simulado', updatedAt: firebase.firestore.FieldValue.serverTimestamp() }
+    }).then(()=>{
+      currentSubscription = { active:true, plan:'premium-mensal-simulado' };
+      _origRender();
+    }).catch(err=>{
+      console.error('Weddy subscribe error:', err.code, err.message);
+      subscribeBtn.disabled = false;
+      subscribeBtn.textContent = 'Subscrever Weddy Premium';
+      alert('Não foi possível ativar a subscrição. Tenta novamente.');
+    });
+  });
 
   // Inspiração
   const inspAddBtn = document.getElementById('insp-add-btn');
@@ -5069,27 +5343,22 @@ function bindHandlers(){
   });
   const rsvpRefreshBtn = document.getElementById('rsvp-refresh-respostas');
   if(rsvpRefreshBtn) rsvpRefreshBtn.addEventListener('click', ()=>{ loadRSVPResponses(); });
-
-  // Weddy Premium — Assistente
-  const assistInput = document.getElementById('assist-chat-input');
-  const assistSendBtn = document.getElementById('assist-chat-send');
-  const sendAssistMessage = ()=>{
-    if(!assistInput) return;
-    const texto = assistInput.value.trim();
-    if(!texto) return;
-    assistChatHistory.push({ role:'user', text:texto });
-    assistChatHistory.push({ role:'bot', text: respostaSimuladaAssistente(texto) });
-    assistInput.value = '';
+  const rsvpSearchInput = document.getElementById('rsvp-search');
+  if(rsvpSearchInput) rsvpSearchInput.addEventListener('input', e=>{
+    rsvpSearchQuery = e.target.value;
     _origRender();
-    const log = document.getElementById('assist-chat-log');
-    if(log) log.scrollTop = log.scrollHeight;
-  };
-  if(assistSendBtn) assistSendBtn.addEventListener('click', sendAssistMessage);
-  if(assistInput) assistInput.addEventListener('keydown', e=>{
-    if(e.key==='Enter'){ e.preventDefault(); sendAssistMessage(); }
+    const freshInput = document.getElementById('rsvp-search');
+    if(freshInput){ freshInput.focus(); freshInput.selectionStart = freshInput.selectionEnd = freshInput.value.length; }
   });
-  const assistLog = document.getElementById('assist-chat-log');
-  if(assistLog) assistLog.scrollTop = assistLog.scrollHeight;
+  const rsvpFilterToggle = document.getElementById('rsvp-filter-toggle');
+  if(rsvpFilterToggle) rsvpFilterToggle.addEventListener('click', ()=>{ rsvpFilterChipsOpen = !rsvpFilterChipsOpen; _origRender(); });
+  document.querySelectorAll('[data-rsvpfilter]').forEach(btn=>{
+    btn.addEventListener('click', e=>{ rsvpStatusFilter = e.currentTarget.dataset.rsvpfilter; _origRender(); });
+  });
+
+  // Nota: o Assistente Weddy já não tem handlers aqui — vive só na janela
+  // flutuante (#chat-panel), cujo próprio conteúdo é ligado por
+  // bindChatPanelHandlers() sempre que essa janela é (re)desenhada.
 
   // O grande dia
   const addEventBtn = document.getElementById('add-event-btn');
