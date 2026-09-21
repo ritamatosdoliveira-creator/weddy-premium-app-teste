@@ -2203,6 +2203,20 @@ const APP_I18N = {
     defTitle:'Definições', defSubtitle:'Personaliza a tua experiência na Weddy<br>e gere o teu casamento.',
     sectionPremium:'Weddy Premium', sectionWedding:'O casamento', sectionData:'Os teus dados', sectionAccess:'Acesso e conta', sectionInfo:'Informação', sectionHelp:'Ajuda',
     rsvpTitle:'Convites RSVP', rsvpDesc:'Envia e acompanha as respostas dos convidados',
+    healthTitle:'Wedding Health', healthDesc:'Um raio-x rápido ao estado do teu casamento',
+    healthAllGood:'Está tudo controlado! 🎉',
+    healthAllGoodDesc:'Não encontrei nada a precisar da tua atenção neste momento — passa por aqui de vez em quando.',
+    healthSummaryRed: n => `${n} coisa${n===1?'':'s'} precisa${n===1?'':'m'} da tua atenção.`,
+    healthSummaryYellow: n => `${n} coisa${n===1?'':'s'} para ires vendo, sem urgência.`,
+    healthConfirmedPct: pct => `${pct}% dos convidados já confirmaram presença.`,
+    healthCheckPendingRSVP: n => `${n} convidado${n===1?'':'s'} ainda ${n===1?'não respondeu':'não responderam'} ao RSVP.`,
+    healthCheckPaymentsSoon: n => `Tens ${n} pagamento${n===1?'':'s'} nos próximos 7 dias.`,
+    healthCheckPaymentsUpcoming: n => `Tens ${n} pagamento${n===1?'':'s'} nos próximos 15 dias.`,
+    healthCheckBudgetOver: pct => `O orçamento está ${pct}% acima do planeado.`,
+    healthCheckNoTable: n => `${n} convidado${n===1?'':'s'} confirmado${n===1?'':'s'} ainda sem mesa atribuída.`,
+    healthCheckNoMeal: n => `${n} convidado${n===1?'':'s'} confirmado${n===1?'':'s'} ainda sem refeição escolhida.`,
+    healthCheckSuppliers: n => `${n} fornecedor${n===1?'':'es'} ainda por contratar.`,
+    btnResolve:'Resolver',
     memoriesTitle:'Weddy Memories', memoriesDesc:'Fotos que os convidados partilharam contigo',
     documentsTitle:'Documentos do casamento', documentsDesc:'Carrega contratos em PDF e pesquisa neles pelo Assistente',
     subscriptionNeeded:'Subscrição necessária',
@@ -2772,6 +2786,20 @@ const APP_I18N = {
     defTitle:'Settings', defSubtitle:'Customize your Weddy experience<br>and manage your wedding.',
     sectionPremium:'Weddy Premium', sectionWedding:'The wedding', sectionData:'Your data', sectionAccess:'Access & account', sectionInfo:'Information', sectionHelp:'Help',
     rsvpTitle:'RSVP invitations', rsvpDesc:"Send and track your guests' responses",
+    healthTitle:'Wedding Health', healthDesc:"A quick check-up on how your wedding is going",
+    healthAllGood:'Everything looks good! 🎉',
+    healthAllGoodDesc:"Nothing needs your attention right now — check back every now and then.",
+    healthSummaryRed: n => `${n} thing${n===1?'':'s'} need${n===1?'s':''} your attention.`,
+    healthSummaryYellow: n => `${n} thing${n===1?'':'s'} worth a look, nothing urgent.`,
+    healthConfirmedPct: pct => `${pct}% of guests have confirmed attendance.`,
+    healthCheckPendingRSVP: n => `${n} guest${n===1?'':'s'} ${n===1?"hasn't":"haven't"} responded to the RSVP yet.`,
+    healthCheckPaymentsSoon: n => `You have ${n} payment${n===1?'':'s'} due in the next 7 days.`,
+    healthCheckPaymentsUpcoming: n => `You have ${n} payment${n===1?'':'s'} due in the next 15 days.`,
+    healthCheckBudgetOver: pct => `The budget is ${pct}% over what you planned.`,
+    healthCheckNoTable: n => `${n} confirmed guest${n===1?'':'s'} still without a table.`,
+    healthCheckNoMeal: n => `${n} confirmed guest${n===1?'':'s'} still without a meal choice.`,
+    healthCheckSuppliers: n => `${n} supplier${n===1?'':'s'} still not booked.`,
+    btnResolve:'Fix this',
     memoriesTitle:'Weddy Memories', memoriesDesc:'Photos your guests have shared with you',
     documentsTitle:'Wedding documents', documentsDesc:'Upload PDF contracts and search them through the Assistant',
     subscriptionNeeded:'Subscription required',
@@ -3500,6 +3528,98 @@ function getUpcomingPayments(){
     }
   });
   return list.sort((a,b)=>a.days-b.days);
+}
+// ============================================================
+// WEDDY WEDDING HEALTH (Fase 4 do roadmap) — nenhuma IA, só regras sobre
+// os dados reais deste casamento (RSVP, pagamentos, mesas, fornecedores,
+// orçamento). Cada regra devolve um "check" com uma gravidade (vermelho/
+// amarelo) só quando há algo a assinalar — sem problemas, a lista fica
+// vazia e o resumo mostra "tudo controlado". Tal como o resto da app, uma
+// futura IA poderia um dia explicar isto por palavras próprias, mas nunca
+// substitui as regras que decidem O QUE é ou não um problema.
+// ============================================================
+function assignedGuestKeysSet(){
+  const out = new Set();
+  Object.values((state.seating && state.seating.assignments) || {}).forEach(v=>{
+    if(!v) return;
+    const gk = String(v).split('::')[0];
+    if(gk) out.add(gk);
+  });
+  return out;
+}
+function getWeddingHealthChecks(){
+  const checks = [];
+  const allGuests = flattenAllGuestsForRSVP();
+
+  // Convidados por responder ao RSVP.
+  const pendentes = allGuests.filter(g=>{
+    if(!g.entry.rsvpToken) return !isConfirmed(g.side, g.catId, g.idx);
+    return !rsvpHasResponded(memberRSVPResponse(g));
+  }).length;
+  if(pendentes>0){
+    checks.push({ id:'rsvp-pending', severity: pendentes>10?'red':'yellow', text: ta('healthCheckPendingRSVP')(pendentes), goto:{def:'rsvp'} });
+  }
+
+  // Pagamentos a chegar (próximos 15 dias; vermelho se algum for já nos
+  // próximos 7).
+  const upcomingPayments = getUpcomingPayments();
+  if(upcomingPayments.length){
+    const soon = upcomingPayments.filter(u=>u.days<=7).length;
+    checks.push({
+      id:'payments',
+      severity: soon>0 ? 'red' : 'yellow',
+      text: soon>0 ? ta('healthCheckPaymentsSoon')(soon) : ta('healthCheckPaymentsUpcoming')(upcomingPayments.length),
+      goto:{ tab:'gastos' }
+    });
+  }
+
+  // Orçamento acima do planeado.
+  const gasto = totalExpenseValue();
+  const orcamento = state.budget && state.budget.total ? state.budget.total : 0;
+  if(orcamento>0 && gasto>orcamento){
+    const pct = Math.round(((gasto-orcamento)/orcamento)*100);
+    if(pct>0){
+      checks.push({ id:'budget-over', severity: pct>=10?'red':'yellow', text: ta('healthCheckBudgetOver')(pct), goto:{ tab:'orcamento' } });
+    }
+  }
+
+  // Convidados confirmados ainda sem mesa — só faz sentido assinalar
+  // depois de já haver pelo menos uma mesa configurada.
+  if((state.seating && state.seating.tables && state.seating.tables.length)){
+    const assignedKeys = assignedGuestKeysSet();
+    const semMesa = allGuests.filter(g=>{
+      if(!isConfirmed(g.side, g.catId, g.idx)) return false;
+      return !assignedKeys.has(guestKey(g.side, g.catId, g.idx));
+    }).length;
+    if(semMesa>0){
+      checks.push({ id:'no-table', severity:'yellow', text: ta('healthCheckNoTable')(semMesa), goto:{ tab:'mesas' } });
+    }
+  }
+
+  // Convidados confirmados via RSVP que ainda não escolheram refeição
+  // (só é possível saber isto de quem respondeu pelo link de RSVP).
+  const semMenu = allGuests.filter(g=>{
+    if(!g.entry.rsvpToken) return false;
+    const resp = memberRSVPResponse(g);
+    return resp && resp.attending===true && !(resp.meal && resp.meal.trim());
+  }).length;
+  if(semMenu>0){
+    checks.push({ id:'no-meal', severity:'yellow', text: ta('healthCheckNoMeal')(semMenu), goto:{ def:'rsvp' } });
+  }
+
+  // Fornecedores ainda por contratar, só relevante quando o casamento já
+  // está perto (senão é normal ainda se estar a comparar opções).
+  if(weddingSettings.weddingDate){
+    const diasFalta = daysUntil(weddingSettings.weddingDate);
+    if(diasFalta!==null && diasFalta>=0 && diasFalta<=60){
+      const porContratar = (state.suppliers||[]).filter(s=>s.status!=='contratado').length;
+      if(porContratar>0){
+        checks.push({ id:'suppliers', severity: diasFalta<=14?'red':'yellow', text: ta('healthCheckSuppliers')(porContratar), goto:{ tab:'fornecedores' } });
+      }
+    }
+  }
+
+  return checks;
 }
 function viewInicio(){
   const totalGuests = countGuests('noiva')+countGuests('noivo');
@@ -6027,6 +6147,43 @@ function exportRSVPToCSV(){
   document.body.removeChild(a);
   setTimeout(()=>URL.revokeObjectURL(url), 2000);
 }
+function viewDefWeddingHealth(){
+  if(!hasActiveSubscription()) return viewDefPremiumLocked(ta('healthTitle'));
+  const checks = getWeddingHealthChecks();
+  const totalGuests = countGuests('noiva')+countGuests('noivo');
+  const totalConfirmed = countConfirmed('noiva')+countConfirmed('noivo');
+  const pct = totalGuests>0 ? Math.round((totalConfirmed/totalGuests)*100) : 0;
+  const nRed = checks.filter(c=>c.severity==='red').length;
+  const nYellow = checks.filter(c=>c.severity==='yellow').length;
+  const overall = nRed>0 ? 'red' : (nYellow>0 ? 'yellow' : 'green');
+  const overallDot = { red:'#C0523F', yellow:'#D8A657', green:'#7A9471' }[overall];
+  const overallText = overall==='red' ? ta('healthSummaryRed')(nRed+nYellow)
+    : overall==='yellow' ? ta('healthSummaryYellow')(nYellow)
+    : ta('healthAllGood');
+  const rows = checks.map(c=>{
+    const dot = c.severity==='red' ? '#C0523F' : '#D8A657';
+    const gotoAttr = c.goto ? `data-healthgoto="${c.goto.tab ? 'tab:'+c.goto.tab : 'def:'+c.goto.def}"` : '';
+    return `
+    <div class="list-row" style="align-items:flex-start; gap:10px;">
+      <span style="width:10px; height:10px; border-radius:50%; background:${dot}; flex-shrink:0; margin-top:6px;"></span>
+      <div class="def-row-mid" style="flex:1;">
+        <div class="def-row-title" style="font-weight:400; line-height:1.4;">${c.text}</div>
+      </div>
+      ${c.goto ? `<button class="rsvp-copy-btn" ${gotoAttr} style="flex-shrink:0;">${ta('btnResolve')}</button>` : ''}
+    </div>`;
+  }).join('');
+  return `
+  ${defSubHeader(ta('healthTitle'))}
+  <div class="stat-card" style="margin:0 16px 12px; display:flex; align-items:center; gap:12px;">
+    <span style="width:14px; height:14px; border-radius:50%; background:${overallDot}; flex-shrink:0;"></span>
+    <div>
+      <div class="l" style="margin:0 0 2px; font-size:16px; color:var(--ink);">${overallText}</div>
+      ${totalGuests>0 ? `<div class="l" style="margin:0;">${ta('healthConfirmedPct')(pct)}</div>` : ''}
+    </div>
+  </div>
+  ${checks.length ? `<div class="list-group" style="margin-bottom:24px;">${rows}</div>` : `<div class="empty-note" style="margin:0 16px 24px;">${ta('healthAllGoodDesc')}</div>`}
+  `;
+}
 function viewDefRSVP(){
   if(!hasActiveSubscription()) return viewDefPremiumLocked(ta('rsvpTitle'));
   if(!rsvpResponsesLoaded && !rsvpLoadingResponses) loadRSVPResponses();
@@ -6329,6 +6486,7 @@ function viewDefinicoes(){
   if(definicoesSection==='exportar') return viewDefExportar();
   if(definicoesSection==='reportar') return viewDefReportar();
   if(definicoesSection==='rsvp') return viewDefRSVP();
+  if(definicoesSection==='health') return viewDefWeddingHealth();
   if(definicoesSection==='memories') return viewDefMemories();
   if(definicoesSection==='documentos') return viewDefDocumentos();
   return viewDefMenu();
@@ -6363,6 +6521,7 @@ function viewDefMenu(){
   <div class="section-label-caps">${ta('sectionPremium')}</div>
   <div class="list-group">
     ${defMenuRow('rsvp', ICONS.mail, 6, ta('rsvpTitle'), subscribed ? ta('rsvpDesc') : ta('subscriptionNeeded'), subscribed ? getRSVPNewResponsesCount() : 0)}
+    ${defMenuRow('health', ICONS.warn||ICONS.checklist, 2, ta('healthTitle'), subscribed ? ta('healthDesc') : ta('subscriptionNeeded'), subscribed ? getWeddingHealthChecks().length : 0)}
     ${defMenuRow('memories', ICONS.camera, 3, ta('memoriesTitle'), subscribed ? ta('memoriesDesc') : ta('subscriptionNeeded'))}
     ${defMenuRow('documentos', ICONS.docnote||ICONS.checklist, 4, ta('documentsTitle'), subscribed ? ta('documentsDesc') : ta('subscriptionNeeded'))}
   </div>
@@ -7228,6 +7387,24 @@ function bindHandlers(){
   });
   document.querySelectorAll('[data-defback]').forEach(el=>{
     el.addEventListener('click', ()=>{ definicoesSection = null; _origRender(); });
+  });
+  // Botões "Resolver" do Wedding Health — saltam para o separador principal
+  // (tab:x) ou para uma secção de Definições (def:x), fechando a própria
+  // página de Definições para a pessoa já cair no sítio certo.
+  document.querySelectorAll('[data-healthgoto]').forEach(el=>{
+    el.addEventListener('click', e=>{
+      const [kind, value] = e.currentTarget.dataset.healthgoto.split(':');
+      closeAllSheets();
+      if(kind==='tab'){
+        definicoesSection = null;
+        activeTab = value;
+      } else if(kind==='def'){
+        activeTab = 'definicoes';
+        definicoesSection = value;
+        if(value==='rsvp') setRSVPSeenCount(countRSVPResponded());
+      }
+      _origRender();
+    });
   });
   const defBack = document.getElementById('def-back');
   if(defBack) defBack.addEventListener('click', ()=>{ closeAllSheets(); activeTab='inicio'; _origRender(); });
