@@ -3547,79 +3547,86 @@ function assignedGuestKeysSet(){
   });
   return out;
 }
-function getWeddingHealthChecks(){
-  const checks = [];
-  const allGuests = flattenAllGuestsForRSVP();
-
-  // Convidados por responder ao RSVP.
-  const pendentes = allGuests.filter(g=>{
+// Cada regra é uma função independente que só olha para o estado do
+// casamento e devolve UM check (ou null se não houver nada a assinalar).
+// Isto é o que o documento da Fase 3B pede em concreto: acrescentar uma
+// regra nova no futuro (ex: "fornecedor sem contrato assinado") é escrever
+// mais uma função e um item neste array — o ecrã (viewDefWeddingHealth) e
+// o Copilot dos noivos nunca precisam de saber quantas regras existem nem
+// o que cada uma verifica.
+function checkPendingRSVP(){
+  const pendentes = flattenAllGuestsForRSVP().filter(g=>{
     if(!g.entry.rsvpToken) return !isConfirmed(g.side, g.catId, g.idx);
     return !rsvpHasResponded(memberRSVPResponse(g));
   }).length;
-  if(pendentes>0){
-    checks.push({ id:'rsvp-pending', severity: pendentes>10?'red':'yellow', text: ta('healthCheckPendingRSVP')(pendentes), goto:{def:'rsvp'} });
-  }
-
-  // Pagamentos a chegar (próximos 15 dias; vermelho se algum for já nos
-  // próximos 7).
-  const upcomingPayments = getUpcomingPayments();
-  if(upcomingPayments.length){
-    const soon = upcomingPayments.filter(u=>u.days<=7).length;
-    checks.push({
-      id:'payments',
-      severity: soon>0 ? 'red' : 'yellow',
-      text: soon>0 ? ta('healthCheckPaymentsSoon')(soon) : ta('healthCheckPaymentsUpcoming')(upcomingPayments.length),
-      goto:{ tab:'gastos' }
-    });
-  }
-
-  // Orçamento acima do planeado.
+  if(pendentes<=0) return null;
+  return { id:'rsvp-pending', severity: pendentes>10?'red':'yellow', text: ta('healthCheckPendingRSVP')(pendentes), goto:{ def:'rsvp' } };
+}
+function checkUpcomingPayments(){
+  const upcoming = getUpcomingPayments();
+  if(!upcoming.length) return null;
+  const soon = upcoming.filter(u=>u.days<=7).length;
+  return {
+    id:'payments',
+    severity: soon>0 ? 'red' : 'yellow',
+    text: soon>0 ? ta('healthCheckPaymentsSoon')(soon) : ta('healthCheckPaymentsUpcoming')(upcoming.length),
+    goto:{ tab:'gastos' }
+  };
+}
+function checkBudget(){
   const gasto = totalExpenseValue();
   const orcamento = state.budget && state.budget.total ? state.budget.total : 0;
-  if(orcamento>0 && gasto>orcamento){
-    const pct = Math.round(((gasto-orcamento)/orcamento)*100);
-    if(pct>0){
-      checks.push({ id:'budget-over', severity: pct>=10?'red':'yellow', text: ta('healthCheckBudgetOver')(pct), goto:{ tab:'orcamento' } });
-    }
-  }
-
-  // Convidados confirmados ainda sem mesa — só faz sentido assinalar
-  // depois de já haver pelo menos uma mesa configurada.
-  if((state.seating && state.seating.tables && state.seating.tables.length)){
-    const assignedKeys = assignedGuestKeysSet();
-    const semMesa = allGuests.filter(g=>{
-      if(!isConfirmed(g.side, g.catId, g.idx)) return false;
-      return !assignedKeys.has(guestKey(g.side, g.catId, g.idx));
-    }).length;
-    if(semMesa>0){
-      checks.push({ id:'no-table', severity:'yellow', text: ta('healthCheckNoTable')(semMesa), goto:{ tab:'mesas' } });
-    }
-  }
-
-  // Convidados confirmados via RSVP que ainda não escolheram refeição
-  // (só é possível saber isto de quem respondeu pelo link de RSVP).
-  const semMenu = allGuests.filter(g=>{
+  if(!(orcamento>0 && gasto>orcamento)) return null;
+  const pct = Math.round(((gasto-orcamento)/orcamento)*100);
+  if(pct<=0) return null;
+  return { id:'budget-over', severity: pct>=10?'red':'yellow', text: ta('healthCheckBudgetOver')(pct), goto:{ tab:'orcamento' } };
+}
+function checkUnseatedGuests(){
+  if(!(state.seating && state.seating.tables && state.seating.tables.length)) return null;
+  const assignedKeys = assignedGuestKeysSet();
+  const semMesa = flattenAllGuestsForRSVP().filter(g=>{
+    if(!isConfirmed(g.side, g.catId, g.idx)) return false;
+    return !assignedKeys.has(guestKey(g.side, g.catId, g.idx));
+  }).length;
+  if(semMesa<=0) return null;
+  return { id:'no-table', severity:'yellow', text: ta('healthCheckNoTable')(semMesa), goto:{ tab:'mesas' } };
+}
+function checkMissingMeals(){
+  // Só é possível saber isto de quem respondeu pelo link de RSVP.
+  const semMenu = flattenAllGuestsForRSVP().filter(g=>{
     if(!g.entry.rsvpToken) return false;
     const resp = memberRSVPResponse(g);
     return resp && resp.attending===true && !(resp.meal && resp.meal.trim());
   }).length;
-  if(semMenu>0){
-    checks.push({ id:'no-meal', severity:'yellow', text: ta('healthCheckNoMeal')(semMenu), goto:{ def:'rsvp' } });
-  }
-
-  // Fornecedores ainda por contratar, só relevante quando o casamento já
-  // está perto (senão é normal ainda se estar a comparar opções).
-  if(weddingSettings.weddingDate){
-    const diasFalta = daysUntil(weddingSettings.weddingDate);
-    if(diasFalta!==null && diasFalta>=0 && diasFalta<=60){
-      const porContratar = (state.suppliers||[]).filter(s=>s.status!=='contratado').length;
-      if(porContratar>0){
-        checks.push({ id:'suppliers', severity: diasFalta<=14?'red':'yellow', text: ta('healthCheckSuppliers')(porContratar), goto:{ tab:'fornecedores' } });
-      }
-    }
-  }
-
-  return checks;
+  if(semMenu<=0) return null;
+  return { id:'no-meal', severity:'yellow', text: ta('healthCheckNoMeal')(semMenu), goto:{ def:'rsvp' } };
+}
+function checkUnbookedVendors(){
+  // Só relevante quando o casamento já está perto (senão é normal ainda
+  // se estar a comparar opções).
+  if(!weddingSettings.weddingDate) return null;
+  const diasFalta = daysUntil(weddingSettings.weddingDate);
+  if(!(diasFalta!==null && diasFalta>=0 && diasFalta<=60)) return null;
+  const porContratar = (state.suppliers||[]).filter(s=>s.status!=='contratado').length;
+  if(porContratar<=0) return null;
+  return { id:'suppliers', severity: diasFalta<=14?'red':'yellow', text: ta('healthCheckSuppliers')(porContratar), goto:{ tab:'fornecedores' } };
+}
+// Ordem = prioridade por defeito quando duas regras têm a mesma gravidade
+// (a ordenação final por vermelho/amarelo acontece em getWeddingHealthChecks).
+const healthRules = [
+  checkPendingRSVP,
+  checkUpcomingPayments,
+  checkBudget,
+  checkUnseatedGuests,
+  checkMissingMeals,
+  checkUnbookedVendors
+];
+const HEALTH_SEVERITY_ORDER = { red:0, yellow:1 };
+function getWeddingHealthChecks(){
+  return healthRules
+    .map(rule=>rule())
+    .filter(Boolean)
+    .sort((a,b)=> HEALTH_SEVERITY_ORDER[a.severity] - HEALTH_SEVERITY_ORDER[b.severity]);
 }
 function viewInicio(){
   const totalGuests = countGuests('noiva')+countGuests('noivo');
@@ -5872,39 +5879,47 @@ function checkCopilotIntentPermission(intent, context){
 }
 
 // 3) REGISTO DE AÇÕES — o único sítio que lê o estado do casamento ou
-// escreve nele. As "primeiras ações" do roadmap para o lado dos noivos;
-// createTask/updateTask (edição/remoção por chat), getBudget "completo",
-// getPayments detalhado, getGuests, getPendingRSVPs como função reutilizável
-// fora do chat, etc. ficam para a Fase 3B, quando isto ganhar mais alcance.
+// escreve nele. Separado explicitamente em "read" (nunca muda nada, seguro
+// para chamar quantas vezes for preciso) e "write" (muda o estado — no dia
+// em que uma IA real passar a poder chamar isto, saber-se de antemão quais
+// são as ações que escrevem é o que permite decidir quais precisam de
+// confirmação antes de correr, como já acontece no Weddy Concierge).
+// "Primeiras ações" do roadmap para o lado dos noivos; updateTask,
+// getGuest/getGuests, moveGuestToTable, sendRSVPReminder, etc. ficam para
+// quando a Fase 3B (IA real) precisar delas.
 const WeddyActions = {
-  createTask(texto){
-    const cat = state.todoCategories.find(c=>c.id==='tc3') || state.todoCategories[0];
-    if(!cat) return null;
-    cat.items.push({ text: texto, done:false, due:'', time:'' });
-    render();
-    return cat;
+  read: {
+    getUpcomingTasks(){
+      return getDuedTodoItems().filter(it => it.days>=0 && it.days<=7);
+    },
+    getPendingRSVPs(){
+      return flattenAllGuestsForRSVP().filter(g=>{
+        return !g.entry.rsvpToken || !rsvpHasResponded(memberRSVPResponse(g));
+      }).map(g=>g.name).filter(Boolean);
+    },
+    getDietaryList(){
+      return flattenAllGuestsForRSVP().filter(g=>{
+        const resp = g.entry.rsvpToken ? memberRSVPResponse(g) : null;
+        return resp && resp.dietary && resp.dietary.trim();
+      }).map(g=>{
+        const resp = memberRSVPResponse(g);
+        return `${g.name} (${resp.dietary.trim()})`;
+      });
+    },
+    getRemainingPayments(){
+      const gasto = totalExpenseValue();
+      const pago = totalExpensePaid();
+      return { totalRemaining: Math.max(0, gasto-pago), upcoming: getUpcomingPayments() };
+    }
   },
-  getUpcomingTasks(){
-    return getDuedTodoItems().filter(it => it.days>=0 && it.days<=7);
-  },
-  getPendingRSVPs(){
-    return flattenAllGuestsForRSVP().filter(g=>{
-      return !g.entry.rsvpToken || !rsvpHasResponded(memberRSVPResponse(g));
-    }).map(g=>g.name).filter(Boolean);
-  },
-  getDietaryList(){
-    return flattenAllGuestsForRSVP().filter(g=>{
-      const resp = g.entry.rsvpToken ? memberRSVPResponse(g) : null;
-      return resp && resp.dietary && resp.dietary.trim();
-    }).map(g=>{
-      const resp = memberRSVPResponse(g);
-      return `${g.name} (${resp.dietary.trim()})`;
-    });
-  },
-  getRemainingPayments(){
-    const gasto = totalExpenseValue();
-    const pago = totalExpensePaid();
-    return { totalRemaining: Math.max(0, gasto-pago), upcoming: getUpcomingPayments() };
+  write: {
+    createTask(texto){
+      const cat = state.todoCategories.find(c=>c.id==='tc3') || state.todoCategories[0];
+      if(!cat) return null;
+      cat.items.push({ text: texto, done:false, due:'', time:'' });
+      render();
+      return cat;
+    }
   }
 };
 
@@ -5924,28 +5939,28 @@ function respondeAssistente(pergunta){
 
   switch(classified.intent){
     case I.CREATE_TASK: {
-      const cat = WeddyActions.createTask(classified.value);
+      const cat = WeddyActions.write.createTask(classified.value);
       return cat ? `Criei a tarefa "${classified.value}" em Tarefas → ${cat.label}. Já a consegues ver e editar lá.` : null;
     }
     case I.GET_UPCOMING_TASKS: {
-      const items = WeddyActions.getUpcomingTasks();
+      const items = WeddyActions.read.getUpcomingTasks();
       if(!items.length) return 'Não tens tarefas com prazo nos próximos 7 dias.';
       const lista = items.slice(0,10).map(it=>`${it.text} (${formatDatePT(it.due)}${it.time?` às ${it.time}`:''})`).join('; ');
       return `Esta semana tens: ${lista}${items.length>10 ? `, e mais ${items.length-10}` : ''}.`;
     }
     case I.GET_PENDING_RSVPS: {
-      const pendentes = WeddyActions.getPendingRSVPs();
+      const pendentes = WeddyActions.read.getPendingRSVPs();
       if(!pendentes.length) return 'Todos os convidados com link de RSVP já responderam — não falta ninguém.';
       const lista = pendentes.slice(0,15).join(', ');
       return `Ainda falta responder: ${lista}${pendentes.length>15 ? ` e mais ${pendentes.length-15}` : ''}.`;
     }
     case I.GET_DIETARY_LIST: {
-      const comRestricao = WeddyActions.getDietaryList();
+      const comRestricao = WeddyActions.read.getDietaryList();
       if(!comRestricao.length) return 'Ainda não há nenhuma restrição alimentar registada nas respostas de RSVP.';
       return `Convidados com restrições alimentares: ${comRestricao.join(', ')}.`;
     }
     case I.GET_REMAINING_PAYMENTS: {
-      const { totalRemaining, upcoming } = WeddyActions.getRemainingPayments();
+      const { totalRemaining, upcoming } = WeddyActions.read.getRemainingPayments();
       if(totalRemaining<=0) return 'Não há nenhum pagamento pendente neste momento — está tudo pago. 🎉';
       const base = `Falta pagar ${fmtEUR(totalRemaining)} no total.`;
       if(!upcoming.length) return base;
