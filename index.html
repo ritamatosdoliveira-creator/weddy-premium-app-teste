@@ -1761,6 +1761,105 @@ function migrateGuestCategories(){
       });
     });
   });
+  // Fase 8.0 — Guest Data Foundation (Set 2026): o campo "id" acima já
+  // identifica cada convidado de forma permanente, mas nunca foi usado
+  // como CHAVE em lado nenhum (state.confirmed, mesas, etc. continuavam a
+  // usar "lado|categoria|índice", que quebra sempre que a lista é
+  // reordenada ou alguém é removido). "guestId" é o mesmo valor de "id",
+  // só que agora É USADO como identidade em todo o lado — ver
+  // migrateConfirmedAndSeatingToGuestId() logo a seguir, chamada sempre
+  // depois desta função.
+  ['noiva','noivo'].forEach(side=>{
+    allGuestCategoriesOf(side).forEach(c=>{
+      const arr = getGuestNames(side, c.id);
+      if(!Array.isArray(arr)) return;
+      arr.forEach(n=>{ if(n && typeof n==='object' && !n.guestId) n.guestId = n.id; });
+    });
+  });
+}
+// Fase 8.0 — Guest Data Foundation (Set 2026): converte state.confirmed e
+// state.seating.assignments do formato antigo, baseado na posição do
+// convidado na lista ("lado|categoria|índice"), para o novo formato
+// baseado no guestId permanente. Idempotente: só mexe nas entradas que
+// ainda estão no formato antigo (chave começa por "noiva|"/"noivo|" ou
+// valor contém "::"); depois da primeira conversão, correr outra vez não
+// muda nada. Tem de correr DEPOIS de migrateGuestCategories() ter
+// garantido que todos os convidados já têm guestId.
+function migrateConfirmedAndSeatingToGuestId(){
+  if(!state) return;
+  function guestIdAt(side, cat, idx){
+    const arr = getGuestNames(side, cat);
+    const entry = arr && arr[idx];
+    return entry && typeof entry==='object' ? entry.guestId : null;
+  }
+  if(state.confirmed){
+    const old = state.confirmed;
+    const isLegacyKey = k=> /^(noiva|noivo)\|/.test(k);
+    if(Object.keys(old).some(isLegacyKey)){
+      const next = {};
+      Object.keys(old).forEach(k=>{
+        if(!isLegacyKey(k)){ next[k] = old[k]; return; }
+        const parts = k.split('|');
+        const idx = Number(parts[parts.length-1]);
+        const cat = parts.slice(1,-1).join('|');
+        const side = parts[0];
+        const gid = guestIdAt(side, cat, idx);
+        if(gid) next[gid] = old[k];
+      });
+      state.confirmed = next;
+    }
+  }
+  if(state.seating && state.seating.assignments){
+    const assignments = state.seating.assignments;
+    Object.keys(assignments).forEach(seatKey=>{
+      const val = assignments[seatKey];
+      if(typeof val!=='string' || val.indexOf('::')===-1) return; // já no formato novo (só guestId)
+      const [oldKey] = val.split('::');
+      const parts = oldKey.split('|');
+      if(parts.length<3){ delete assignments[seatKey]; return; }
+      const idx = Number(parts[parts.length-1]);
+      const cat = parts.slice(1,-1).join('|');
+      const side = parts[0];
+      const gid = guestIdAt(side, cat, idx);
+      if(gid) assignments[seatKey] = gid; else delete assignments[seatKey];
+    });
+  }
+}
+// Dado um guestId, encontra o convidado em qualquer categoria de qualquer
+// lado. É a única forma "correta" de resolver um convidado a partir da
+// Fase 8.0 — nenhuma funcionalidade nova deve voltar a navegar por
+// índice/posição.
+function findGuestByGuestId(guestId){
+  if(!guestId) return null;
+  for(const side of ['noiva','noivo']){
+    for(const c of allGuestCategoriesOf(side)){
+      const arr = getGuestNames(side, c.id);
+      if(!Array.isArray(arr)) continue;
+      const idx = arr.findIndex(e=>e && typeof e==='object' && e.guestId===guestId);
+      if(idx>=0) return { side, catId:c.id, idx, entry:arr[idx], arr };
+    }
+  }
+  return null;
+}
+// Fase 8.0 — operação central de remoção de convidado. Resolve sozinha
+// TODAS as referências desse convidado (RSVP no Firestore, confirmação,
+// lugar à mesa) e remove o registo — em vez de cada funcionalidade nova
+// ter de saber, ela própria, tudo o que precisa de limpar. Qualquer
+// caminho da app que remova/apague um convidado deve chamar esta função,
+// nunca fazer splice() diretamente no array.
+function deleteGuest(guestId){
+  const found = findGuestByGuestId(guestId);
+  if(!found) return Promise.resolve();
+  const { arr, idx, entry } = found;
+  const cleanup = entry.rsvpToken ? deleteGuestRSVPDoc(entry).catch(()=>{}) : Promise.resolve();
+  arr.splice(idx, 1);
+  delete state.confirmed[guestId];
+  if(state.seating && state.seating.assignments){
+    Object.keys(state.seating.assignments).forEach(seatKey=>{
+      if(state.seating.assignments[seatKey]===guestId) delete state.seating.assignments[seatKey];
+    });
+  }
+  return cleanup;
 }
 
 function seedData(){
@@ -1829,6 +1928,7 @@ let state = seedData();
 normalizeCategories();
 migrateCategoryDescriptions();
 migrateGuestCategories();
+migrateConfirmedAndSeatingToGuestId();
 let weddingSettings = defaultSettings();
 let activeTab = 'inicio';
 let guestSeg = 'noiva';
@@ -1942,9 +2042,10 @@ function generateGuestId(){
 // percentagem de pagamento; staff/fornecedores só a percentagem; o resto
 // só o nome — mas TODOS ganham sempre um identificador fixo (id).
 function newGuestEntry(catId, name){
-  if(catId==='criancas') return { name, id:generateGuestId(), age:'', payingPct:0 };
-  if(catId==='staff') return { name, id:generateGuestId(), payingPct:1 };
-  return { name, id:generateGuestId() };
+  const id = generateGuestId();
+  if(catId==='criancas') return { name, id, guestId:id, age:'', payingPct:0 };
+  if(catId==='staff') return { name, id, guestId:id, payingPct:1 };
+  return { name, id, guestId:id };
 }
 // Arredonda para 1 casa decimal e mostra sem ".0" quando é um número inteiro
 // (ex: 3 em vez de "3.0", mas 1.5 continua "1.5").
@@ -1973,50 +2074,15 @@ function getGuestCatLabel(side, catId){
   const custom = (state.guests[side].custom||[]).find(c=>c.id===catId);
   return custom ? custom.label : catId;
 }
-// Ao remover um convidado de uma lista, os índices dos que vêm a seguir
-// baixam uma posição. Sem isto, o "confirmado" ficava associado ao índice
-// errado (ou perdia-se todo), depois de qualquer eliminação.
-function reindexConfirmedAfterRemoval(prefix, removedIdx, newLength){
-  const old = {};
-  Object.keys(state.confirmed).forEach(k=>{
-    if(k.startsWith(prefix)){
-      const idx = Number(k.slice(prefix.length));
-      if(!isNaN(idx)){ old[idx] = state.confirmed[k]; delete state.confirmed[k]; }
-    }
-  });
-  Object.keys(old).forEach(idxStr=>{
-    const idx = Number(idxStr);
-    if(idx === removedIdx) return; // o próprio convidado removido, não transporta
-    const newIdx = idx > removedIdx ? idx - 1 : idx;
-    if(newIdx >= 0 && newIdx < newLength) state.confirmed[prefix+newIdx] = old[idx];
-  });
-}
-// Ao mover um convidado de uma posição para outra dentro da mesma lista, a
-// confirmação (guardada por índice) tem de "andar" junto com ele — senão a
-// pessoa errada ficava com a marca de confirmado depois de reordenar.
-function reindexConfirmedAfterMove(prefix, fromIdx, toIdx){
-  if(fromIdx===toIdx) return;
-  const old = {};
-  Object.keys(state.confirmed).forEach(k=>{
-    if(k.startsWith(prefix)){
-      const idx = Number(k.slice(prefix.length));
-      if(!isNaN(idx)){ old[idx] = state.confirmed[k]; delete state.confirmed[k]; }
-    }
-  });
-  function mapIndex(idx){
-    if(idx===fromIdx) return toIdx;
-    if(fromIdx<toIdx){
-      if(idx>fromIdx && idx<=toIdx) return idx-1;
-    } else {
-      if(idx>=toIdx && idx<fromIdx) return idx+1;
-    }
-    return idx;
-  }
-  Object.keys(old).forEach(idxStr=>{
-    const idx = Number(idxStr);
-    state.confirmed[prefix+mapIndex(idx)] = old[idx];
-  });
-}
+// Fase 8.0 — Guest Data Foundation (Set 2026): antes, "confirmado" e o
+// lugar à mesa eram guardados por posição na lista ("lado|categoria|
+// índice"), por isso reordenar ou remover um convidado exigia reindexar
+// manualmente tudo o resto (as duas funções que estavam aqui,
+// reindexConfirmedAfterRemoval/AfterMove). Agora que state.confirmed é
+// chaveado pelo guestId permanente de cada convidado (ver
+// migrateConfirmedAndSeatingToGuestId), mover ou remover um convidado
+// nunca desalinha mais nada — o guestId não muda com a posição, por isso
+// estas duas funções deixaram de ser necessárias e foram removidas.
 function moveGuestToIndex(side, cat, fromIdx, toIdx){
   const arr = getGuestNames(side, cat);
   if(!arr) return;
@@ -2024,7 +2090,6 @@ function moveGuestToIndex(side, cat, fromIdx, toIdx){
   if(toIdx===fromIdx) return;
   const [item] = arr.splice(fromIdx,1);
   arr.splice(toIdx,0,item);
-  reindexConfirmedAfterMove(side+'|'+cat+'|', fromIdx, toIdx);
 }
 function moveGuest(side, cat, fromIdx, dir){
   moveGuestToIndex(side, cat, fromIdx, fromIdx+dir);
@@ -2051,7 +2116,16 @@ function clearAllSeatsForTable(tableId){
     if(m && Number(m[1])===tableId) delete state.seating.assignments[k];
   });
 }
-function isConfirmed(side,cat,idx){ return !!state.confirmed[guestKey(side,cat,idx)]; }
+// Fase 8.0: resolve o convidado atual em (side,cat,idx) e lê a sua
+// confirmação pelo guestId estável, nunca por posição — mesmo que este
+// helper continue a receber side/cat/idx (útil no render, onde a posição
+// atual é sempre fiável), o que fica gravado em state.confirmed é sempre
+// o guestId.
+function isConfirmed(side,cat,idx){
+  const arr = getGuestNames(side,cat);
+  const entry = arr && arr[idx];
+  return !!(entry && typeof entry==='object' && state.confirmed[entry.guestId]);
+}
 function countGuests(side){
   let total = 0;
   allGuestCategoriesOf(side).forEach(c=>{
@@ -2080,7 +2154,8 @@ function allAdultGuests(){
     allGuestCategoriesOf(side).forEach(c=>{
       (getGuestNames(side,c.id)||[]).forEach((n,idx)=>{
         const name = (typeof n==='object' && n!==null) ? (n.name||'') : n;
-        out.push({side,cat:c.id,idx,name,key:guestKey(side,c.id,idx)});
+        const gid = (typeof n==='object' && n!==null) ? n.guestId : null;
+        out.push({side,cat:c.id,idx,name,key:gid,guestId:gid});
       });
     });
   });
@@ -3628,12 +3703,14 @@ function getUpcomingPayments(){
 // futura IA poderia um dia explicar isto por palavras próprias, mas nunca
 // substitui as regras que decidem O QUE é ou não um problema.
 // ============================================================
+// Fase 8.0: o valor de cada lugar (state.seating.assignments["t{id}-s{n}"])
+// passou a ser diretamente o guestId do convidado sentado ali (antes era
+// uma string composta "lado|categoria|índice::Nome"), por isso já não é
+// preciso extrair nada — só juntar todos os valores num Set.
 function assignedGuestKeysSet(){
   const out = new Set();
   Object.values((state.seating && state.seating.assignments) || {}).forEach(v=>{
-    if(!v) return;
-    const gk = String(v).split('::')[0];
-    if(gk) out.add(gk);
+    if(v) out.add(v);
   });
   return out;
 }
@@ -3676,7 +3753,7 @@ function checkUnseatedGuests(){
   const assignedKeys = assignedGuestKeysSet();
   const semMesa = flattenAllGuestsForRSVP().filter(g=>{
     if(!isConfirmed(g.side, g.catId, g.idx)) return false;
-    return !assignedKeys.has(guestKey(g.side, g.catId, g.idx));
+    return !assignedKeys.has(g.guestId);
   }).length;
   if(semMesa<=0) return null;
   return { id:'no-table', severity:'yellow', text: ta('healthCheckNoTable')(semMesa), goto:{ tab:'mesas' } };
@@ -4090,8 +4167,12 @@ function bindGuestGroupHandlers(scope){
   scope.querySelectorAll('[data-confirm]').forEach(el=>{
     el.addEventListener('click', e=>{
       const [side,cat,idx] = e.currentTarget.dataset.confirm.split('|');
-      const k = guestKey(side,cat,Number(idx));
-      state.confirmed[k] = !state.confirmed[k];
+      const arr = getGuestNames(side,cat);
+      const entry = arr && arr[Number(idx)];
+      if(!entry || typeof entry!=='object' || !entry.guestId) return;
+      // Fase 8.0 (Set 2026): state.confirmed passou a ser chaveado pelo
+      // guestId permanente do convidado, não pela posição na lista.
+      state.confirmed[entry.guestId] = !state.confirmed[entry.guestId];
       softUpdateConvidados();
     });
   });
@@ -4100,23 +4181,18 @@ function bindGuestGroupHandlers(scope){
       const [side,cat,idx] = e.currentTarget.dataset.remove.split('|');
       const arr = getGuestNames(side,cat);
       if(!arr) return;
-      // Fix 3 da auditoria RGPD/Segurança (Set 2026): antes, isto só tirava
-      // o convidado do array local — o documento guests/{token} continuava
-      // no Firestore, e o link de RSVP antigo continuava a funcionar. Agora
-      // apaga (ou encolhe, em modo família) o documento correspondente
-      // também, tal como já acontecia no botão explícito de revogar link.
-      // Corre em segundo plano para a lista continuar a responder de
-      // imediato; um erro aqui não deve bloquear a remoção local, mas fica
-      // registado para se poder investigar/repetir manualmente.
       const removedEntry = arr[Number(idx)];
-      arr.splice(Number(idx),1);
-      reindexConfirmedAfterRemoval(side+'|'+cat+'|', Number(idx), arr.length);
+      if(!removedEntry || typeof removedEntry!=='object' || !removedEntry.guestId) return;
+      // Fase 8.0 (Set 2026): remover um convidado passa a ser sempre feito
+      // pela operação central deleteGuest(guestId) — resolve sozinha o
+      // array local, o RSVP no Firestore, o estado de confirmação e o
+      // lugar à mesa, em vez de cada botão saber, ele próprio, tudo o que
+      // precisa de limpar (era exatamente esse tipo de esquecimento que a
+      // auditoria de segurança encontrou nos outros caminhos de remoção).
+      deleteGuest(removedEntry.guestId).catch(err=>{
+        console.error('Weddy: falha a apagar o convite RSVP associado ao convidado removido.', err && err.code, err && err.message);
+      });
       softUpdateConvidados();
-      if(removedEntry && typeof removedEntry==='object' && removedEntry.rsvpToken){
-        deleteGuestRSVPDoc(removedEntry).catch(err=>{
-          console.error('Weddy: falha a apagar o convite RSVP associado ao convidado removido.', err.code, err.message);
-        });
-      }
     });
   });
   scope.querySelectorAll('[data-editguest]').forEach(inp=>{
@@ -4198,17 +4274,14 @@ function bindGuestGroupHandlers(scope){
         ? ta('confirmDeleteCategoryWithGuests')(label, arr.length)
         : ta('confirmDeleteCategorySimple')(label);
       if(!confirm(msg)) return;
-      // Fix 3 da auditoria pós-fixes (Set 2026): apagar uma categoria
-      // inteira só removia os convidados do array local — os documentos
-      // guests/{token} no Firestore de cada um deles ficavam órfãos e os
-      // links de RSVP antigos continuavam a funcionar, mesmo o diálogo de
-      // confirmação dizendo ao casal que os convidados "também se
-      // perdiam". Agora limpamos o Firestore de cada convidado da
-      // categoria com o mesmo helper usado no botão "✕" individual.
-      arr.forEach(entry=>{ deleteGuestRSVPDoc(entry).catch(()=>{}); });
+      // Fase 8.0 (Set 2026): tal como no botão "✕" individual, cada
+      // convidado da categoria é removido pela operação central
+      // deleteGuest(guestId) — que já limpa RSVP, confirmação e lugar à
+      // mesa sozinha — antes de a própria categoria ser removida.
+      arr.slice().forEach(entry=>{
+        if(entry && typeof entry==='object' && entry.guestId) deleteGuest(entry.guestId).catch(()=>{});
+      });
       state.guests[side].custom = state.guests[side].custom.filter(c=>c.id!==cat);
-      const prefix = side+'|'+cat+'|';
-      Object.keys(state.confirmed).forEach(k=>{ if(k.startsWith(prefix)) delete state.confirmed[k]; });
       render();
     });
   });
@@ -4420,7 +4493,12 @@ function viewMesas(){
       for(let s=1;s<=table.seats;s++){
         const key = 't'+t+'-s'+s;
         const val = state.seating.assignments[key] || '';
-        const name = val ? val.split('::')[1] : ta('tapToAssign');
+        // Fase 8.0: "val" é agora o guestId do convidado sentado ali (não
+        // mais uma string composta com o nome embutido) — o nome resolve-se
+        // ao convidado atual, o que também garante que mostra sempre o
+        // nome correto mesmo que o convidado tenha sido editado depois.
+        const seatGuest = val ? resolveSeatGuest(val) : null;
+        const name = seatGuest ? seatGuest.name : ta('tapToAssign');
         seatsHTML += `<div class="seat-row ${val?'filled':''}" data-openseat="${key}"><span class="seat-n">${s}</span><span class="seat-name">${escapeHTML(name)}</span>${ICONS.chev}</div>`;
       }
       bodyHTML = `
@@ -5699,7 +5777,7 @@ function flattenAllGuestsForRSVP(){
       if(!Array.isArray(arr)) return;
       arr.forEach((entry, idx)=>{
         if(!entry || typeof entry!=='object') return;
-        out.push({ side, catId:c.id, catLabel:c.label, idx, entry, name: entry.name||'' });
+        out.push({ side, catId:c.id, catLabel:c.label, idx, entry, name: entry.name||'', guestId: entry.guestId });
       });
     });
   });
@@ -5855,7 +5933,7 @@ function ensureRSVPLink(item){
   const s = weddingSettings;
   return GUESTS().doc(token).set({
     weddingId: currentWeddingId,
-    guestId: item.entry.id || null,
+    guestId: item.entry.guestId || item.entry.id || null,
     name: item.name,
     coupleName1: s.coupleName1 || '',
     coupleName2: s.coupleName2 || '',
@@ -5901,7 +5979,13 @@ function ensureFamilyRSVPLink(items){
   return GUESTS().doc(token).set({
     weddingId: currentWeddingId,
     isFamily: true,
-    members: members.map(m=>({ guestId: m.memberId, name: m.item.name })),
+    // Fase 8.0 (Set 2026): antes, o campo abaixo chamava-se "guestId" e
+    // guardava, na verdade, o memberId gerado só para este link — colidia
+    // de nome com o guestId permanente e estável do convidado (o mesmo
+    // campo que agora existe em convites individuais). Passa a chamar-se
+    // rsvpMemberId (o que sempre foi, de facto) e "guestId" passa a
+    // guardar mesmo a identidade permanente do convidado.
+    members: members.map(m=>({ guestId: m.item.entry.guestId || null, rsvpMemberId: m.memberId, name: m.item.name })),
     coupleName1: s.coupleName1 || '',
     coupleName2: s.coupleName2 || '',
     weddingDate: s.weddingDate || '',
@@ -5959,7 +6043,11 @@ function deleteGuestRSVPDoc(entry){
   const token = entry.rsvpToken;
   const doc = rsvpResponses[token];
   if(doc && doc.isFamily && entry.rsvpMemberId){
-    const remainingMembers = (doc.members||[]).filter(m=>m.guestId!==entry.rsvpMemberId);
+    // Fase 8.0: lê "rsvpMemberId" (formato novo) com fallback para
+    // "guestId" (formato antigo, ainda por migrar nesta conta —
+    // ver migrateFamilyGuestIds nas Cloud Functions) — funciona com
+    // documentos de familia criados antes OU depois desta migração.
+    const remainingMembers = (doc.members||[]).filter(m=>(m.rsvpMemberId||m.guestId)!==entry.rsvpMemberId);
     if(remainingMembers.length>0){
       const remainingResponses = { ...(doc.responses||{}) };
       delete remainingResponses[entry.rsvpMemberId];
@@ -6033,14 +6121,15 @@ function loadRSVPResponses(){
     render();
   });
 }
-// A posição (idx) de um convidado pode mudar depois de outras listas serem
-// alteradas nesta mesma sincronização (ex: crianças a serem acrescentadas
-// ou removidas da mesma categoria) — por isso nunca se guarda um idx, vai-se
-// sempre buscar a posição atual pela referência do próprio objeto.
+// Fase 8.0 (Set 2026): isto costumava ter de recalcular a posição atual
+// (idx) do convidado, porque a posição podia mudar a meio desta mesma
+// sincronização e nunca se guardava um índice — só se ia buscar a posição
+// na hora, pela referência do próprio objeto. Com o guestId estável, já
+// não há nada a recalcular: a identidade do convidado é sempre a mesma,
+// independentemente da posição. Mantido (em vez de removido) para não
+// obrigar a tocar em todos os call sites — devolve sempre entry.guestId.
 function liveGuestKeyFor(side, catId, entry){
-  const arr = getGuestNames(side, catId) || [];
-  const idx = arr.indexOf(entry);
-  return idx>=0 ? guestKey(side, catId, idx) : null;
+  return entry && entry.guestId ? entry.guestId : null;
 }
 // Aplica as respostas de RSVP já recebidas (rsvpResponses) ao estado local:
 // 1) Sim/Não do convidado principal atualiza a marca de "confirmado" que já
@@ -6110,9 +6199,11 @@ function applyRSVPResponsesToState(){
       const n = criancasCat.names[idx];
       if(n && n.rsvpChildOf && n.rsvpChildOf.indexOf(childRefPrefix)===0 && !wantedRefs.has(n.rsvpChildOf)){
         if(n.rsvpCreated){
-          const gk2 = guestKey(side,'criancas',idx);
-          const seatKey2 = findGuestSeatKey(gk2, null);
-          if(seatKey2) delete state.seating.assignments[seatKey2];
+          if(n.guestId){
+            const seatKey2 = findGuestSeatKey(n.guestId, null);
+            if(seatKey2) delete state.seating.assignments[seatKey2];
+            delete state.confirmed[n.guestId];
+          }
           criancasCat.names.splice(idx,1);
         } else {
           delete n.rsvpChildOf;
@@ -6144,7 +6235,10 @@ function applyRSVPResponsesToState(){
         changed = true;
         summary.childrenLinked++;
       } else {
-        criancasCat.names.push({ id:generateGuestId(), name:c.name||'Criança', age:(c.age===undefined||c.age===null)?'':c.age, payingPct:0, rsvpChildOf:c.ref, rsvpCreated:true });
+        {
+          const newChildId = generateGuestId();
+          criancasCat.names.push({ id:newChildId, guestId:newChildId, name:c.name||'Criança', age:(c.age===undefined||c.age===null)?'':c.age, payingPct:0, rsvpChildOf:c.ref, rsvpCreated:true });
+        }
         changed = true;
         summary.childrenAdded++;
       }
@@ -6510,7 +6604,7 @@ const WeddyActions = {
       const assignedKeys = assignedGuestKeysSet();
       return flattenAllGuestsForRSVP().filter(g=>{
         if(!isConfirmed(g.side, g.catId, g.idx)) return false;
-        return !assignedKeys.has(guestKey(g.side, g.catId, g.idx));
+        return !assignedKeys.has(g.guestId);
       }).map(g=>g.name).filter(Boolean);
     }
   },
@@ -9011,10 +9105,13 @@ function closeSeatSheet(){
   document.getElementById('sheet-backdrop').classList.remove('show');
   editingSeatKey = null;
 }
-function findGuestSeatKey(guestKey, excludeSeatKey){
+// Fase 8.0: o valor guardado em cada lugar é agora diretamente o guestId
+// do convidado (antes era "lado|categoria|índice::Nome", por isso a
+// comparação tinha de ser um startsWith) — agora é uma comparação exata.
+function findGuestSeatKey(guestId, excludeSeatKey){
   for(const [seatKey, val] of Object.entries(state.seating.assignments)){
     if(seatKey===excludeSeatKey) continue;
-    if(val && val.startsWith(guestKey+'::')) return seatKey;
+    if(val && val===guestId) return seatKey;
   }
   return null;
 }
@@ -9028,8 +9125,9 @@ function renderSeatPickerList(){
   const q = seatQuery.toLowerCase();
   let rows = `<div class="picker-row ${current===''?'is-selected':''}" data-pick=""><span class="side-tag" style="background:var(--ink-soft);">—</span><span class="pname">Lugar livre</span></div>`;
   allAdultGuests().forEach(g=>{
+    if(!g.key) return; // sem guestId (não devia acontecer após a migração), ignora
     if(q && !g.name.toLowerCase().includes(q)) return;
-    const val = g.key+'::'+g.name;
+    const val = g.key; // Fase 8.0: o valor gravado é o guestId, já não "lado|cat|idx::Nome"
     const elsewhere = findGuestSeatKey(g.key, editingSeatKey);
     const childInfo = g.cat==='criancas' ? getGuestNames(g.side,'criancas')[g.idx] : null;
     const childTag = childInfo ? `<span class="pname-hint">Criança${childInfo.age?' · '+escapeHTML(String(childInfo.age))+' anos':''}</span>` : '';
@@ -9043,8 +9141,7 @@ function renderSeatPickerList(){
     row.addEventListener('click', e=>{
       const val = e.currentTarget.dataset.pick;
       if(val){
-        const guestKey = val.split('::')[0];
-        const elsewhere = findGuestSeatKey(guestKey, editingSeatKey);
+        const elsewhere = findGuestSeatKey(val, editingSeatKey);
         if(elsewhere) delete state.seating.assignments[elsewhere];
       }
       state.seating.assignments[editingSeatKey] = val;
@@ -9067,11 +9164,14 @@ let mesa3dSelectedTable = 1;
 let mesa3dViewMode = 'mesa';
 const mesa3d = { scene:null, camera:null, renderer:null, tableGroup:null, chairs:[], dragging:false, startX:0, startRotY:0, moved:0, raf:null };
 
-function parseSeatAssignment(val){
-  if(!val) return null;
-  const [key, name] = val.split('::');
-  if(!name) return null;
-  return { side:key.split('|')[0], name };
+// Fase 8.0: antes, o valor gravado em cada lugar já trazia o nome embutido
+// ("lado|cat|idx::Nome"), por isso bastava separar a string. Agora o valor
+// é só o guestId — para mostrar side/name é preciso resolver o convidado.
+function resolveSeatGuest(guestId){
+  if(!guestId) return null;
+  const found = findGuestByGuestId(guestId);
+  if(!found) return null;
+  return { side: found.side, name: found.entry.name || '' };
 }
 
 function ensureMesa3DHeader(){
@@ -9249,33 +9349,40 @@ function syncSeatingToGuestDocs(btn){
   }
   const original = btn ? btn.textContent : '';
   if(btn){ btn.disabled = true; btn.textContent = 'A sincronizar…'; }
-  // Agrupa, por mesa, os guestKeys com lugar atribuído e o respetivo nome.
-  const byTable = {}; // tableId -> [{guestKey, name, seat}]
-  Object.entries(state.seating.assignments).forEach(([seatKey, val])=>{
-    if(!val) return;
-    const [gKey, name] = val.split('::');
-    if(!gKey || !name) return;
+  // Fase 8.0 (Set 2026): antes, esta função recalculava a "morada"
+  // lado|categoria|índice do convidado NO MOMENTO do sync e procurava-a
+  // num mapa cujas chaves tinham sido gravadas com o índice de QUANDO o
+  // lugar foi atribuído — se a lista tivesse sido reordenada ou outro
+  // convidado da mesma categoria tivesse sido removido/acrescentado entre
+  // as duas ações, o sync podia escrever a mesa errada no convidado
+  // errado, ou perder a atribuição sem avisar. Agora os lugares já estão
+  // gravados diretamente por guestId (estável, nunca muda com a posição),
+  // por isso já não há recálculo nenhum a fazer — só agrupar.
+  const byTable = {}; // tableId -> [{guestId, name, seat}]
+  Object.entries(state.seating.assignments).forEach(([seatKey, guestId])=>{
+    if(!guestId) return;
+    const found = findGuestByGuestId(guestId);
+    if(!found) return; // guestId órfão (convidado entretanto apagado) — ignora
     const m = seatKey.match(/^t(\d+)-s(\d+)$/);
     if(!m) return;
     const tableId = Number(m[1]), seatNum = Number(m[2]);
     if(!byTable[tableId]) byTable[tableId] = [];
-    byTable[tableId].push({ guestKey:gKey, name, seat:seatNum });
+    byTable[tableId].push({ guestId, name: found.entry.name||'', seat:seatNum });
   });
-  // guestKey -> {tableId, seat, tablemates}
-  const assignmentByGuestKey = {};
+  // guestId -> {tableId, seat, tablemates}
+  const assignmentByGuestId = {};
   Object.entries(byTable).forEach(([tableId, list])=>{
     list.forEach(item=>{
-      assignmentByGuestKey[item.guestKey] = {
+      assignmentByGuestId[item.guestId] = {
         tableId: Number(tableId),
         seat: item.seat,
-        tablemates: list.filter(o=>o.guestKey!==item.guestKey).map(o=>o.name)
+        tablemates: list.filter(o=>o.guestId!==item.guestId).map(o=>o.name)
       };
     });
   });
   const guests = flattenAllGuestsForRSVP().filter(g=>g.entry.rsvpToken);
   const writes = guests.map(g=>{
-    const gk = guestKey(g.side, g.catId, g.idx);
-    const info = assignmentByGuestKey[gk];
+    const info = assignmentByGuestId[g.guestId];
     const payload = info
       ? { assignedTable: info.tableId, assignedSeat: info.seat, tablemates: info.tablemates }
       : { assignedTable: null, assignedSeat: null, tablemates: [] };
@@ -9484,7 +9591,7 @@ function loadMesa3DTable(){
   if(mesa3d.builtSeatCount !== table.seats) buildMesa3DChairs(table.seats);
   mesa3d.chairs.forEach(ch=>{
     const key = 't'+t+'-s'+ch.index;
-    const info = parseSeatAssignment(state.seating.assignments[key] || '');
+    const info = resolveSeatGuest(state.seating.assignments[key] || '');
     const color = info ? (info.side==='noiva' ? 0xCB8577 : 0x6C8296) : 0xFFFCF4;
     ch.seatMesh.material.color.setHex(color);
     ch.backMesh.material.color.setHex(color);
@@ -9574,7 +9681,7 @@ function tableSVG(table){
   const seatR = 5;
 
   function seatDot(sx, sy, angle, s){
-    const info = parseSeatAssignment(state.seating.assignments['t'+t+'-s'+s] || '');
+    const info = resolveSeatGuest(state.seating.assignments['t'+t+'-s'+s] || '');
     const dotColor = info ? (info.side==='noiva' ? '#CB8577' : '#6C8296') : '#E7DEC8';
     return `<circle cx="${sx}" cy="${sy}" r="${seatR}" fill="${dotColor}" stroke="#FFFDF8" stroke-width="1"/>`;
   }
@@ -9922,12 +10029,19 @@ async function exportMyDataAsJson(btn){
       GUESTS().where('weddingId', '==', currentWeddingId).get(),
       MEMORIES().where('weddingId', '==', currentWeddingId).get(),
     ]);
+    // Fase 8.0 (Set 2026): "guestId" (dentro de "data.guests" e, para cada
+    // convite, também no próprio documento RSVP) é o identificador interno
+    // e permanente do convidado — nunca muda. "id"/"rsvpToken" aqui é a
+    // CREDENCIAL de acesso ao link de RSVP desse convidado — quem tiver
+    // este ficheiro consegue abrir/editar a resposta de qualquer um deles,
+    // por isso deve ser tratado com o mesmo cuidado que os próprios links.
     const guests = guestsSnap.docs.map(d=>({ id: d.id, ...d.data() }));
     const memories = memoriesSnap.docs.map(d=>({ id: d.id, ...d.data() }));
     const exportObj = {
       exportedAt: new Date().toISOString(),
       weddingId: currentWeddingId,
       settings: weddingSettings,
+      note: 'guestId = identificador interno do convidado (permanente). id/rsvpToken em "rsvps" = credencial de acesso ao link de RSVP — trata com cuidado.',
       data: state,
       rsvps: guests,
       memories: memories,
@@ -10489,14 +10603,13 @@ function exportToExcel(){
     ['noiva','noivo'].forEach(side=>{
       allGuestCategoriesOf(side).forEach(c=>{
         (getGuestNames(side,c.id)||[]).forEach((n,idx)=>{
-          const key = guestKey(side,c.id,idx);
           const isObj = n && typeof n==='object';
           const hasPay = isPaymentTrackingCat(c.id);
           guestList.push({
             name: isObj ? (n.name||'') : n,
             side: side==='noiva'?'Noiva':'Noivo',
             group: c.label,
-            confirmed: !!state.confirmed[key],
+            confirmed: isConfirmed(side,c.id,idx),
             age: (isObj && c.id==='criancas') ? (n.age||'') : '',
             paying: hasPay ? fmtGuestCount(guestWeight(n)*100)+'%' : ''
           });
@@ -10524,11 +10637,16 @@ function exportToExcel(){
     const tableDataRows = [];
     state.seating.tables.forEach((t,ti)=>{
       for(let s=1; s<=t.seats; s++){
-        const key = t.id+'-'+s;
+        // Fase 8.0: corrigido também um bug independente aqui — faltava o
+        // prefixo "t"/"s" na chave (era "3-5" em vez de "t3-s5"), pelo que
+        // esta coluna nunca batia certo com state.seating.assignments e a
+        // aba "Mesas" do Excel aparecia sempre sem nomes de convidados.
+        const key = 't'+t.id+'-s'+s;
         const alt = ti%2===1;
         const c = alt?XL_STYLES.cellAlt:XL_STYLES.cell;
         const cc = alt?XL_STYLES.cellCenterAlt:XL_STYLES.cellCenter;
-        const guestName = state.seating.assignments[key] || '';
+        const seatGuest = state.seating.assignments[key] ? resolveSeatGuest(state.seating.assignments[key]) : null;
+        const guestName = seatGuest ? seatGuest.name : '';
         tableDataRows.push([
           xlCell('Mesa '+t.id, cc),
           xlCell((TABLE_SHAPES[t.shape]||{}).label || t.shape, cc),
@@ -10638,7 +10756,6 @@ function exportToPDF(){
   ['noiva','noivo'].forEach(side=>{
     allGuestCategoriesOf(side).forEach(c=>{
       (getGuestNames(side,c.id)||[]).forEach((n,idx)=>{
-        const key = guestKey(side,c.id,idx);
         const isObj = n && typeof n==='object';
         const hasPay = isPaymentTrackingCat(c.id);
         const name = isObj ? (n.name||'') : n;
@@ -10646,7 +10763,7 @@ function exportToPDF(){
           (isObj && c.id==='criancas' && n.age) ? `${n.age} anos` : '',
           hasPay ? `${fmtGuestCount(guestWeight(n)*100)}%` : ''
         ].filter(Boolean).join(' · ');
-        guestBody.push([name, `${side==='noiva'?'Noiva':'Noivo'} · ${c.label}${extra?' · '+extra:''}`, state.confirmed[key]?'Confirmado':'—']);
+        guestBody.push([name, `${side==='noiva'?'Noiva':'Noivo'} · ${c.label}${extra?' · '+extra:''}`, isConfirmed(side,c.id,idx)?'Confirmado':'—']);
       });
     });
   });
@@ -10762,6 +10879,7 @@ function attachFirestoreSync(){
         normalizeCategories();
         migrateCategoryDescriptions();
         migrateGuestCategories();
+        migrateConfirmedAndSeatingToGuestId();
         // Fase 6.1.1 — migração financeira idempotente (ver
         // migrateLegacySupplierPayments): corre a cada snapshot, mas só
         // produz alterações reais na primeira vez que encontra pagamentos

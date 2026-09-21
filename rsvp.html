@@ -725,6 +725,18 @@ h1{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:30px; col
     db.collection('guests').doc(guestToken).get().then(guestSnap=>{
       if(!guestSnap.exists){ show('error-state'); return; }
       guestData = guestSnap.data();
+      // Fase 8.0 (Set 2026): o campo que identifica cada membro dentro de
+      // um convite de família passou a chamar-se "rsvpMemberId" (antes
+      // chamava-se, de forma confusa, "guestId" — colidia com o novo
+      // guestId permanente do convidado). Convites já existentes, ainda
+      // não migrados pela Cloud Function migrateFamilyGuestIds, continuam
+      // no formato antigo — por isso normalizamos aqui, uma única vez,
+      // para que o resto desta página (que usa sempre "m.guestId" como
+      // nome de variável local para "id do membro dentro deste RSVP")
+      // funcione da mesma forma com documentos antigos ou novos.
+      if(guestData.isFamily && Array.isArray(guestData.members)){
+        guestData.members = guestData.members.map(m=>({ ...m, guestId: m.rsvpMemberId || m.guestId }));
+      }
       renderForm();
       // Regista que o convite foi aberto (só na primeira vez) — dá aos
       // noivos um estado intermédio ("visto, a pensar") antes de uma
