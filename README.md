@@ -128,13 +128,22 @@ percebi" quando uma pergunta não bate com nenhuma regra.
   reconheceram, e devolve qual de uma lista fixa de intenções (ex:
   `GET_VENUE`, `CONFIRM_ATTENDANCE`) melhor a descreve.
 - **Nunca** recebe os dados do casamento, **nunca** inventa uma resposta,
-  e **nunca** escreve nada no Firestore. A resposta final ao convidado ou
-  ao casal continua sempre a vir do `WeddyActions` no frontend, com os
-  dados reais — a IA só ajuda a "apontar" para a intenção certa.
+  e **nunca** escreve nada no Firestore (fora do próprio contador de
+  utilização — ver "Custo e limites" abaixo). A resposta final ao
+  convidado ou ao casal continua sempre a vir do `WeddyActions` no
+  frontend, com os dados reais — a IA só ajuda a "apontar" para a
+  intenção certa.
 - Separa automaticamente o que um **convidado** pode pedir (Weddy
   Concierge) do que só os **noivos** podem pedir (Assistente Weddy) — e
   isto não depende do que o pedido diz que é: só é tratado como "noivos"
   quem chamar a função com uma sessão Firebase Auth válida.
+- **(Fase 3B.5)** O `weddingId` usado para o limite de utilização nunca é
+  aceite diretamente do frontend — é sempre derivado no servidor: para os
+  noivos, a partir do email da sessão Firebase Auth (procurando o
+  casamento cujo `ownerEmails` contém esse email); para o convidado, a
+  partir do `guestToken` do seu próprio link de RSVP (lendo o campo
+  `weddingId` do documento `guests/{guestToken}`). Ninguém consegue gastar
+  ou "emprestar" quota de utilização de um casamento que não é o seu.
 
 ### O que precisas de ter antes de começar
 
@@ -207,7 +216,37 @@ casamento**: a constante `AI_DAILY_LIMIT_PER_WEDDING` no topo do
 coleção `aiUsage` do Firestore (um documento por `weddingId`) e reinicia
 à meia-noite UTC. Ao atingir o limite num dia, a função passa a devolver
 `{ intent: "UNKNOWN" }` sem chamar a OpenAI — o Concierge/Assistente
-caem na resposta genérica de sempre, sem erro nem crash. É uma proteção
-de custo, não uma proteção de segurança: o `weddingId` vem do próprio
-frontend e não é verificado contra nada — por isso não o uses para mais
-do que isto.
+caem na resposta genérica de sempre, sem erro nem crash.
+
+Isto continua a ser uma proteção de **custo**, não de acesso a dados — a
+função nunca leu nem escreveu dados do casamento, com ou sem limite. Mas
+desde a Fase 3B.5 o `weddingId` usado para contar já não é um valor que o
+frontend possa inventar: é sempre derivado no servidor (ver secção
+acima), por isso um casamento já não consegue consumir ou distorcer a
+quota de outro.
+
+## Estado da Fase 3B (para acompanhares o que falta)
+
+| Etapa | O quê | Estado |
+|---|---|---|
+| 3B.0 | Fornecedor/configuração (Gemini → OpenAI) | ✅ feito |
+| 3B.1 | `AIService` + Cloud Function `classifyWeddyIntent` | ✅ feito |
+| 3B.2 | Saída estruturada (`json_schema`) + validação server-side | ✅ feito |
+| 3B.3 | Limite diário de chamadas por casamento | ✅ feito |
+| 3B.4 | Teste real contra a API da OpenAI | 🔜 **por fazer — só tu consegues fazer isto** |
+| 3B.5 | `weddingId` derivado da sessão/guestToken, nunca do cliente | ✅ feito |
+| 3B.6 | Deploy de produção | 🔜 depois do 3B.4 |
+
+**Sobre a 3B.4 — preciso de ser direto:** não consigo fazer chamadas de
+rede a APIs externas como a da OpenAI a partir deste ambiente (o acesso à
+rede daqui está limitado a um conjunto fixo de sites, e mesmo que não
+estivesse, não tenho nem posso pedir a tua API key). Isto não é algo que
+eu vá conseguir "verificar por ti" mais tarde — é um passo que só tu
+consegues dar, depois do deploy. A lista de testes que sugeriste (pergunta
+normal, pergunta `UNKNOWN`, uma `read`, uma tentativa de `write`, o
+limite de 60, e wedding A não conseguir influenciar wedding B) é a lista
+certa — mas se quiseres, faço uma coisa complementar: escrevo-te um
+guião passo a passo com exatamente o que escrever no chat do Concierge/
+Assistente para cada um desses casos, e o que deves ver em cada um, para
+tornares esse teste manual mais rápido e sistemático. Diz-me se queres
+isso.

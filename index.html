@@ -1367,10 +1367,10 @@ const AIService = {
     if(!cloudFunctions) return { intent:'UNKNOWN' };
     try{
       const call = cloudFunctions.httpsCallable('classifyWeddyIntent');
-      // weddingId vai só para a função poder aplicar o limite diário de
-      // chamadas por casamento (Fase 3B.1) — nunca é usado para saber
-      // dados do casamento, só para contar pedidos.
-      const res = await call({ question, role, weddingId: currentWeddingId });
+      // Não envia weddingId: a função deriva sempre o casamento a partir
+      // da sessão Firebase Auth (nunca do que o cliente diga) — ver
+      // resolveWeddingId() na Cloud Function (Fase 3B.5).
+      const res = await call({ question, role });
       const data = res && res.data;
       return (data && typeof data.intent === 'string') ? data : { intent:'UNKNOWN' };
     }catch(err){
@@ -2556,6 +2556,16 @@ const APP_I18N = {
     lastUpdateLabel:(x)=>`Última atualização: ${x}.`,
     neverUpdatedLabel:'Ainda não atualizaste as respostas.',
     btnCopyReminders:(n)=>`Copiar lembretes (${n})`,
+    autopilotTitle:'Weddy Autopilot',
+    autopilotLateCount:(n)=>`🔴 ${n} atrasado${n===1?'':'s'}`,
+    autopilotDueCount:(n)=>`🟠 ${n} precisa${n===1?'':'m'} de lembrete`,
+    autopilotAllOnTime:'Ninguém precisa de um lembrete agora — tudo dentro do prazo.',
+    autopilotPrepareBtn:(n)=>n>0 ? `Preparar lembrete (${n})` : 'Preparar lembrete',
+    autopilotModalTitle:(n)=>`Rever lembrete para ${n} convidado${n===1?'':'s'}`,
+    autopilotModalHint:'A Weddy prepara o texto com o link de cada um. Confirma para copiar — o envio continua a ser sempre feito por ti (email, WhatsApp, o que preferires).',
+    autopilotConfirmBtn:'Confirmar e copiar',
+    autopilotBadgeLate:'Atrasado — o prazo já passou',
+    autopilotBadgeDue:'Precisa de um lembrete',
     btnExportCSV:'Exportar CSV',
     phSearchGuestEllipsis:'Pesquisar convidado…',
     emptyNoMatchSearch:'Nenhum convidado corresponde à pesquisa/filtro.',
@@ -3142,6 +3152,16 @@ const APP_I18N = {
     lastUpdateLabel:(x)=>`Last updated: ${x}.`,
     neverUpdatedLabel:'You haven\'t updated the responses yet.',
     btnCopyReminders:(n)=>`Copy reminders (${n})`,
+    autopilotTitle:'Weddy Autopilot',
+    autopilotLateCount:(n)=>`🔴 ${n} late`,
+    autopilotDueCount:(n)=>`🟠 ${n} need${n===1?'s':''} a reminder`,
+    autopilotAllOnTime:'No one needs a reminder right now — everyone is still on time.',
+    autopilotPrepareBtn:(n)=>n>0 ? `Prepare reminder (${n})` : 'Prepare reminder',
+    autopilotModalTitle:(n)=>`Review reminder for ${n} guest${n===1?'':'s'}`,
+    autopilotModalHint:'Weddy prepares the text with each guest\'s link. Confirm to copy — sending is always up to you (email, WhatsApp, whatever you prefer).',
+    autopilotConfirmBtn:'Confirm and copy',
+    autopilotBadgeLate:'Late — the deadline has passed',
+    autopilotBadgeDue:'Needs a reminder',
     btnExportCSV:'Export CSV',
     phSearchGuestEllipsis:'Search guest…',
     emptyNoMatchSearch:'No guest matches the search/filter.',
@@ -5457,6 +5477,107 @@ function flattenAllGuestsForRSVP(){
   });
   return out;
 }
+
+// ============================================================
+// RSVP AUTOPILOT (Fase 5, v1 — modo assistido)
+// Nunca envia nada sozinho: só deteta convidados pendentes, classifica a
+// urgência (dentro do prazo / precisa de lembrete / atrasado) e prepara
+// um lembrete que o casal revê e confirma antes de copiar (ver
+// openRSVPAutopilotModal, mais abaixo). Não há aqui nenhuma Cloud
+// Function nova nem chamada de rede — usa só dados que a app já lê
+// (rsvpDeadline) e o mesmo contador de lembretes que a Cloud Function
+// sendRsvpReminders (quando o casal a configurar) também incrementa —
+// guests/{token}.remindersSent, ou .reminders.{memberId}.remindersSent
+// num convite de família — por isso os dois mecanismos (manual aqui,
+// automático por email lá) nunca se "esquecem" um do outro.
+// ============================================================
+const RSVP_AUTOPILOT_STALE_DAYS = 5; // só volta a pedir lembrete passado isto
+
+function reminderInfoOf(item, token){
+  const doc = token ? rsvpResponses[token] : null;
+  if(!doc) return { count:0, lastAt:null };
+  if(doc.isFamily){
+    const mid = item.entry.rsvpMemberId;
+    const rem = (mid && doc.reminders && doc.reminders[mid]) || null;
+    return { count: (rem && rem.remindersSent) || 0, lastAt: (rem && rem.lastReminderAt) || null };
+  }
+  return { count: doc.remindersSent || 0, lastAt: doc.lastReminderAt || null };
+}
+function daysSinceTimestamp(tsLike){
+  if(!tsLike) return null;
+  const d = (tsLike && typeof tsLike.toDate === 'function') ? tsLike.toDate() : new Date(tsLike);
+  if(isNaN(d.getTime())) return null;
+  return Math.floor((Date.now() - d.getTime())/86400000);
+}
+// Urgência de UM convidado pendente (já com link, ainda sem resposta
+// "sim"/"não"). null = não se aplica (já respondeu, ou ainda nem tem
+// link gerado — não há para onde mandar lembrete nenhum).
+//   'late' 🔴 — o prazo já passou.
+//   'due'  🟠 — sem prazo definido, ou a menos de 7 dias dele, e nunca
+//               foi lembrado (ou já lá vão RSVP_AUTOPILOT_STALE_DAYS
+//               dias desde o último lembrete).
+//   'ontime' 🟡 — todo o resto (ainda folgado, ou lembrado há pouco).
+function rsvpAutopilotBucket(item, token, status, deadline){
+  if(status!=='pending' && status!=='maybe') return null;
+  if(!token) return null;
+  let daysLeft = null;
+  if(deadline){
+    const today = new Date(); today.setHours(0,0,0,0);
+    daysLeft = Math.ceil((new Date(deadline+'T00:00:00') - today)/86400000);
+  }
+  if(daysLeft!==null && daysLeft<0) return 'late';
+  const { count, lastAt } = reminderInfoOf(item, token);
+  const sinceLast = daysSinceTimestamp(lastAt);
+  const closeToDeadline = daysLeft!==null && daysLeft<=7;
+  const neverOrStale = count===0 || (sinceLast!==null && sinceLast>=RSVP_AUTOPILOT_STALE_DAYS);
+  if(neverOrStale && (closeToDeadline || daysLeft===null)) return 'due';
+  return 'ontime';
+}
+// Todos os convidados pendentes já classificados — o único sítio que
+// calcula isto; usado pelo ecrã de RSVP e pelo Copilot dos noivos.
+function rsvpAutopilotList(){
+  const deadline = weddingSettings.rsvpDeadline || '';
+  return flattenAllGuestsForRSVP().map(item=>{
+    const token = item.entry.rsvpToken;
+    const resp = token ? memberRSVPResponse(item) : null;
+    const status = rsvpStatusOf(resp);
+    const bucket = rsvpAutopilotBucket(item, token, status, deadline);
+    return { item, token, status, bucket };
+  }).filter(x=>x.bucket);
+}
+// Regista, no Firestore, que se acabou de preparar um lembrete para estes
+// convidados — atualiza a cópia local (rsvpResponses) de imediato, para o
+// ecrã refletir sem esperar por um novo loadRSVPResponses().
+function markRemindersSent(entries){
+  const jobs = entries.map(({item, token})=>{
+    if(!token) return Promise.resolve();
+    const doc = rsvpResponses[token];
+    const isFam = doc && doc.isFamily;
+    const mid = item.entry.rsvpMemberId;
+    const payload = isFam ? {
+      [`reminders.${mid}.remindersSent`]: firebase.firestore.FieldValue.increment(1),
+      [`reminders.${mid}.lastReminderAt`]: firebase.firestore.FieldValue.serverTimestamp(),
+    } : {
+      remindersSent: firebase.firestore.FieldValue.increment(1),
+      lastReminderAt: firebase.firestore.FieldValue.serverTimestamp(),
+    };
+    if(doc){
+      if(isFam){
+        doc.reminders = doc.reminders || {};
+        doc.reminders[mid] = doc.reminders[mid] || { remindersSent:0 };
+        doc.reminders[mid].remindersSent = (doc.reminders[mid].remindersSent||0) + 1;
+        doc.reminders[mid].lastReminderAt = new Date().toISOString();
+      } else {
+        doc.remindersSent = (doc.remindersSent||0) + 1;
+        doc.lastReminderAt = new Date().toISOString();
+      }
+    }
+    return GUESTS().doc(token).update(payload).catch(err=>{
+      console.error('Weddy Autopilot markRemindersSent error:', err.code, err.message);
+    });
+  });
+  return Promise.all(jobs);
+}
 // Garante que este convidado tem um link de RSVP: se já tiver token,
 // devolve-o; caso contrário gera um, grava-o no próprio convidado (dentro
 // do state, sincronizado como o resto da app) e cria o documento público
@@ -5851,7 +5972,13 @@ const WEDDY_COPILOT_INTENTS = {
   GET_PENDING_RSVPS:'GET_PENDING_RSVPS', GET_DIETARY_LIST:'GET_DIETARY_LIST', GET_RSVP_INFO:'GET_RSVP_INFO',
   GET_REMAINING_PAYMENTS:'GET_REMAINING_PAYMENTS', GET_BUDGET:'GET_BUDGET',
   GET_GUEST_COUNT:'GET_GUEST_COUNT', GET_COUNTDOWN:'GET_COUNTDOWN', GET_TABLE_COUNT:'GET_TABLE_COUNT',
-  SEARCH_DOCUMENTS:'SEARCH_DOCUMENTS', UNKNOWN:'UNKNOWN'
+  SEARCH_DOCUMENTS:'SEARCH_DOCUMENTS',
+  // Fase 5 — RSVP Autopilot (v1, modo assistido): só leitura, tal como
+  // tudo o resto do Copilot hoje — "preparar lembrete" continua a ser
+  // sempre um clique do casal no ecrã de RSVP, nunca algo que o chat
+  // dispara sozinho (ver rsvpAutopilotList/openRSVPAutopilotModal).
+  GET_LATE_RSVPS:'GET_LATE_RSVPS', GET_RSVPS_NEEDING_REMINDER:'GET_RSVPS_NEEDING_REMINDER',
+  UNKNOWN:'UNKNOWN'
 };
 
 // 1) CLASSIFICAÇÃO — por keywords, nenhuma IA real. Devolve sempre
@@ -5874,6 +6001,17 @@ function classifyCopilotIntent(pergunta){
   // "o que tenho esta semana" / "tarefas desta semana" / "agenda da semana"
   if(/esta semana|nesta semana|essa semana|this week|agenda da semana|tarefas (desta|da) semana|o que tenho (para )?(esta semana|hoje)/.test(p)){
     return { intent: WEDDY_COPILOT_INTENTS.GET_UPCOMING_TASKS };
+  }
+
+  // "quem está atrasado" / "quem passou o prazo" — subconjunto mais
+  // específico dos pendentes (checar antes do "quem ainda não respondeu").
+  if(/atrasad|em atraso|passou o prazo|fora do prazo/.test(p) && /quem|convidad|rsvp/.test(p)){
+    return { intent: WEDDY_COPILOT_INTENTS.GET_LATE_RSVPS };
+  }
+
+  // "quem precisa de lembrete" / "quem ainda não recebeu lembrete"
+  if(/precisa(m)?\s+de\s+lembrete|lembrete[s]?\s+(em falta|pendentes)|ainda n[aã]o (recebeu|receberam) (o )?lembrete|n[aã]o foi(ram)? lembrad/.test(p)){
+    return { intent: WEDDY_COPILOT_INTENTS.GET_RSVPS_NEEDING_REMINDER };
   }
 
   // "quem ainda não respondeu" / "quem falta responder" / "quem não confirmou"
@@ -5953,6 +6091,14 @@ const WeddyActions = {
       const gasto = totalExpenseValue();
       const pago = totalExpensePaid();
       return { totalRemaining: Math.max(0, gasto-pago), upcoming: getUpcomingPayments() };
+    },
+    // Fase 5 — RSVP Autopilot: mesma classificação usada no ecrã de RSVP
+    // (rsvpAutopilotList), só filtrada por urgência.
+    getLateRSVPs(){
+      return rsvpAutopilotList().filter(x=>x.bucket==='late').map(x=>x.item.name).filter(Boolean);
+    },
+    getRSVPsNeedingReminder(){
+      return rsvpAutopilotList().filter(x=>x.bucket==='due' || x.bucket==='late').map(x=>x.item.name).filter(Boolean);
     }
   },
   write: {
@@ -6009,6 +6155,18 @@ async function respondeAssistente(pergunta){
       if(!pendentes.length) return 'Todos os convidados com link de RSVP já responderam — não falta ninguém.';
       const lista = pendentes.slice(0,15).join(', ');
       return `Ainda falta responder: ${lista}${pendentes.length>15 ? ` e mais ${pendentes.length-15}` : ''}.`;
+    }
+    case I.GET_LATE_RSVPS: {
+      const atrasados = WeddyActions.read.getLateRSVPs();
+      if(!atrasados.length) return 'Não há ninguém atrasado — ou ainda não definiste um prazo de RSVP em Definições → RSVP.';
+      const lista = atrasados.slice(0,15).join(', ');
+      return `Estão atrasados: ${lista}${atrasados.length>15 ? `, e mais ${atrasados.length-15}` : ''}.`;
+    }
+    case I.GET_RSVPS_NEEDING_REMINDER: {
+      const precisam = WeddyActions.read.getRSVPsNeedingReminder();
+      if(!precisam.length) return 'Neste momento ninguém precisa de um lembrete novo.';
+      const lista = precisam.slice(0,15).join(', ');
+      return `Precisam de um lembrete: ${lista}${precisam.length>15 ? `, e mais ${precisam.length-15}` : ''}. Podes prepará-lo em Definições → RSVP.`;
     }
     case I.GET_DIETARY_LIST: {
       const comRestricao = WeddyActions.read.getDietaryList();
@@ -6280,8 +6438,10 @@ function viewDefRSVP(){
     if(q && !normName(item.name).includes(q)) return false;
     return true;
   });
+  const deadlineForBuckets = weddingSettings.rsvpDeadline || '';
   const rows = visible.map(({item, token, resp, status})=>{
     const rowKey = `${item.side}|${item.catId}|${item.idx}`;
+    const rowBucket = rsvpAutopilotBucket(item, token, status, deadlineForBuckets);
     const isFamilyDoc = token && rsvpResponses[token] && rsvpResponses[token].isFamily;
     const statusHtml = status==='yes'
       ? `<span class="rsvp-pill rsvp-pill-yes">${ta('rsvpStatusGoing')}${resp.meal? ' · '+escapeHTML(resp.meal):''}</span>`
@@ -6313,6 +6473,14 @@ function viewDefRSVP(){
       if(resp.alojamento) extrasParts.push(ta('needsAccommodation'));
     }
     const extrasHtml = extrasParts.length ? `<div class="visit-detail">${extrasParts.map(t=>escapeHTML(t)).join(' · ')}</div>` : '';
+    // Fase 5 — RSVP Autopilot: só assinala quem precisa mesmo de atenção
+    // (atrasado ou a precisar de lembrete); quem ainda está bem dentro do
+    // prazo não ganha nenhum aviso extra, para não poluir a lista.
+    const autopilotHtml = rowBucket==='late'
+      ? `<div class="visit-detail" style="color:#C0523F;">🔴 ${ta('autopilotBadgeLate')}</div>`
+      : rowBucket==='due'
+        ? `<div class="visit-detail" style="color:#D8A657;">🟠 ${ta('autopilotBadgeDue')}</div>`
+        : '';
     const familyBadgeHtml = isFamilyDoc ? `<span class="rsvp-pill" style="background:var(--cream); color:var(--rust-dark);">${ta('familyBadge')}</span>` : '';
     // Email opcional por convidado — só serve para os lembretes automáticos
     // (Cloud Function separada, ver functions/). Sem isto não há forma de a
@@ -6332,6 +6500,7 @@ function viewDefRSVP(){
       <div class="rsvp-row-meta">${item.side==='noiva'?ta('sideBride'):ta('sideGroom')} · ${escapeHTML(item.catLabel)}</div>
       ${childrenHtml}
       ${extrasHtml}
+      ${autopilotHtml}
       ${emailHtml}
       ${rsvpGroupMode ? '' : `<div class="rsvp-row-actions">${actionsHtml}<span class="rsvp-row-chev">${ICONS.chev}</span></div>`}
     </div>`;
@@ -6352,8 +6521,14 @@ function viewDefRSVP(){
     return `<button class="assist-chip" style="${style}" data-rsvpfilter="${key}">${escapeHTML(label)}</button>`;
   }).join('');
   const pending = withStatus.filter(w=>w.status==='pending');
-  const needsReminder = withStatus.filter(w=>w.status==='pending' || w.status==='maybe');
-  const pendingWithLink = needsReminder.filter(w=>w.token);
+  // Fase 5 — RSVP Autopilot: classifica todos os pendentes por urgência.
+  // needsAttention (atrasados + a precisar de lembrete) é quem entra por
+  // omissão no lembrete preparado pela Weddy — quem ainda está bem dentro
+  // do prazo (🟡) não é incomodado sem necessidade.
+  const autopilot = rsvpAutopilotList();
+  const lateList = autopilot.filter(x=>x.bucket==='late');
+  const dueList = autopilot.filter(x=>x.bucket==='due');
+  const needsAttention = [...lateList, ...dueList];
   const transporteCount = withStatus.filter(w=>w.status==='yes' && w.resp && w.resp.transporte).length;
   const alojamentoCount = withStatus.filter(w=>w.status==='yes' && w.resp && w.resp.alojamento).length;
   const deadline = weddingSettings.rsvpDeadline || '';
@@ -6373,6 +6548,15 @@ function viewDefRSVP(){
     transporteCount ? ta('transportCountLabel')(transporteCount) : '',
     alojamentoCount ? ta('accommodationCountLabel')(alojamentoCount) : ''
   ].filter(Boolean).join(' · ')}</div>` : ''}
+  ${autopilot.length ? `
+  <div class="stat-card" style="margin:0 16px 12px;">
+    <div class="l" style="margin:0 0 8px;">${ta('autopilotTitle')}</div>
+    <div class="empty-note" style="margin:0 0 10px; font-style:normal;">${[
+      lateList.length ? ta('autopilotLateCount')(lateList.length) : '',
+      dueList.length ? ta('autopilotDueCount')(dueList.length) : ''
+    ].filter(Boolean).join(' · ') || ta('autopilotAllOnTime')}</div>
+    <button class="rsvp-deadline-save" id="rsvp-autopilot-prepare" style="width:100%;" ${needsAttention.length? '':'disabled'}>${ICONS.bell} ${ta('autopilotPrepareBtn')(needsAttention.length)}</button>
+  </div>` : ''}
   <div class="rsvp-deadline-card">
     <div style="flex:1; min-width:0;">
       <div class="l">${ta('labelRSVPDeadline')}</div>
@@ -6403,7 +6587,6 @@ function viewDefRSVP(){
   <div class="rsvp-updated-note">${lastRSVPRefreshAt? ta('lastUpdateLabel')(fmtRelativeTime(lastRSVPRefreshAt)) : ta('neverUpdatedLabel')}</div>
   ${lastRSVPSyncSummary ? `<div class="empty-note" style="margin:0 16px 10px; font-style:normal;">${rsvpSyncSummaryText(lastRSVPSyncSummary)}</div>` : ''}
   <div class="rsvp-actions-row">
-    <button class="rsvp-copy-btn" id="rsvp-copy-lembretes" ${pendingWithLink.length? '':'disabled'}>${ICONS.bell} ${ta('btnCopyReminders')(fmtGuestCount(pendingWithLink.length))}</button>
     <button class="rsvp-copy-btn" id="rsvp-export-csv" ${totalGuests? '':'disabled'}>${ICONS.download} ${ta('btnExportCSV')}</button>
   </div>
   <div class="rsvp-actions-row">
@@ -7747,27 +7930,14 @@ function bindHandlers(){
       guestFaqList: rawToFaqList(faqInput? faqInput.value : '')
     });
   });
-  const rsvpCopyLembretes = document.getElementById('rsvp-copy-lembretes');
-  if(rsvpCopyLembretes) rsvpCopyLembretes.addEventListener('click', async ()=>{
-    const allGuests2 = flattenAllGuestsForRSVP();
-    const linhas = [];
-    allGuests2.forEach(item=>{
-      const token = item.entry.rsvpToken;
-      if(!token) return;
-      const status = rsvpStatusOf(memberRSVPResponse(item));
-      if(status==='yes' || status==='no') return;
-      linhas.push(`${item.name}: ${RSVP_BASE_URL}?g=${token}`);
-    });
-    if(!linhas.length){ alert(ta('alertNoPendingWithLink')); return; }
-    const texto = `Olá! É só um lembrete simpático para confirmares presença 💌\n\n${linhas.join('\n')}`;
-    try{
-      await navigator.clipboard.writeText(texto);
-      const original = rsvpCopyLembretes.innerHTML;
-      rsvpCopyLembretes.innerHTML = `${ICONS.check} ${ta('copiedCheck')}`;
-      setTimeout(()=>{ rsvpCopyLembretes.innerHTML = original; }, 1800);
-    }catch(err){
-      prompt(ta('promptCopyReminderManually'), texto);
-    }
+  // Fase 5 — RSVP Autopilot: em vez de copiar logo, abre um passo de
+  // revisão/confirmação (openRSVPAutopilotModal) — "Weddy prepara, casal
+  // confirma" — só depois copia o texto e regista o lembrete.
+  const rsvpAutopilotPrepare = document.getElementById('rsvp-autopilot-prepare');
+  if(rsvpAutopilotPrepare) rsvpAutopilotPrepare.addEventListener('click', ()=>{
+    const entries = rsvpAutopilotList().filter(x=>x.bucket==='due' || x.bucket==='late');
+    if(!entries.length) return;
+    openRSVPAutopilotModal(entries);
   });
   const rsvpExportCsv = document.getElementById('rsvp-export-csv');
   if(rsvpExportCsv) rsvpExportCsv.addEventListener('click', ()=>{ exportRSVPToCSV(); });
@@ -8503,6 +8673,51 @@ function openRSVPQRModal(link, name){
 }
 function closeRSVPQRModal(){
   const el = document.getElementById('rsvp-qr-modal');
+  if(el) el.remove();
+}
+// Fase 5 — RSVP Autopilot: passo de revisão antes de copiar o lembrete.
+// A Weddy já escolheu quem entra (atrasados + a precisar de lembrete),
+// mas nada é copiado nem marcado como enviado sem o casal carregar em
+// "Confirmar e copiar" aqui — nunca há envio automático nesta versão.
+function openRSVPAutopilotModal(entries){
+  closeRSVPAutopilotModal();
+  const wrap = document.createElement('div');
+  wrap.id = 'rsvp-autopilot-modal';
+  wrap.className = 'rsvp-qr-modal';
+  const rows = entries.map(({item, bucket})=>`
+    <div class="list-row" style="padding:8px 0;">
+      <span style="width:8px; height:8px; border-radius:50%; background:${bucket==='late'?'#C0523F':'#D8A657'}; flex-shrink:0;"></span>
+      <div style="flex:1;">${escapeHTML(item.name)}</div>
+    </div>`).join('');
+  wrap.innerHTML = `
+    <div class="rsvp-qr-card" style="max-height:80vh; overflow-y:auto;">
+      <button class="rsvp-qr-close" id="rsvp-autopilot-close">${ICONS.close||'&times;'}</button>
+      <div class="rsvp-row-name" style="margin-bottom:4px;">${ta('autopilotModalTitle')(entries.length)}</div>
+      <div class="empty-note" style="margin:0 0 10px; font-style:normal; text-align:left;">${ta('autopilotModalHint')}</div>
+      <div class="list-group" style="text-align:left; margin-bottom:14px;">${rows}</div>
+      <button class="rsvp-deadline-save" id="rsvp-autopilot-confirm" style="width:100%;">${ta('autopilotConfirmBtn')}</button>
+    </div>
+  `;
+  document.body.appendChild(wrap);
+  document.getElementById('rsvp-autopilot-close').addEventListener('click', closeRSVPAutopilotModal);
+  wrap.addEventListener('click', e=>{ if(e.target===wrap) closeRSVPAutopilotModal(); });
+  document.getElementById('rsvp-autopilot-confirm').addEventListener('click', async (e)=>{
+    const btn = e.currentTarget;
+    btn.disabled = true;
+    const linhas = entries.map(({item, token})=>`${item.name}: ${RSVP_BASE_URL}?g=${token}`);
+    const texto = `Olá! É só um lembrete simpático para confirmares presença 💌\n\n${linhas.join('\n')}`;
+    try{
+      await navigator.clipboard.writeText(texto);
+    }catch(err){
+      prompt(ta('promptCopyReminderManually'), texto);
+    }
+    await markRemindersSent(entries);
+    closeRSVPAutopilotModal();
+    render();
+  });
+}
+function closeRSVPAutopilotModal(){
+  const el = document.getElementById('rsvp-autopilot-modal');
   if(el) el.remove();
 }
 // Escreve em TODOS os guests/{token} o "programa do dia" — só os momentos

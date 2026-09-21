@@ -320,10 +320,11 @@ h1{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:30px; col
       if(!cloudFunctions) return { intent:'UNKNOWN' };
       try{
         const call = cloudFunctions.httpsCallable('classifyWeddyIntent');
-        // weddingId vai só para a função poder aplicar o limite diário de
-        // chamadas por casamento (Fase 3B.1) — nunca é usado para saber
-        // dados do casamento, só para contar pedidos.
-        const res = await call({ question, role, weddingId: guestData && guestData.weddingId });
+        // Envia o guestToken (o próprio ID do link de RSVP deste
+        // convidado) em vez do weddingId: a função vai buscar o
+        // weddingId real ao documento guests/{guestToken}, nunca confia
+        // num valor que o cliente possa inventar (Fase 3B.5).
+        const res = await call({ question, role, guestToken });
         const data = res && res.data;
         return (data && typeof data.intent === 'string') ? data : { intent:'UNKNOWN' };
       }catch(err){

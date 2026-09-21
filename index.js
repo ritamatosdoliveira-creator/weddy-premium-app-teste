@@ -262,15 +262,31 @@ exports.sendRsvpReminders = onSchedule(
  * hoje, só sem a segunda opinião da IA para perguntas fora das regex.
  *
  * LIMITE DE UTILIZAÇÃO (por decisão tua, adicionado nesta versão)
- * Cada casamento (identificado pelo weddingId que o frontend envia) tem
- * um limite diário de chamadas — ver AI_DAILY_LIMIT_PER_WEDDING abaixo.
- * O contador vive na coleção "aiUsage" (um documento por weddingId) e
- * reinicia à meia-noite UTC. Ao atingir o limite, a função devolve
- * { intent: "UNKNOWN" } em vez de chamar a OpenAI — o Concierge/
- * Assistente caem na resposta genérica de sempre, sem crash nem erro
- * visível. Isto é uma proteção de custo, não de segurança: o weddingId
- * vem do cliente e não é verificado contra o Firebase Auth, por isso não
- * o uses para nada além de contar pedidos.
+ * Cada casamento tem um limite diário de chamadas — ver
+ * AI_DAILY_LIMIT_PER_WEDDING abaixo. O contador vive na coleção
+ * "aiUsage" (um documento por weddingId) e reinicia à meia-noite UTC. Ao
+ * atingir o limite, a função devolve { intent: "UNKNOWN" } em vez de
+ * chamar a OpenAI — o Concierge/Assistente caem na resposta genérica de
+ * sempre, sem crash nem erro visível.
+ *
+ * DE ONDE VEM O weddingId (Fase 3B.5 — nunca confiado ao cliente)
+ * O frontend NUNCA envia um weddingId diretamente — a função deriva-o
+ * sempre a partir de algo que quem chama não pode escolher:
+ *   - Noivos (Assistente Weddy): do email da sessão Firebase Auth
+ *     (request.auth.token.email), procurando o casamento cujo
+ *     ownerEmails contém esse email. Sem sessão válida ou sem casamento
+ *     encontrado, não há weddingId (e portanto não há limite aplicado —
+ *     ver abaixo).
+ *   - Convidados (Weddy Concierge): do guestToken que o cliente envia
+ *     (o próprio ID do link de RSVP que já é público), lendo o campo
+ *     weddingId do documento guests/{guestToken}. Um convidado não
+ *     consegue "emprestar" quota a outro casamento porque o weddingId
+ *     não vem do que ele escreve, vem do que está guardado nesse
+ *     documento em concreto.
+ * Sem conseguir resolver um weddingId de nenhuma destas formas, a
+ * função continua a funcionar normalmente — só não há limite aplicado
+ * a esse pedido (a proteção de custo cai, mas nunca a de permissões,
+ * que continua a depender só de isCouple/allowedIntents acima).
  *
  * CUSTO
  * Cada chamada desta função (quando não bloqueada pelo limite acima)
@@ -377,11 +393,43 @@ async function callOpenAI(question, allowedIntents) {
   return out;
 }
 
+// Deriva o weddingId de algo que quem chama não pode escolher — nunca de
+// um campo que o cliente enviou diretamente. Ver "DE ONDE VEM O
+// weddingId" no comentário grande acima. Devolve null quando não é
+// possível derivar (sessão inválida, casamento não encontrado, guestToken
+// em falta ou inválido) — nesse caso simplesmente não há limite aplicado.
+async function resolveWeddingId(request, isCouple) {
+  if (isCouple) {
+    const email = request.auth && request.auth.token && request.auth.token.email;
+    if (!email) return null;
+    try {
+      const snap = await db.collection('weddings')
+        .where('ownerEmails', 'array-contains', email.toLowerCase())
+        .limit(1)
+        .get();
+      return snap.empty ? null : snap.docs[0].id;
+    } catch (err) {
+      logger.error('resolveWeddingId (couple): erro a procurar o casamento.', err);
+      return null;
+    }
+  }
+  const guestToken = request.data && request.data.guestToken;
+  if (!guestToken || typeof guestToken !== 'string') return null;
+  try {
+    const snap = await db.collection('guests').doc(guestToken).get();
+    if (!snap.exists) return null;
+    const data = snap.data();
+    return (data && typeof data.weddingId === 'string') ? data.weddingId : null;
+  } catch (err) {
+    logger.error('resolveWeddingId (guest): erro a ler o documento do convidado.', err);
+    return null;
+  }
+}
+
 // Verifica e incrementa, numa única transação, o contador diário de
-// chamadas de IA de um casamento. Sem weddingId (nunca deveria acontecer
-// vindo do frontend atual, mas por segurança) não há como aplicar o
-// limite, por isso deixa passar — a proteção de custo cai, mas o
-// classificador continua a funcionar.
+// chamadas de IA de um casamento. Sem weddingId (ver resolveWeddingId
+// acima) não há como aplicar o limite, por isso deixa passar — a
+// proteção de custo cai, mas o classificador continua a funcionar.
 async function checkAndIncrementAiUsage(weddingId) {
   if (!weddingId || typeof weddingId !== 'string') return { allowed: true };
   const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD (UTC)
@@ -405,7 +453,6 @@ async function checkAndIncrementAiUsage(weddingId) {
 exports.classifyWeddyIntent = onCall({ region: 'europe-west1' }, async (request) => {
   const question = request.data && request.data.question;
   const requestedRole = request.data && request.data.role;
-  const weddingId = request.data && request.data.weddingId;
   if (!question || typeof question !== 'string' || !question.trim() || question.length > 500) {
     throw new HttpsError('invalid-argument', 'Pergunta em falta, vazia ou demasiado longa.');
   }
@@ -418,6 +465,7 @@ exports.classifyWeddyIntent = onCall({ region: 'europe-west1' }, async (request)
   const allowedIntents = isCouple ? COUPLE_INTENTS : GUEST_INTENTS;
 
   try {
+    const weddingId = await resolveWeddingId(request, isCouple);
     const usage = await checkAndIncrementAiUsage(weddingId);
     if (!usage.allowed) {
       logger.info(`classifyWeddyIntent: limite diário atingido para o casamento ${weddingId}.`);
