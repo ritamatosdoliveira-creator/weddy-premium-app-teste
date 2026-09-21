@@ -2500,6 +2500,7 @@ const APP_I18N = {
     contractSyncedNote:'Sincronizado — visível em todos os dispositivos e pesquisável pelo Assistente.',
     contractLocalOnlyNote:'Guardado só neste telemóvel. Carrega o contrato novamente para o sincronizar.',
     statusUploadingContract:'A carregar contrato…',
+    legacyPaymentTag:'pagamento antigo migrado',
 
     premiumLockedText:(title)=>`"${title}" e as restantes funcionalidades Premium ficam disponíveis assim que teres uma subscrição ativa.`,
     premiumFeatureRSVP:'Convites RSVP com link individual por convidado',
@@ -3071,6 +3072,7 @@ const APP_I18N = {
     contractSyncedNote:'Synced — visible on every device and searchable by the Assistant.',
     contractLocalOnlyNote:'Saved only on this phone. Upload the contract again to sync it.',
     statusUploadingContract:'Uploading contract…',
+    legacyPaymentTag:'migrated old payment',
 
     premiumLockedText:(title)=>`"${title}" and the remaining Premium features become available once you have an active subscription.`,
     premiumFeatureRSVP:'RSVP invitations with an individual link per guest',
@@ -5077,28 +5079,70 @@ function removeSupplierPhoto(id){ try{ localStorage.removeItem(supplierPhotoKey(
 function getSupplierContract(id){ try{ const raw = localStorage.getItem(supplierContractKey(id)); return raw ? JSON.parse(raw) : null; }catch(e){ return null; } }
 function setSupplierContract(id, obj){ try{ localStorage.setItem(supplierContractKey(id), JSON.stringify(obj)); }catch(e){ showSaveToast(true); alert(ta('errStorageContract')); } }
 function removeSupplierContract(id){ try{ localStorage.removeItem(supplierContractKey(id)); }catch(e){} }
-// Fase 6.1 — Budget passa a ser a fonte única de verdade para dinheiro.
-// s.payments (localStorage-menos, na verdade Firestore) fica como o livro
-// "antigo": nunca é apagado nem migrado automaticamente, para não perder
-// dados de casamentos existentes. Novos pagamentos passam a ser criados
-// como despesas ligadas por supplierId (ver bindFornecedorDetalheHandlers).
-// O total pago é a soma aditiva dos dois — nunca um substituto do outro.
-function supplierPaidTotal(s){
-  const legacy = (s.payments||[]).reduce((sum,p)=>sum+(Number(p.amount)||0),0);
-  const linked = (state.expenses||[]).filter(e=>e.supplierId===s.id).reduce((sum,e)=>sum+(Number(e.paid)||0),0);
-  return legacy + linked;
+// Fase 6.1.1 — migração financeira idempotente dos pagamentos legados de
+// fornecedor. s.payments era um segundo livro de contas, independente do
+// Budget, o que permitia (e já aconteceu) o fornecedor mostrar um total
+// pago diferente do que o Budget contava para esse mesmo fornecedor. Esta
+// função corre uma vez por casamento (chamada a cada snapshot do
+// Firestore, tal como migrateCategoryDescriptions/migrateGuestCategories
+// já fazem): para cada pagamento antigo em s.payments sem despesa
+// correspondente já migrada, cria uma despesa em state.expenses ligada ao
+// fornecedor (supplierId), marcada com legacyPaymentId (o id do pagamento
+// de origem) e migratedFromSupplierPayment:true. Verificar se já existe
+// uma despesa com aquele legacyPaymentId é o que torna a migração segura
+// de correr repetidamente — nunca duplica. s.payments NUNCA é apagado nem
+// alterado por esta função: fica só como registo de
+// compatibilidade/auditoria do que já foi migrado. Devolve true se algo
+// foi migrado nesta chamada (para quem chamar saber se deve gravar).
+function migrateLegacySupplierPayments(){
+  if(!state || !Array.isArray(state.suppliers) || !Array.isArray(state.expenses)) return false;
+  let migrated = false;
+  state.suppliers.forEach(s=>{
+    (s.payments||[]).forEach(p=>{
+      const already = state.expenses.some(e=>e.legacyPaymentId===p.id);
+      if(already) return;
+      state.expenses.unshift({
+        date: p.date || '', desc: ta('autoPaymentDesc')(s.name),
+        value: Number(p.amount)||0, paid: Number(p.amount)||0,
+        category: s.category, dueDate:'', method:'',
+        supplierId: s.id, legacyPaymentId: p.id, migratedFromSupplierPayment: true
+      });
+      migrated = true;
+    });
+  });
+  // Verificação automática: depois da migração, o total pago de cada
+  // fornecedor (agora só a partir de state.expenses) tem de bater certo
+  // com a soma de todos os pagamentos que alguma vez existiram em
+  // s.payments — se não bater, fica um aviso na consola (nunca bloqueia
+  // a app nem impede o uso, é só uma rede de segurança para detetar).
+  if(migrated){
+    state.suppliers.forEach(s=>{
+      const legacyTotal = (s.payments||[]).reduce((sum,p)=>sum+(Number(p.amount)||0),0);
+      const migratedTotal = state.expenses.filter(e=>e.supplierId===s.id && e.migratedFromSupplierPayment).reduce((sum,e)=>sum+(Number(e.paid)||0),0);
+      if(Math.abs(legacyTotal - migratedTotal) > 0.001){
+        console.error('[Weddy] Migração 6.1.1: total pago do fornecedor', s.id, 'não bate certo depois de migrar.', { legacyTotal, migratedTotal });
+      }
+    });
+  }
+  return migrated;
 }
-// Lista combinada de pagamentos para o ecrã de detalhe do fornecedor —
-// junta o livro antigo (s.payments) com as despesas do Budget ligadas a
-// este fornecedor, ordenados por data. kind diferencia a origem para o
-// botão de eliminar saber que caminho seguir.
+// Fase 6.1.1 — depois da migração acima, state.expenses passa a ser
+// realmente a ÚNICA fonte de verdade para dinheiro: já não somamos
+// s.payments aqui (todos os pagamentos que lá existirem já têm, ou vão
+// ter no próximo load, uma despesa equivalente). s.payments deixa de ser
+// lido pela UI — fica só como histórico bruto de compatibilidade.
+function supplierPaidTotal(s){
+  return (state.expenses||[]).filter(e=>e.supplierId===s.id).reduce((sum,e)=>sum+(Number(e.paid)||0),0);
+}
+// Lista de pagamentos para o ecrã de detalhe do fornecedor — lida só de
+// state.expenses (fonte única). migrated:true assinala um pagamento que
+// veio da migração 6.1.1 (para a UI poder dar uma pista visual discreta).
 function supplierCombinedPayments(s){
-  const legacy = (s.payments||[]).map(p=>({ date:p.date, amount:Number(p.amount)||0, kind:'legacy', id:p.id }));
-  const linked = (state.expenses||[])
+  return (state.expenses||[])
     .map((e,idx)=>({e,idx}))
     .filter(({e})=>e.supplierId===s.id)
-    .map(({e,idx})=>({ date:e.date, amount:Number(e.paid)||0, kind:'expense', id:String(idx), desc:e.desc }));
-  return [...legacy, ...linked].sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+    .map(({e,idx})=>({ date:e.date, amount:Number(e.paid)||0, id:String(idx), desc:e.desc, migrated: !!e.migratedFromSupplierPayment }))
+    .sort((a,b)=>(b.date||'').localeCompare(a.date||''));
 }
 // Fase 6.1 — contrato do fornecedor: passa a ser guardado no Firestore
 // (via state.weddingDocuments, reaproveitando exatamente a mesma
@@ -5156,9 +5200,9 @@ function viewFornecedorDetalhe(){
   const pct = total ? Math.min(100, Math.round(paid/total*100)) : 0;
   const paymentsHTML = supplierCombinedPayments(s).map(p=>`
     <div class="supd-pay-row">
-      <div class="title" style="flex:1; font-size:13.5px; color:var(--ink);">${p.date?formatDateShortPT(p.date):ta('noDateLabel')}${p.kind==='expense'?` · ${escapeHTML(p.desc||'')}`:''}</div>
+      <div class="title" style="flex:1; font-size:13.5px; color:var(--ink);">${p.date?formatDateShortPT(p.date):ta('noDateLabel')}${p.desc?` · ${escapeHTML(p.desc)}`:''}${p.migrated?` · ${ta('legacyPaymentTag')}`:''}</div>
       <div class="amount">${fmtEUR(p.amount)}</div>
-      <button class="remove-x" data-delsuppay="${p.kind}|${p.id}">✕</button>
+      <button class="remove-x" data-delsuppay="${p.id}">✕</button>
     </div>`).join('');
 
   return `
@@ -5373,12 +5417,12 @@ function bindFornecedorDetalheHandlers(){
   const valorTotalInp = document.getElementById('supd-valortotal');
   if(valorTotalInp) valorTotalInp.addEventListener('input', e=>{ s.valorTotal = Math.max(0, Number(e.target.value)||0); softUpdateSupplierPayments(); });
 
-  // Fase 6.1 — Budget como fonte única de verdade para dinheiro: um novo
-  // pagamento a um fornecedor passa a ser criado como despesa do Budget,
-  // ligada por supplierId, em vez de ser empurrado para s.payments. Os
-  // pagamentos antigos em s.payments não são tocados nem migrados — ficam
-  // a contar para o total (ver supplierPaidTotal) exatamente como sempre
-  // contaram.
+  // Fase 6.1 / 6.1.1 — Budget é a fonte única de verdade para dinheiro: um
+  // novo pagamento a um fornecedor é criado diretamente como despesa do
+  // Budget, ligada por supplierId. s.payments deixou de ser lido pela UI
+  // (ver supplierPaidTotal/supplierCombinedPayments) — fica só como
+  // histórico bruto de compatibilidade, e os pagamentos que lá existirem
+  // são migrados automaticamente para cá por migrateLegacySupplierPayments.
   const payAddBtn = document.getElementById('supd-pay-add');
   if(payAddBtn) payAddBtn.addEventListener('click', ()=>{
     const dateEl = document.getElementById('supd-pay-date');
@@ -5395,12 +5439,16 @@ function bindFornecedorDetalheHandlers(){
   });
   document.querySelectorAll('[data-delsuppay]').forEach(btn=>{
     btn.addEventListener('click', e=>{
-      const [kind,id] = e.currentTarget.dataset.delsuppay.split('|');
-      if(kind==='expense'){
-        state.expenses.splice(Number(id),1);
-      }else{
-        s.payments = (s.payments||[]).filter(p=>p.id!==id);
+      const idx = Number(e.currentTarget.dataset.delsuppay);
+      const exp = state.expenses[idx];
+      // Se esta despesa veio da migração de um pagamento antigo, remove
+      // também esse pagamento de s.payments — senão a próxima migração
+      // (idempotente por natureza) recriava-a sozinha, "ressuscitando" um
+      // pagamento que a pessoa acabou de apagar de propósito.
+      if(exp && exp.legacyPaymentId){
+        s.payments = (s.payments||[]).filter(p=>p.id!==exp.legacyPaymentId);
       }
+      state.expenses.splice(idx,1);
       render();
       pushRemote(true);
     });
@@ -6102,8 +6150,60 @@ const WEDDY_COPILOT_INTENTS = {
   // sempre um clique do casal no ecrã de RSVP, nunca algo que o chat
   // dispara sozinho (ver rsvpAutopilotList/openRSVPAutopilotModal).
   GET_LATE_RSVPS:'GET_LATE_RSVPS', GET_RSVPS_NEEDING_REMINDER:'GET_RSVPS_NEEDING_REMINDER',
+  // Fase 7 — Wedding Brain: mesma arquitetura Intent → WeddyActions.read →
+  // resposta, mas cada uma destas junta dados de MAIS do que um domínio
+  // (Vendors+Budget+Documentos, ou Guests+Mesas), em vez de ler só um sítio
+  // como as intents acima. A IA continua a servir só para classificar —
+  // nunca para gerar a resposta (ver respondeAssistente).
+  GET_SUPPLIER_PAYMENT_INFO:'GET_SUPPLIER_PAYMENT_INFO',
+  GET_UNCONTRACTED_SUPPLIERS:'GET_UNCONTRACTED_SUPPLIERS',
+  GET_PAYMENTS_THIS_MONTH:'GET_PAYMENTS_THIS_MONTH',
+  SEARCH_SUPPLIER_CONTRACT:'SEARCH_SUPPLIER_CONTRACT',
+  GET_SUPPLIER_BUDGET_MISMATCHES:'GET_SUPPLIER_BUDGET_MISMATCHES',
+  GET_GUESTS_WITHOUT_TABLE:'GET_GUESTS_WITHOUT_TABLE',
   UNKNOWN:'UNKNOWN'
 };
+// Palavras com menos de 3 letras ("e", "x", "a"...) ficam de fora — são
+// curtas demais para significarem alguma coisa numa comparação e, sem este
+// filtro, "trapezista" "batia" com "fotografia" só por ambas conterem "e".
+function wordsOfNormalized(normStr){ return (normStr||'').split(/[^a-z0-9]+/).filter(w=>w.length>=3); }
+// "fotógrafo" e "fotografia" (a categoria) são a mesma família de
+// palavras, mas só a profissão/ofício costuma aparecer na pergunta — uma
+// simples inclusão de substring não os liga. Sem inventar um stemmer real,
+// considera que duas palavras batem certo se partilharem os primeiros
+// carateres (radical), desde que ambas tenham pelo menos 5 — é uma
+// aproximação simples, não IA nenhuma, mas cobre casos comuns em
+// português (fotógrafo/fotografia, florista/flores, decorador/decoração).
+function wordsMatchLoosely(a, b){
+  if(!a || !b || a.length<3 || b.length<3) return false;
+  if(a.includes(b) || b.includes(a)) return true;
+  const minLen = Math.min(a.length, b.length);
+  if(minLen < 5) return false;
+  const prefixLen = Math.min(6, minLen);
+  return a.slice(0,prefixLen) === b.slice(0,prefixLen);
+}
+// Encontra o fornecedor a que a pergunta se refere, por nome ou por
+// categoria (ex: "o fotógrafo" encontra o fornecedor cuja categoria é
+// "Fotografia e Vídeo", mesmo que essa palavra não esteja no nome dele).
+// Mesma técnica de pontuação por tokens que searchWeddingDocuments usa —
+// nunca é a IA a decidir isto, é sempre comparação de texto direta.
+function findSupplierByText(text){
+  const tokens = normalizeSearchText(text).split(/[^a-z0-9]+/).filter(w=>w.length>=3 && !STOPWORDS_PT.has(w));
+  if(!tokens.length || !state.suppliers || !state.suppliers.length) return null;
+  let best = null, bestScore = 0;
+  state.suppliers.forEach(s=>{
+    const nameWords = wordsOfNormalized(normalizeSearchText(s.name));
+    const cat = catById(s.category);
+    const catWords = cat ? wordsOfNormalized(normalizeSearchText(cat.name)) : [];
+    let score = 0;
+    tokens.forEach(t=>{
+      if(nameWords.some(w=>wordsMatchLoosely(t,w))) score += 2;
+      if(catWords.some(w=>wordsMatchLoosely(t,w))) score += 1;
+    });
+    if(score>bestScore){ bestScore = score; best = s; }
+  });
+  return bestScore>0 ? best : null;
+}
 
 // 1) CLASSIFICAÇÃO — por keywords, nenhuma IA real. Devolve sempre
 // { intent, value? }; nunca decide sozinha se pode executar nem como
@@ -6151,6 +6251,47 @@ function classifyCopilotIntent(pergunta){
   // "quanto falta pagar" / "próximos pagamentos" / "pagamentos pendentes"
   if(/falta pagar|pagamentos? (pendentes|por pagar|em falta)|quanto (falta|tenho) (ainda )?(a )?pagar|pr[oó]ximos pagamentos/.test(p)){
     return { intent: WEDDY_COPILOT_INTENTS.GET_REMAINING_PAYMENTS };
+  }
+
+  // Fase 7 — Wedding Brain: perguntas que cruzam Vendors com Budget e
+  // Documentos. Vêm antes das genéricas (GET_BUDGET, GET_TABLE_COUNT) de
+  // propósito — são mais específicas, têm de ganhar quando se aplicam.
+
+  // "quanto pagámos ao fotógrafo" / "próximo pagamento do espaço" —
+  // identifica QUAL fornecedor pelo nome ou pela categoria (findSupplierByText)
+  // e só dispara se resolver a um fornecedor concreto.
+  if(/(quanto|j[aá]).*pag[aá]?mos?\s+(ao|à|a|para)\s+/.test(p) || /pr[oó]ximo pagamento\s+(do|da|de)\s+/.test(p) || /valor (do|da) (contrato|fornecedor)/.test(p)){
+    const supplierGuess = findSupplierByText(pergunta);
+    if(supplierGuess) return { intent: WEDDY_COPILOT_INTENTS.GET_SUPPLIER_PAYMENT_INFO };
+  }
+
+  // "que fornecedores ainda não estão contratados" / "fornecedores por contratar"
+  if(/fornecedor/.test(p) && /(n[aã]o est[aã]o contratad|por contratar|ainda n[aã]o contratei|falta contratar|sem contrat)/.test(p)){
+    return { intent: WEDDY_COPILOT_INTENTS.GET_UNCONTRACTED_SUPPLIERS };
+  }
+
+  // "que pagamentos tenho este mês" / "pagamentos do mês"
+  if(/pagamentos?/.test(p) && /(este m[eê]s|deste m[eê]s|do m[eê]s|neste m[eê]s)/.test(p)){
+    return { intent: WEDDY_COPILOT_INTENTS.GET_PAYMENTS_THIS_MONTH };
+  }
+
+  // "há algum fornecedor cujo valor não bate certo com o orçamento?"
+  if(/fornecedor/.test(p) && /(n[aã]o bate|discrep[aâ]nci|n[aã]o coincide|n[aã]o corresponde)/.test(p)){
+    return { intent: WEDDY_COPILOT_INTENTS.GET_SUPPLIER_BUDGET_MISMATCHES };
+  }
+
+  // "o contrato do fotógrafo diz alguma coisa sobre X" — só dispara se
+  // conseguir identificar a QUE fornecedor o contrato pertence; senão cai
+  // na pesquisa geral de documentos (SEARCH_DOCUMENTS), mais abaixo.
+  if(/contrato/.test(p)){
+    const supplierGuess = findSupplierByText(pergunta);
+    if(supplierGuess) return { intent: WEDDY_COPILOT_INTENTS.SEARCH_SUPPLIER_CONTRACT };
+  }
+
+  // "que convidados confirmados ainda não têm mesa" — antes do /mesa/
+  // genérico (GET_TABLE_COUNT), que só conta quantas mesas existem.
+  if(/sem mesa|mesa por atribuir|ainda n[aã]o t[eê]m mesa|falta atribuir mesa/.test(p)){
+    return { intent: WEDDY_COPILOT_INTENTS.GET_GUESTS_WITHOUT_TABLE };
   }
 
   if(/rsvp/.test(p)){
@@ -6223,6 +6364,80 @@ const WeddyActions = {
     },
     getRSVPsNeedingReminder(){
       return rsvpAutopilotList().filter(x=>x.bucket==='due' || x.bucket==='late').map(x=>x.item.name).filter(Boolean);
+    },
+    // Fase 7 — Wedding Brain: cada uma destas junta Vendors + Budget (+
+    // Documentos), usando o link supplierId que a Fase 6.1/6.1.1 criou.
+    // Continuam a ser só leitura — nunca escrevem nada.
+    getSupplierPaymentInfo(pergunta){
+      const s = findSupplierByText(pergunta);
+      if(!s) return null;
+      return {
+        name: s.name,
+        paid: supplierPaidTotal(s),
+        total: Number(s.valorTotal)||0,
+        nextAmount: Number(s.nextPaymentAmount)||0,
+        nextDate: s.nextPaymentDate || '',
+        hasContract: !!(supplierContractDoc(s.id) || getSupplierContract(s.id))
+      };
+    },
+    getUncontractedSuppliers(){
+      return (state.suppliers||[]).filter(s=>s.status!=='contratado').map(s=>s.name).filter(Boolean);
+    },
+    getPaymentsThisMonth(){
+      const now = new Date();
+      const y = now.getFullYear(), m = now.getMonth();
+      const list = [];
+      state.expenses.forEach(e=>{
+        const remaining = Math.max(0, Number(e.value)-Number(e.paid||0));
+        if(remaining>0 && e.dueDate){
+          const d = new Date(e.dueDate+'T00:00:00');
+          if(d.getFullYear()===y && d.getMonth()===m) list.push({ label:e.desc||ta('defaultExpenseLabel'), amount:remaining, dueDate:e.dueDate });
+        }
+      });
+      // Também os "próximos pagamentos" já combinados na ficha do
+      // fornecedor, que podem ainda não ter despesa/data-limite no Budget.
+      (state.suppliers||[]).forEach(s=>{
+        if(s.nextPaymentDate && Number(s.nextPaymentAmount)>0){
+          const d = new Date(s.nextPaymentDate+'T00:00:00');
+          if(d.getFullYear()===y && d.getMonth()===m) list.push({ label: ta('autoPaymentDesc')(s.name), amount:Number(s.nextPaymentAmount), dueDate:s.nextPaymentDate });
+        }
+      });
+      return list.sort((a,b)=>(a.dueDate||'').localeCompare(b.dueDate||''));
+    },
+    searchSupplierContract(pergunta){
+      const s = findSupplierByText(pergunta);
+      if(!s) return null;
+      const doc = supplierContractDoc(s.id);
+      if(!doc){
+        const legacy = getSupplierContract(s.id);
+        return { supplierName: s.name, found:false, legacyOnly: !!legacy };
+      }
+      const tokens = normalizeSearchText(pergunta).split(/[^a-z0-9]+/).filter(w=>w.length>=3 && !STOPWORDS_PT.has(w));
+      let best = null;
+      buildDocumentChunks(doc.text).forEach(chunk=>{
+        const norm = normalizeSearchText(chunk);
+        let score = 0;
+        tokens.forEach(t=>{ if(norm.includes(t)) score++; });
+        if(score>0 && (!best || score>best.score)) best = { score, snippet: chunk.length>420 ? chunk.slice(0,420)+'…' : chunk };
+      });
+      return { supplierName: s.name, found: !!best, snippet: best ? best.snippet : null };
+    },
+    getSupplierBudgetMismatches(){
+      return (state.suppliers||[]).map(s=>{
+        const contracted = Number(s.valorTotal)||0;
+        if(!contracted) return null;
+        const budgeted = state.expenses.filter(e=>e.supplierId===s.id).reduce((sum,e)=>sum+(Number(e.value)||0),0);
+        const diff = budgeted - contracted;
+        if(Math.abs(diff) < 0.01) return null;
+        return { name: s.name, contracted, budgeted, diff };
+      }).filter(Boolean);
+    },
+    getGuestsWithoutTable(){
+      const assignedKeys = assignedGuestKeysSet();
+      return flattenAllGuestsForRSVP().filter(g=>{
+        if(!isConfirmed(g.side, g.catId, g.idx)) return false;
+        return !assignedKeys.has(guestKey(g.side, g.catId, g.idx));
+      }).map(g=>g.name).filter(Boolean);
     }
   },
   write: {
@@ -6335,6 +6550,51 @@ async function respondeAssistente(pergunta){
       const found = searchWeddingDocuments(pergunta);
       if(found) return `Encontrei isto em "${found.doc}":\n\n"${found.snippet}"`;
       return 'Ainda estou em modo de demonstração (sem ligação a um modelo de IA real), mas já consigo responder sobre convidados, orçamento, datas, mesas, pagamentos, tarefas da semana e procurar nos documentos que carregaste — pergunta-me, por exemplo, "quantos convidados já confirmaram?".';
+    }
+    // Fase 7 — Wedding Brain: estas respostas juntam mais do que um
+    // domínio (Vendors+Budget+Documentos, ou Guests+Mesas). Continua tudo a
+    // sair só de WeddyActions — nenhuma destas frases é escrita pela IA.
+    case I.GET_SUPPLIER_PAYMENT_INFO: {
+      const info = WeddyActions.read.getSupplierPaymentInfo(pergunta);
+      if(!info) return 'Não encontrei nenhum fornecedor que corresponda a essa pergunta — tenta usar o nome dele ou a categoria (ex: "fotógrafo", "espaço").';
+      let resposta = `${info.name} — já pago: ${fmtEUR(info.paid)}`;
+      if(info.total>0) resposta += ` de ${fmtEUR(info.total)} contratados`;
+      resposta += '.';
+      if(info.nextAmount>0 && info.nextDate) resposta += ` Próximo pagamento: ${fmtEUR(info.nextAmount)} em ${formatDatePT(info.nextDate)}.`;
+      else if(info.nextAmount>0) resposta += ` Tens um próximo pagamento de ${fmtEUR(info.nextAmount)} sem data definida.`;
+      resposta += info.hasContract ? ' (Fonte: contrato + orçamento.)' : ' (Fonte: orçamento — ainda sem contrato carregado.)';
+      return resposta;
+    }
+    case I.GET_UNCONTRACTED_SUPPLIERS: {
+      const list = WeddyActions.read.getUncontractedSuppliers();
+      if(!list.length) return 'Todos os fornecedores já estão contratados. 🎉';
+      return `Ainda faltam contratar: ${list.join(', ')}.`;
+    }
+    case I.GET_PAYMENTS_THIS_MONTH: {
+      const list = WeddyActions.read.getPaymentsThisMonth();
+      if(!list.length) return 'Não tens nenhum pagamento previsto para este mês.';
+      const lista = list.slice(0,10).map(u=>`${u.label} — ${fmtEUR(u.amount)} (${formatDatePT(u.dueDate)})`).join('; ');
+      return `Este mês tens: ${lista}${list.length>10 ? `, e mais ${list.length-10}` : ''}.`;
+    }
+    case I.SEARCH_SUPPLIER_CONTRACT: {
+      const result = WeddyActions.read.searchSupplierContract(pergunta);
+      if(!result) return 'Não encontrei nenhum fornecedor que corresponda a essa pergunta — tenta usar o nome dele ou a categoria.';
+      if(result.legacyOnly) return `O contrato de ${result.supplierName} ainda só está guardado neste telemóvel (não sincronizado) — não consigo pesquisar o texto dele a partir daqui. Carrega-o novamente na ficha do fornecedor para o sincronizar.`;
+      if(!result.found) return `Ainda não tenho o contrato de ${result.supplierName} carregado — podes adicioná-lo na ficha dele, em Fornecedores.`;
+      if(!result.snippet) return `Tenho o contrato de ${result.supplierName}, mas não encontrei nada sobre isso no texto dele.`;
+      return `No contrato de ${result.supplierName}:\n\n"${result.snippet}"`;
+    }
+    case I.GET_SUPPLIER_BUDGET_MISMATCHES: {
+      const list = WeddyActions.read.getSupplierBudgetMismatches();
+      if(!list.length) return 'Não encontrei nenhuma discrepância — o que está registado no Budget para cada fornecedor bate certo com o valor contratado.';
+      const lista = list.slice(0,8).map(m=>`${m.name} (contratado: ${fmtEUR(m.contracted)}, no Budget: ${fmtEUR(m.budgeted)}, ${m.diff>0?'a mais':'a menos'}: ${fmtEUR(Math.abs(m.diff))})`).join('; ');
+      return `Encontrei diferenças em: ${lista}.`;
+    }
+    case I.GET_GUESTS_WITHOUT_TABLE: {
+      const list = WeddyActions.read.getGuestsWithoutTable();
+      if(!list.length) return 'Todos os convidados confirmados já têm mesa atribuída.';
+      const lista = list.slice(0,15).join(', ');
+      return `Ainda sem mesa: ${lista}${list.length>15 ? `, e mais ${list.length-15}` : ''}.`;
     }
     default:
       return 'Ainda estou em modo de demonstração (sem ligação a um modelo de IA real), mas já consigo responder sobre convidados, orçamento, datas, mesas, pagamentos, tarefas da semana e procurar nos documentos que carregaste — pergunta-me, por exemplo, "quantos convidados já confirmaram?".';
@@ -10306,6 +10566,17 @@ function attachFirestoreSync(){
         normalizeCategories();
         migrateCategoryDescriptions();
         migrateGuestCategories();
+        // Fase 6.1.1 — migração financeira idempotente (ver
+        // migrateLegacySupplierPayments): corre a cada snapshot, mas só
+        // produz alterações reais na primeira vez que encontra pagamentos
+        // legados por migrar. Quando migra algo, força a gravação para o
+        // Firestore deixar de depender de isto voltar a correr no próximo
+        // load — sem isto, um export/CSV ou uma leitura direta ao
+        // Firestore continuaria a ver os dois livros por reconciliar.
+        if(migrateLegacySupplierPayments()){
+          changed = true;
+          pushRemote(true);
+        }
       }
       if(data.settings && JSON.stringify(data.settings) !== JSON.stringify(weddingSettings)){ weddingSettings = data.settings; changed = true; }
       if(data.ownerEmails) currentWeddingOwners = data.ownerEmails;

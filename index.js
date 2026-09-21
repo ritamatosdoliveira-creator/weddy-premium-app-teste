@@ -319,6 +319,12 @@ const COUPLE_INTENTS = [
   'CREATE_TASK', 'GET_UPCOMING_TASKS', 'GET_PENDING_RSVPS', 'GET_DIETARY_LIST',
   'GET_REMAINING_PAYMENTS', 'GET_RSVP_INFO', 'GET_GUEST_COUNT', 'GET_BUDGET',
   'GET_COUNTDOWN', 'GET_TABLE_COUNT', 'SEARCH_DOCUMENTS',
+  // Fase 5 — RSVP Autopilot (v1, leitura só).
+  'GET_LATE_RSVPS', 'GET_RSVPS_NEEDING_REMINDER',
+  // Fase 7 — Wedding Brain (leitura só, cruza Vendors+Budget+Documentos ou
+  // Guests+Mesas; ver WeddyActions.read em clone-app/index.html).
+  'GET_SUPPLIER_PAYMENT_INFO', 'GET_UNCONTRACTED_SUPPLIERS', 'GET_PAYMENTS_THIS_MONTH',
+  'SEARCH_SUPPLIER_CONTRACT', 'GET_SUPPLIER_BUDGET_MISMATCHES', 'GET_GUESTS_WITHOUT_TABLE',
 ];
 
 function buildClassifyPrompt(question, allowedIntents) {
