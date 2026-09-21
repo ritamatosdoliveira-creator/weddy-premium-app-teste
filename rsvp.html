@@ -105,6 +105,33 @@ h1{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:30px; col
 .member-card .field{ margin-bottom:12px; }
 .member-card .field:last-child{ margin-bottom:0; }
 .member-status-note{ font-size:12px; color:var(--ink-soft); margin-top:-4px; }
+
+/* Weddy Concierge — chat do convidado. Tudo respostas por regras, nunca
+   IA real: o motor está em respondeConcierge() mais abaixo no <script>. */
+.concierge-fab{ all:unset; box-sizing:border-box; position:fixed; right:18px; bottom:18px; width:56px; height:56px; border-radius:50%; background:var(--rust); color:#fff; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 16px rgba(154,79,61,0.35); cursor:pointer; z-index:40; }
+.concierge-fab svg{ width:24px; height:24px; }
+.concierge-fab.state-hidden{ display:none !important; }
+.concierge-panel{ position:fixed; right:14px; bottom:14px; width:min(360px, calc(100vw - 28px)); height:min(560px, calc(100vh - 28px)); background:var(--card); border-radius:22px; box-shadow:0 8px 34px rgba(48,44,41,0.22); display:flex; flex-direction:column; overflow:hidden; z-index:41; }
+.concierge-panel.state-hidden{ display:none !important; }
+.concierge-head{ background:var(--rust); color:#fff; padding:14px 16px; display:flex; align-items:center; justify-content:space-between; flex-shrink:0; }
+.concierge-head-title{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:17px; }
+.concierge-head-sub{ font-size:11px; opacity:.85; margin-top:1px; }
+.concierge-close{ all:unset; box-sizing:border-box; width:26px; height:26px; display:flex; align-items:center; justify-content:center; cursor:pointer; opacity:.9; }
+.concierge-log{ flex:1; overflow-y:auto; padding:14px 14px 6px; display:flex; flex-direction:column; gap:9px; }
+.concierge-msg{ max-width:84%; padding:9px 12px; border-radius:14px; font-size:13px; line-height:1.42; white-space:pre-wrap; }
+.concierge-msg.bot{ align-self:flex-start; background:var(--cream); color:var(--ink); border-bottom-left-radius:4px; }
+.concierge-msg.user{ align-self:flex-end; background:var(--rust); color:#fff; border-bottom-right-radius:4px; }
+.concierge-suggestions{ display:flex; flex-wrap:wrap; gap:6px; padding:0 14px 10px; flex-shrink:0; }
+.concierge-suggestions.state-hidden{ display:none !important; }
+.concierge-chip{ all:unset; box-sizing:border-box; padding:7px 11px; border-radius:20px; border:1.4px solid var(--line); font-size:11.5px; color:var(--rust-dark); cursor:pointer; background:#fff; }
+.concierge-confirm-row{ display:flex; gap:8px; margin-top:8px; }
+.concierge-confirm-btn{ all:unset; box-sizing:border-box; padding:7px 13px; border-radius:10px; font-size:12px; font-weight:700; cursor:pointer; }
+.concierge-confirm-btn.yes{ background:#fff; color:var(--rust-dark); }
+.concierge-confirm-btn.no{ background:rgba(255,255,255,0.35); color:var(--ink); }
+.concierge-input-row{ display:flex; gap:8px; padding:10px 12px; border-top:1px solid var(--line); flex-shrink:0; }
+.concierge-input-row input{ flex:1; border:1.6px solid var(--line); background:#fff; border-radius:20px; padding:10px 14px; font-size:13px; color:var(--ink); font-family:inherit; outline:none; }
+.concierge-send-btn{ all:unset; box-sizing:border-box; width:38px; height:38px; border-radius:50%; background:var(--rust); color:#fff; display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; }
+.concierge-send-btn svg{ width:16px; height:16px; }
 </style>
 </head>
 <body>
@@ -229,6 +256,30 @@ h1{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:30px; col
     <div class="footer-logo">weddy</div>
   </div>
 
+  <button type="button" class="concierge-fab state-hidden" id="concierge-fab" aria-label="Weddy Concierge">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+  </button>
+
+  <div class="concierge-panel state-hidden" id="concierge-panel">
+    <div class="concierge-head">
+      <div>
+        <div class="concierge-head-title" data-t="conciergeHeadTitle">Weddy Concierge</div>
+        <div class="concierge-head-sub" data-t="conciergeHeadSub">Pergunta-me o que quiseres sobre este casamento</div>
+      </div>
+      <button type="button" class="concierge-close" id="concierge-close" aria-label="Fechar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="concierge-log" id="concierge-log"></div>
+    <div class="concierge-suggestions" id="concierge-suggestions"></div>
+    <div class="concierge-input-row">
+      <input type="text" id="concierge-input" data-t-placeholder="conciergeInputPlaceholder" placeholder="Escreve a tua pergunta…">
+      <button type="button" class="concierge-send-btn" id="concierge-send" aria-label="Enviar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+      </button>
+    </div>
+  </div>
+
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
@@ -314,13 +365,66 @@ h1{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:30px; col
       memoriesThanks: 'Obrigado por partilhar! 💛',
       memoriesError: 'Não foi possível enviar esta foto. Verifica a internet e tenta novamente.',
       privacyToggle: 'Como tratamos os teus dados',
-      privacyText: 'Os dados que dás aqui (nome, resposta, refeição, restrições alimentares, transporte/alojamento) são vistos apenas pelos noivos e usados só para organizar este casamento — nunca são partilhados com mais ninguém. Este link não te mostra a lista de outros convidados nem informações do orçamento. Podes atualizar ou apagar a tua resposta a qualquer momento, neste mesmo link.',
+      privacyText: 'Os dados que dás aqui (nome, resposta, refeição, restrições alimentares, transporte/alojamento) são vistos apenas pelos noivos e usados só para organizar este casamento — nunca são partilhados com mais ninguém. Este link não te mostra a lista de outros convidados nem informações do orçamento. Podes atualizar ou apagar a tua resposta a qualquer momento, neste mesmo link. O assistente de conversa (Weddy Concierge) não usa nenhuma inteligência artificial real — responde só com base na informação que os noivos escreveram, nunca altera a tua resposta sem primeiro pedires confirmação, e a conversa em si fica só neste dispositivo, não é guardada nem lida pelos noivos.',
       deleteResponseLink: 'Apagar a minha resposta',
       deleteConfirm: 'Tens a certeza que queres apagar a tua resposta (presença, refeição, restrições, transporte e alojamento)? Isto não apaga o teu nome nem o link do convite — só a tua resposta.',
       deleteSuccessMsg: 'A tua resposta foi apagada. Podes responder de novo quando quiseres.',
       deleteError: 'Não foi possível apagar a resposta. Verifica a internet e tenta novamente.',
       months: ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'],
       dateFormat: (day, month, year) => `${day} de ${month} de ${year}`,
+
+      // Weddy Concierge — chat do convidado (tudo por regras, sem IA real)
+      conciergeHeadTitle: 'Weddy Concierge',
+      conciergeHeadSub: 'Pergunta-me o que quiseres sobre este casamento',
+      conciergeInputPlaceholder: 'Escreve a tua pergunta…',
+      conciergeGreeting: name => `Olá${name? ' '+name : ''} 🤍 Sou o assistente deste casamento. Podes perguntar-me sobre o local, horário, dress code, transporte, alojamento ou presentes — ou dizer-me se afinal a tua resposta mudou.`,
+      conciergeSuggestWhere: 'Onde é?',
+      conciergeSuggestTime: 'A que horas?',
+      conciergeSuggestDress: 'Dress code?',
+      conciergeSuggestParking: 'Há estacionamento?',
+      conciergeReplyVenue: v => `É em ${v}. 📍`,
+      conciergeReplyNoVenue: 'Ainda não tenho o local definido — os noivos vão adicioná-lo em breve.',
+      conciergeReplyTime: list => `O programa do dia:\n${list}`,
+      conciergeReplyNoTime: 'Ainda não tenho o horário definido.',
+      conciergeReplyDress: v => `O dress code é: ${v}`,
+      conciergeReplyNoDress: 'Os noivos ainda não definiram um dress code específico.',
+      conciergeReplyParking: v => `Sobre estacionamento: ${v}`,
+      conciergeReplyNoParking: 'Ainda não tenho informação sobre estacionamento.',
+      conciergeReplyTransport: v => `Sobre transporte: ${v}`,
+      conciergeReplyNoTransport: 'Ainda não tenho informação sobre transporte.',
+      conciergeReplyAccommodation: v => `Sobre alojamento: ${v}`,
+      conciergeReplyNoAccommodation: 'Ainda não tenho informação sobre alojamento.',
+      conciergeReplyGifts: v => `Sobre presentes: ${v}`,
+      conciergeReplyNoGifts: 'Os noivos ainda não deixaram informação sobre presentes.',
+      conciergeReplyChildrenGeneric: 'Isso depende do convite de cada família — diz-me se vais trazer crianças na tua resposta acima, no campo "Vais trazer crianças?", que eu registo.',
+      conciergeReplyCompanionIndividual: 'O teu convite é individual. Se quiseres levar alguém, o melhor é falar diretamente com os noivos.',
+      conciergeReplyCompanionFamily: 'Este link já é partilhado por toda a família — cada pessoa responde no seu próprio cartão, mais acima nesta página.',
+      conciergeReplyTableFamilyUnavailable: 'Este link é partilhado por toda a família, por isso não consigo dizer a mesa de cada pessoa por aqui — vê a atribuição de mesas junto dos noivos.',
+      conciergeReplyRSVPFamilyUnavailable: 'Este link é partilhado por toda a família — cada pessoa vê a sua própria resposta no seu cartão, mais acima nesta página.',
+      conciergeReplyTableNotAssigned: 'Ainda não tens uma mesa atribuída — assim que os noivos organizarem os lugares, digo-te aqui.',
+      conciergeReplyTableAssigned: (table, seat, mates) => `Vais estar na mesa ${table}${seat?`, lugar ${seat}`:''}.${mates && mates.length ? ' Também aí: '+mates.join(', ')+'.' : ''}`,
+      conciergeReplyRSVPYes: meal => `A tua resposta está confirmada como "vou". ${meal ? `Refeição escolhida: ${meal}.` : 'Ainda não escolheste a refeição no formulário acima.'}`,
+      conciergeReplyRSVPNo: 'A tua resposta está registada como "não vou conseguir estar presente".',
+      conciergeReplyRSVPMaybe: 'A tua resposta está registada como "ainda não sei".',
+      conciergeReplyRSVPPending: 'Ainda não respondeste — usa o formulário acima ou diz-me aqui se vais ou não.',
+      conciergeReplyContact: v => `Podes contactar os noivos aqui: ${v}`,
+      conciergeFallback: 'Não tenho essa informação disponível neste momento.',
+      conciergeFallbackWithContact: v => `Não tenho essa informação disponível neste momento. Podes contactar os noivos através de: ${v}`,
+      conciergeDidntUnderstand: 'Não percebi bem a tua pergunta — podes tentar de outra forma? Também podes usar os botões acima da resposta para confirmar presença.',
+      conciergeActionUnavailableFamily: 'Para alterar a tua resposta, usa os campos acima (cada pessoa da família tem o seu próprio cartão) — por aqui só posso responder a perguntas.',
+      conciergeConfirmYesText: 'Vou marcar a tua presença como confirmada. Confirmas?',
+      conciergeConfirmNoText: 'Vou marcar que não vais conseguir estar presente. Confirmas?',
+      conciergeConfirmMaybeText: 'Vou marcar a tua resposta como "ainda não sei". Confirmas?',
+      conciergeConfirmDietaryText: v => `Vou adicionar "${v}" às tuas restrições alimentares. Confirmas?`,
+      conciergeConfirmBtnYes: 'Sim, confirmar',
+      conciergeConfirmBtnNo: 'Cancelar',
+      conciergeActionCancelled: 'Sem problema, não alterei nada. 🤍',
+      conciergeActionDoneYes: 'Feito! A tua presença ficou confirmada. 🎉 Não te esqueças de escolher a refeição no formulário acima.',
+      conciergeActionDoneNo: 'Combinado, registei que não vais conseguir vir. Obrigado por avisares.',
+      conciergeActionDoneMaybe: 'Sem problema — fica registado como "ainda não sei". Quando souberes, volta a dizer-me. 🤍',
+      conciergeActionDoneDietary: 'Feito 🤍 Já deixei essa informação associada à tua confirmação.',
+      conciergeActionError: 'Não consegui guardar isso agora — verifica a internet e tenta novamente.',
+      conciergeActionNeedsYesFirst: 'Para eu adicionar uma restrição alimentar preciso primeiro de saber que vens — confirma a tua presença no formulário acima.',
     },
     en: {
       loading: 'Loading…',
@@ -382,13 +486,66 @@ h1{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:30px; col
       memoriesThanks: 'Thanks for sharing! 💛',
       memoriesError: 'Could not upload this photo. Check your connection and try again.',
       privacyToggle: 'How we handle your data',
-      privacyText: "The data you give here (name, response, meal, dietary restrictions, transport/accommodation) is only seen by the couple and used solely to organize this wedding — it's never shared with anyone else. This link never shows you the other guests' list or budget information. You can update or delete your response at any time, on this same link.",
+      privacyText: "The data you give here (name, response, meal, dietary restrictions, transport/accommodation) is only seen by the couple and used solely to organize this wedding — it's never shared with anyone else. This link never shows you the other guests' list or budget information. You can update or delete your response at any time, on this same link. The chat assistant (Weddy Concierge) does not use any real artificial intelligence — it only answers based on information the couple wrote, never changes your response without first asking you to confirm, and the conversation itself stays on this device only — it isn't saved or read by the couple.",
       deleteResponseLink: 'Delete my response',
       deleteConfirm: "Are you sure you want to delete your response (attendance, meal, restrictions, transport and accommodation)? This does not delete your name or the invitation link — only your response.",
       deleteSuccessMsg: 'Your response has been deleted. You can respond again whenever you like.',
       deleteError: 'Could not delete your response. Check your connection and try again.',
       months: ['January','February','March','April','May','June','July','August','September','October','November','December'],
       dateFormat: (day, month, year) => `${month} ${day}, ${year}`,
+
+      // Weddy Concierge — guest chat (rule-based, no real AI)
+      conciergeHeadTitle: 'Weddy Concierge',
+      conciergeHeadSub: 'Ask me anything about this wedding',
+      conciergeInputPlaceholder: 'Type your question…',
+      conciergeGreeting: name => `Hi${name? ' '+name : ''} 🤍 I'm this wedding's assistant. Ask me about the venue, schedule, dress code, transport, accommodation or gifts — or let me know if your response has changed.`,
+      conciergeSuggestWhere: 'Where is it?',
+      conciergeSuggestTime: 'What time?',
+      conciergeSuggestDress: 'Dress code?',
+      conciergeSuggestParking: 'Is there parking?',
+      conciergeReplyVenue: v => `It's at ${v}. 📍`,
+      conciergeReplyNoVenue: "I don't have the venue set yet — the couple will add it soon.",
+      conciergeReplyTime: list => `The day's schedule:\n${list}`,
+      conciergeReplyNoTime: "I don't have the schedule yet.",
+      conciergeReplyDress: v => `The dress code is: ${v}`,
+      conciergeReplyNoDress: "The couple hasn't set a specific dress code yet.",
+      conciergeReplyParking: v => `About parking: ${v}`,
+      conciergeReplyNoParking: "I don't have parking information yet.",
+      conciergeReplyTransport: v => `About transport: ${v}`,
+      conciergeReplyNoTransport: "I don't have transport information yet.",
+      conciergeReplyAccommodation: v => `About accommodation: ${v}`,
+      conciergeReplyNoAccommodation: "I don't have accommodation information yet.",
+      conciergeReplyGifts: v => `About gifts: ${v}`,
+      conciergeReplyNoGifts: "The couple hasn't left any information about gifts yet.",
+      conciergeReplyChildrenGeneric: 'That depends on each family\'s invitation — let me know in the "Will you be bringing children?" field above and I\'ll note it.',
+      conciergeReplyCompanionIndividual: 'Your invitation is for one person. If you\'d like to bring someone, the best thing is to reach out to the couple directly.',
+      conciergeReplyCompanionFamily: "This link is already shared by the whole family — each person answers on their own card, further up this page.",
+      conciergeReplyTableFamilyUnavailable: 'This link is shared by the whole family, so I can\'t tell each person\'s table here — check the seating with the couple.',
+      conciergeReplyRSVPFamilyUnavailable: 'This link is shared by the whole family — each person sees their own reply on their own card, further up this page.',
+      conciergeReplyTableNotAssigned: "You don't have a table assigned yet — I'll let you know here once the couple sorts out the seating.",
+      conciergeReplyTableAssigned: (table, seat, mates) => `You'll be at table ${table}${seat?`, seat ${seat}`:''}.${mates && mates.length ? ' Also there: '+mates.join(', ')+'.' : ''}`,
+      conciergeReplyRSVPYes: meal => `Your reply is confirmed as "attending". ${meal ? `Meal chosen: ${meal}.` : "You haven't picked a meal in the form above yet."}`,
+      conciergeReplyRSVPNo: 'Your reply is recorded as "not able to attend".',
+      conciergeReplyRSVPMaybe: 'Your reply is recorded as "not sure yet".',
+      conciergeReplyRSVPPending: "You haven't replied yet — use the form above or tell me here whether you're coming.",
+      conciergeReplyContact: v => `You can reach the couple here: ${v}`,
+      conciergeFallback: "I don't have that information available right now.",
+      conciergeFallbackWithContact: v => `I don't have that information available right now. You can contact the couple at: ${v}`,
+      conciergeDidntUnderstand: "I didn't quite get that — could you try rephrasing? You can also use the buttons above to confirm your attendance.",
+      conciergeActionUnavailableFamily: "To change your response, use the fields above (each family member has their own card) — here I can only answer questions.",
+      conciergeConfirmYesText: "I'll mark your attendance as confirmed. Confirm?",
+      conciergeConfirmNoText: "I'll mark that you won't be able to attend. Confirm?",
+      conciergeConfirmMaybeText: 'I\'ll mark your response as "not sure yet". Confirm?',
+      conciergeConfirmDietaryText: v => `I'll add "${v}" to your dietary restrictions. Confirm?`,
+      conciergeConfirmBtnYes: 'Yes, confirm',
+      conciergeConfirmBtnNo: 'Cancel',
+      conciergeActionCancelled: "No problem, I didn't change anything. 🤍",
+      conciergeActionDoneYes: "Done! Your attendance is confirmed. 🎉 Don't forget to pick your meal in the form above.",
+      conciergeActionDoneNo: "Got it, I've noted you won't be able to make it. Thanks for letting us know.",
+      conciergeActionDoneMaybe: 'No problem — noted as "not sure yet". Let me know once you know. 🤍',
+      conciergeActionDoneDietary: "Done 🤍 I've added that to your response.",
+      conciergeActionError: "I couldn't save that right now — check your connection and try again.",
+      conciergeActionNeedsYesFirst: 'For me to add a dietary restriction I first need to know you\'re coming — confirm your attendance in the form above.',
     }
   };
   let currentLang = 'pt';
@@ -447,6 +604,11 @@ h1{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:30px; col
     });
     document.querySelector('.privacy-block').classList.toggle('state-hidden', id==='loading-state' || id==='error-state');
     document.getElementById('memories-block').classList.toggle('state-hidden', id==='loading-state' || id==='error-state');
+    const showConcierge = id!=='loading-state' && id!=='error-state';
+    document.getElementById('concierge-fab').classList.toggle('state-hidden', !showConcierge);
+    if(!showConcierge){
+      document.getElementById('concierge-panel').classList.add('state-hidden');
+    }
   }
 
   const params = new URLSearchParams(location.search);
@@ -461,6 +623,12 @@ h1{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:30px; col
   // resposta guardada em guestData.responses[guestId]. familyMemberState guarda
   // o estado em memória de cada pessoa até se enviar tudo de uma vez.
   let familyMemberState = {};
+  // Weddy Concierge — chat do convidado. Tudo respostas por regras
+  // (keyword matching), nunca um modelo de IA real, tal como o Assistente
+  // Weddy do lado dos noivos em index.html. conciergePendingAction guarda
+  // uma ação de RSVP detetada mas ainda não confirmada pelo convidado.
+  let conciergeGreeted = false;
+  let conciergePendingAction = null;
 
   function renderChildren(){
     const list = document.getElementById('children-list');
@@ -1019,6 +1187,406 @@ h1{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:30px; col
       msgEl.className = 'msg error';
       btn.disabled = false;
     });
+  });
+
+  // ============================================================
+  // WEDDY CONCIERGE — chat do convidado.
+  //
+  // Fase 2.5 do roadmap "Weddy 2.0": camada intermédia entre o motor por
+  // regras (Fase 2) e um futuro motor com IA real. Em vez de ir direto de
+  // "texto → resposta", a mensagem passa sempre por quatro passos fixos:
+  //
+  //   mensagem → classifyIntent → checkIntentPermission → WeddyActions → resposta
+  //
+  // O único sítio que hoje "não sabe nada de IA" é classifyIntent — é uma
+  // função de regex/keywords, tal como antes. No dia em que ligarmos um
+  // classificador real (Fase 3+), só essa função muda: devolve sempre a
+  // mesma forma { intent, value? }, por isso tudo o resto (permissões,
+  // ações, respostas) fica exatamente igual.
+  // ============================================================
+
+  const WEDDY_INTENTS = {
+    GET_VENUE:'GET_VENUE', GET_SCHEDULE:'GET_SCHEDULE', GET_DRESS_CODE:'GET_DRESS_CODE',
+    GET_PARKING:'GET_PARKING', GET_TRANSPORT:'GET_TRANSPORT', GET_ACCOMMODATION:'GET_ACCOMMODATION',
+    GET_GIFTS:'GET_GIFTS', GET_CONTACT:'GET_CONTACT', GET_FAQ:'GET_FAQ',
+    GET_TABLE:'GET_TABLE', GET_RSVP:'GET_RSVP', ASK_CHILDREN:'ASK_CHILDREN',
+    CONFIRM_ATTENDANCE:'CONFIRM_ATTENDANCE', DECLINE_ATTENDANCE:'DECLINE_ATTENDANCE', SET_RSVP_UNDECIDED:'SET_RSVP_UNDECIDED',
+    ADD_COMPANION:'ADD_COMPANION', SET_DIETARY_RESTRICTION:'SET_DIETARY_RESTRICTION',
+    UNKNOWN:'UNKNOWN'
+  };
+  // Intenções que ESCREVEM no Firestore (todas as outras só leem/informam).
+  const CONCIERGE_ACTION_INTENTS = new Set([
+    WEDDY_INTENTS.CONFIRM_ATTENDANCE, WEDDY_INTENTS.DECLINE_ATTENDANCE,
+    WEDDY_INTENTS.SET_RSVP_UNDECIDED, WEDDY_INTENTS.SET_DIETARY_RESTRICTION
+  ]);
+
+  // 1) CLASSIFICAÇÃO — hoje por keywords (nenhuma IA real). Devolve sempre
+  // { intent, value? }; nunca decide sozinha se a intenção é permitida ou
+  // como responder — isso é o trabalho dos dois passos seguintes.
+  function classifyIntent(pergunta){
+    const p = pergunta.toLowerCase();
+    // Nota de ordem: verificações mais específicas (alojamento, transporte,
+    // estacionamento…) têm de vir ANTES da pergunta genérica de "onde"
+    // (\bonde\b), senão "onde posso ficar/dormir" seria sempre apanhado
+    // pela intenção do local em vez da de alojamento.
+    if(/acompanhante|namorad[oa] (ao|para o|no)|levar (a minha (mulher|esposa|namorada)|o meu (marido|namorado))|trazer (a minha (mulher|esposa|namorada)|o meu (marido|namorado))|minha (mulher|esposa|namorada) (ao|no|para)|meu (marido|namorado) (ao|no|para)|bring my (wife|husband|girlfriend|boyfriend|partner|date)|plus.?one|\+ ?1\b/i.test(p)){
+      return { intent: WEDDY_INTENTS.ADD_COMPANION };
+    }
+    if(/crianç|filhos?\b|\bkids?\b|\bchild(ren)?\b/i.test(p)){
+      return { intent: WEDDY_INTENTS.ASK_CHILDREN };
+    }
+    if(/dress ?code|\btraje\b|o que (vestir|usar)|\broupa\b|what to wear|\battire\b/i.test(p)){
+      return { intent: WEDDY_INTENTS.GET_DRESS_CODE };
+    }
+    if(/estacionamento|\bparque\b|\bcarro\b|\bparking\b/i.test(p)){
+      return { intent: WEDDY_INTENTS.GET_PARKING };
+    }
+    if(/transporte|autocarro|\bshuttle\b|\bbus\b|\btransport\b/i.test(p)){
+      return { intent: WEDDY_INTENTS.GET_TRANSPORT };
+    }
+    if(/alojamento|\bdormir\b|\bhotel\b|ficar (onde|a dormir)|\bstay\b|\baccommodation\b|\bsleep\b/i.test(p)){
+      return { intent: WEDDY_INTENTS.GET_ACCOMMODATION };
+    }
+    if(/presente|prenda|lista de casamento|\bgift|\bregistry\b/i.test(p)){
+      return { intent: WEDDY_INTENTS.GET_GIFTS };
+    }
+    if(/que horas|horário|horario|começa|comeca|\btime\b|what time|schedule|when does/i.test(p)){
+      return { intent: WEDDY_INTENTS.GET_SCHEDULE };
+    }
+    if(/a minha mesa\b|em que mesa|que mesa (estou|fico|é a minha)|o meu lugar\b|onde (me sento|fico)|\bmy table\b|which table (am i|will i)|\bmy seat\b|where (do i sit|am i sitting)/i.test(p)){
+      return { intent: WEDDY_INTENTS.GET_TABLE };
+    }
+    if(/\ba minha resposta\b|o que (é que )?eu respondi|já respondi|what did i (answer|respond|reply)|\bmy rsvp\b|\bmy response\b/i.test(p)){
+      return { intent: WEDDY_INTENTS.GET_RSVP };
+    }
+    if(/\bonde\b|localiza|morada|endereç|\bwhere\b|\bvenue\b/i.test(p)){
+      return { intent: WEDDY_INTENTS.GET_VENUE };
+    }
+    if(/contact[oa]|falar com os noivos|\bcontact\b|phone number/i.test(p)){
+      return { intent: WEDDY_INTENTS.GET_CONTACT };
+    }
+    if(/não vou conseguir|nao vou conseguir|não posso ir|nao posso ir|não consigo (ir|estar)|nao consigo (ir|estar)|can'?t (make it|come|attend)|won'?t be able/i.test(p)){
+      return { intent: WEDDY_INTENTS.DECLINE_ATTENDANCE };
+    }
+    if(/ainda não sei|nao sei ainda|\btalvez\b|not sure yet|don'?t know yet/i.test(p)){
+      return { intent: WEDDY_INTENTS.SET_RSVP_UNDECIDED };
+    }
+    if(/confirmo (a )?(minha )?presença|vou (estar presente|sim,? vou)|eu vou!|posso confirmar que vou|count me in|i('| )?ll be there|i will attend|i can make it/i.test(p)){
+      return { intent: WEDDY_INTENTS.CONFIRM_ATTENDANCE };
+    }
+    if(/sou vegetarian|sou vegan|tenho alergia|sou alérgic|sou alergic|sou intolerante|alergia a|intoler[âa]nci|i'?m vegetarian|i'?m vegan|i have an? allergy|allergic to|gluten.?free/i.test(p)){
+      return { intent: WEDDY_INTENTS.SET_DIETARY_RESTRICTION, value: pergunta.trim().slice(0,200) };
+    }
+    const faq = matchCustomFaq(p);
+    if(faq) return { intent: WEDDY_INTENTS.GET_FAQ, value: faq };
+    return { intent: WEDDY_INTENTS.UNKNOWN };
+  }
+
+  function matchCustomFaq(p){
+    const list = Array.isArray(guestData.guestFaqList) ? guestData.guestFaqList : [];
+    if(!list.length) return null;
+    const qWords = p.split(/\W+/).filter(w=>w.length>=4);
+    if(!qWords.length) return null;
+    let best=null, bestScore=0;
+    list.forEach(f=>{
+      const faqWords = (f.q||'').toLowerCase().split(/\W+/).filter(w=>w.length>=4);
+      const score = qWords.filter(w=>faqWords.includes(w)).length;
+      if(score>bestScore){ bestScore=score; best=f; }
+    });
+    return bestScore>0 ? best : null;
+  }
+
+  // 2) PERMISSÕES — decide se ESTE convidado pode pedir ESTA intenção,
+  // antes de qualquer ação ou leitura acontecer. Um link de família não
+  // tem um "eu" único (cada pessoa responde no seu próprio cartão), por
+  // isso todas as intenções que alteram o RSVP ficam bloqueadas aqui; um
+  // acompanhante nunca é permitido, porque o modelo de dados atual não tem
+  // esse conceito (cada pessoa é sempre a sua própria entrada).
+  function checkIntentPermission(intent, context){
+    if(intent===WEDDY_INTENTS.ADD_COMPANION){
+      return { allowed:false, reason:'not-supported' };
+    }
+    if(context.guestData.isFamily){
+      if(CONCIERGE_ACTION_INTENTS.has(intent)) return { allowed:false, reason:'family-shared-link' };
+      if(intent===WEDDY_INTENTS.GET_TABLE) return { allowed:false, reason:'family-no-table' };
+      if(intent===WEDDY_INTENTS.GET_RSVP) return { allowed:false, reason:'family-no-single-rsvp' };
+    }
+    return { allowed:true };
+  }
+
+  // 3) REGISTO DE AÇÕES — o único sítio que lê o documento do convidado ou
+  // escreve no Firestore. As de leitura (getWeddingInfo…) devolvem os dados
+  // já prontos a usar na resposta; as de escrita (updateRSVP,
+  // setDietaryRestriction) devolvem sempre uma Promise. As "primeiras
+  // ações" do roadmap (info do casamento, RSVP, mesa, dieta); o resto
+  // (createTask, getBudget, getPendingRSVPs…, do lado dos noivos) fica
+  // para a Fase 3, quando isto passar a servir também o Weddy AI Copilot.
+  const WeddyActions = {
+    getWeddingInfo(field, context){
+      const map = {
+        venue: context.guestData.venue,
+        dressCode: context.guestData.guestDressCode,
+        parking: context.guestData.guestParkingInfo,
+        transport: context.guestData.guestTransportInfo,
+        accommodation: context.guestData.guestAccommodationInfo,
+        gifts: context.guestData.guestGiftsInfo,
+        contact: context.guestData.guestContactInfo
+      };
+      return map[field] || null;
+    },
+    getSchedule(context){
+      const prog = Array.isArray(context.guestData.guestProgram) ? context.guestData.guestProgram : [];
+      if(!prog.length) return null;
+      return prog.map(ev => `${ev.time||'?'} — ${ev.label||''}${ev.place?' ('+ev.place+')':''}`).join('\n');
+    },
+    getGuestRSVP(context){
+      const g = context.guestData;
+      return { attending: g.attending, rsvpStatus: g.rsvpStatus, meal: g.meal };
+    },
+    getGuestTable(context){
+      const g = context.guestData;
+      if(!g.assignedTable) return { assigned:false };
+      const mates = Array.isArray(g.tablemates) ? g.tablemates.filter(m=>m && m!==g.name) : [];
+      return { assigned:true, table:g.assignedTable, seat:g.assignedSeat, tablemates:mates };
+    },
+    // Ações de escrita — usadas por conciergeExecuteAction depois de o
+    // convidado confirmar. Devolvem sempre a Promise do próprio update().
+    updateRSVP(status, context){
+      const updates = { respondedAt: firebase.firestore.FieldValue.serverTimestamp() };
+      if(status==='yes'){
+        updates.attending = true; updates.rsvpStatus = 'yes';
+      } else if(status==='no'){
+        updates.attending = false; updates.rsvpStatus = 'no';
+        updates.meal = ''; updates.dietary = ''; updates.transporte = false; updates.alojamento = false; updates.children = [];
+      } else {
+        updates.attending = null; updates.rsvpStatus = 'maybe';
+      }
+      return db.collection('guests').doc(context.guestToken).update(updates).then(()=>updates);
+    },
+    setDietaryRestriction(text, context){
+      const existing = (context.guestData.dietary||'').trim();
+      const dietary = existing ? existing + '; ' + text : text;
+      return db.collection('guests').doc(context.guestToken).update({ dietary }).then(()=>({ dietary }));
+    }
+  };
+
+  // 4) RESPOSTA — junta classificação + permissão + ação numa única { text,
+  // action? }, no mesmo formato que o resto do chat já esperava antes desta
+  // camada existir (conciergeHandleUserMessage não precisou de mudar nada).
+  function respondeConcierge(pergunta){
+    const context = { guestData, guestToken };
+    const classified = classifyIntent(pergunta);
+    const permission = checkIntentPermission(classified.intent, context);
+    const I = WEDDY_INTENTS;
+
+    if(!permission.allowed){
+      if(permission.reason==='not-supported'){
+        return { text: context.guestData.isFamily ? t('conciergeReplyCompanionFamily') : t('conciergeReplyCompanionIndividual') };
+      }
+      if(permission.reason==='family-no-table'){
+        return { text: t('conciergeReplyTableFamilyUnavailable') };
+      }
+      if(permission.reason==='family-no-single-rsvp'){
+        return { text: t('conciergeReplyRSVPFamilyUnavailable') };
+      }
+      // family-shared-link: qualquer intenção que alteraria o RSVP.
+      return { text: t('conciergeActionUnavailableFamily') };
+    }
+
+    switch(classified.intent){
+      case I.ASK_CHILDREN:
+        return { text: t('conciergeReplyChildrenGeneric') };
+      case I.GET_DRESS_CODE: {
+        const v = WeddyActions.getWeddingInfo('dressCode', context);
+        return { text: v ? t('conciergeReplyDress')(v) : t('conciergeReplyNoDress') };
+      }
+      case I.GET_PARKING: {
+        const v = WeddyActions.getWeddingInfo('parking', context);
+        return { text: v ? t('conciergeReplyParking')(v) : t('conciergeReplyNoParking') };
+      }
+      case I.GET_TRANSPORT: {
+        const v = WeddyActions.getWeddingInfo('transport', context);
+        return { text: v ? t('conciergeReplyTransport')(v) : t('conciergeReplyNoTransport') };
+      }
+      case I.GET_ACCOMMODATION: {
+        const v = WeddyActions.getWeddingInfo('accommodation', context);
+        return { text: v ? t('conciergeReplyAccommodation')(v) : t('conciergeReplyNoAccommodation') };
+      }
+      case I.GET_GIFTS: {
+        const v = WeddyActions.getWeddingInfo('gifts', context);
+        return { text: v ? t('conciergeReplyGifts')(v) : t('conciergeReplyNoGifts') };
+      }
+      case I.GET_SCHEDULE: {
+        const v = WeddyActions.getSchedule(context);
+        return { text: v ? t('conciergeReplyTime')(v) : t('conciergeReplyNoTime') };
+      }
+      case I.GET_VENUE: {
+        const v = WeddyActions.getWeddingInfo('venue', context);
+        return { text: v ? t('conciergeReplyVenue')(v) : t('conciergeReplyNoVenue') };
+      }
+      case I.GET_CONTACT: {
+        const v = WeddyActions.getWeddingInfo('contact', context);
+        return { text: v ? t('conciergeReplyContact')(v) : t('conciergeFallback') };
+      }
+      case I.GET_TABLE: {
+        const info = WeddyActions.getGuestTable(context);
+        if(!info.assigned) return { text: t('conciergeReplyTableNotAssigned') };
+        return { text: t('conciergeReplyTableAssigned')(info.table, info.seat, info.tablemates) };
+      }
+      case I.GET_RSVP: {
+        const rsvp = WeddyActions.getGuestRSVP(context);
+        if(rsvp.attending===true) return { text: t('conciergeReplyRSVPYes')(rsvp.meal) };
+        if(rsvp.attending===false) return { text: t('conciergeReplyRSVPNo') };
+        if(rsvp.rsvpStatus==='maybe') return { text: t('conciergeReplyRSVPMaybe') };
+        return { text: t('conciergeReplyRSVPPending') };
+      }
+      case I.DECLINE_ATTENDANCE:
+        return { text: t('conciergeConfirmNoText'), action:{ intent: I.DECLINE_ATTENDANCE } };
+      case I.SET_RSVP_UNDECIDED:
+        return { text: t('conciergeConfirmMaybeText'), action:{ intent: I.SET_RSVP_UNDECIDED } };
+      case I.CONFIRM_ATTENDANCE:
+        return { text: t('conciergeConfirmYesText'), action:{ intent: I.CONFIRM_ATTENDANCE } };
+      case I.SET_DIETARY_RESTRICTION:
+        return { text: t('conciergeConfirmDietaryText')(classified.value), action:{ intent: I.SET_DIETARY_RESTRICTION, value: classified.value } };
+      case I.GET_FAQ:
+        return { text: classified.value.a };
+      default:
+        return { text: context.guestData.guestContactInfo ? t('conciergeFallbackWithContact')(context.guestData.guestContactInfo) : t('conciergeFallback') };
+    }
+  }
+
+  // Executa uma ação já CONFIRMADA pelo convidado (ver conciergeOnConfirmYes)
+  // — nunca chamada diretamente a partir da classificação.
+  function conciergeExecuteAction(action){
+    const context = { guestData, guestToken };
+    const I = WEDDY_INTENTS;
+
+    if(action.intent===I.SET_DIETARY_RESTRICTION && guestData.attending!==true){
+      conciergeAppend('bot', t('conciergeActionNeedsYesFirst'));
+      return;
+    }
+
+    let promise, doneKey;
+    if(action.intent===I.CONFIRM_ATTENDANCE){
+      promise = WeddyActions.updateRSVP('yes', context); doneKey = 'conciergeActionDoneYes';
+    } else if(action.intent===I.DECLINE_ATTENDANCE){
+      promise = WeddyActions.updateRSVP('no', context); doneKey = 'conciergeActionDoneNo';
+    } else if(action.intent===I.SET_RSVP_UNDECIDED){
+      promise = WeddyActions.updateRSVP('maybe', context); doneKey = 'conciergeActionDoneMaybe';
+    } else if(action.intent===I.SET_DIETARY_RESTRICTION){
+      promise = WeddyActions.setDietaryRestriction(action.value, context); doneKey = 'conciergeActionDoneDietary';
+    } else {
+      return;
+    }
+
+    promise.then((updates)=>{
+      Object.assign(guestData, updates);
+      conciergeAppend('bot', t(doneKey));
+      if(updates.rsvpStatus!==undefined) selectedAttend = updates.rsvpStatus;
+      renderForm();
+    }).catch(()=>{
+      conciergeAppend('bot', t('conciergeActionError'));
+    });
+  }
+
+  function conciergeAppend(role, text, withConfirm){
+    const log = document.getElementById('concierge-log');
+    const div = document.createElement('div');
+    div.className = 'concierge-msg ' + role;
+    div.textContent = text;
+    if(withConfirm){
+      const row = document.createElement('div');
+      row.className = 'concierge-confirm-row';
+      const yesBtn = document.createElement('button');
+      yesBtn.type = 'button';
+      yesBtn.className = 'concierge-confirm-btn yes';
+      yesBtn.textContent = t('conciergeConfirmBtnYes');
+      yesBtn.addEventListener('click', conciergeOnConfirmYes);
+      const noBtn = document.createElement('button');
+      noBtn.type = 'button';
+      noBtn.className = 'concierge-confirm-btn no';
+      noBtn.textContent = t('conciergeConfirmBtnNo');
+      noBtn.addEventListener('click', conciergeOnConfirmNo);
+      row.appendChild(yesBtn);
+      row.appendChild(noBtn);
+      div.appendChild(row);
+    }
+    log.appendChild(div);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  function conciergeRemoveLastConfirmRow(){
+    const rows = document.querySelectorAll('#concierge-log .concierge-confirm-row');
+    if(rows.length) rows[rows.length-1].remove();
+  }
+  function conciergeOnConfirmYes(){
+    if(!conciergePendingAction) return;
+    const action = conciergePendingAction;
+    conciergePendingAction = null;
+    conciergeRemoveLastConfirmRow();
+    conciergeExecuteAction(action);
+  }
+  function conciergeOnConfirmNo(){
+    conciergePendingAction = null;
+    conciergeRemoveLastConfirmRow();
+    conciergeAppend('bot', t('conciergeActionCancelled'));
+  }
+
+  function conciergeHandleUserMessage(text){
+    const trimmed = (text||'').trim();
+    if(!trimmed) return;
+    conciergeAppend('user', trimmed);
+    const result = respondeConcierge(trimmed);
+    if(result && result.action){
+      conciergePendingAction = result.action;
+      conciergeAppend('bot', result.text, true);
+    } else {
+      conciergeAppend('bot', (result && result.text) || t('conciergeDidntUnderstand'));
+    }
+  }
+
+  function conciergeRenderSuggestions(){
+    const wrap = document.getElementById('concierge-suggestions');
+    const chips = [t('conciergeSuggestWhere'), t('conciergeSuggestTime'), t('conciergeSuggestDress'), t('conciergeSuggestParking')];
+    wrap.classList.remove('state-hidden');
+    wrap.innerHTML = chips.map((label,i)=>`<button type="button" class="concierge-chip" data-chip="${i}">${label.replace(/</g,'&lt;')}</button>`).join('');
+    wrap.querySelectorAll('[data-chip]').forEach((btn,i)=>{
+      btn.addEventListener('click', ()=>{
+        conciergeHandleUserMessage(chips[i]);
+        wrap.classList.add('state-hidden');
+      });
+    });
+  }
+
+  function conciergeOpen(){
+    document.getElementById('concierge-panel').classList.remove('state-hidden');
+    if(!conciergeGreeted){
+      conciergeGreeted = true;
+      const name = guestData.isFamily ? '' : (guestData.name||'');
+      conciergeAppend('bot', t('conciergeGreeting')(name));
+      conciergeRenderSuggestions();
+    }
+    document.getElementById('concierge-input').focus();
+  }
+
+  document.getElementById('concierge-fab').addEventListener('click', conciergeOpen);
+  document.getElementById('concierge-close').addEventListener('click', ()=>{
+    document.getElementById('concierge-panel').classList.add('state-hidden');
+  });
+  document.getElementById('concierge-send').addEventListener('click', ()=>{
+    const input = document.getElementById('concierge-input');
+    conciergeHandleUserMessage(input.value);
+    input.value = '';
+    document.getElementById('concierge-suggestions').classList.add('state-hidden');
+  });
+  document.getElementById('concierge-input').addEventListener('keydown', e=>{
+    if(e.key==='Enter'){
+      e.preventDefault();
+      const input = document.getElementById('concierge-input');
+      conciergeHandleUserMessage(input.value);
+      input.value = '';
+      document.getElementById('concierge-suggestions').classList.add('state-hidden');
+    }
   });
 })();
 </script>

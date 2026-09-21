@@ -1004,8 +1004,8 @@ html.rotate-blocked .rotate-lock-overlay{ display:flex; }
 
 <div class="rotate-lock-overlay" id="rotate-lock-overlay">
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/><path d="M3 9l3-3-3-3" transform="translate(0,3)"/></svg>
-  <div class="rl-title">Roda o telemóvel</div>
-  <div class="rl-text">A Weddy foi pensada para seres usada na vertical. Volta a rodar o teu telemóvel para continuares.</div>
+  <div class="rl-title" data-t="rotateLockTitle">Roda o telemóvel</div>
+  <div class="rl-text" data-t="rotateLockText">A Weddy foi pensada para seres usada na vertical. Volta a rodar o teu telemóvel para continuares.</div>
 </div>
 
 <div class="screen">
@@ -1014,10 +1014,10 @@ html.rotate-blocked .rotate-lock-overlay{ display:flex; }
   <div id="iab-warning" class="iab-warning">
     <div class="iab-warning-card">
       <div class="iab-warning-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16v.01"/></svg></div>
-      <div class="iab-warning-title">Quase lá! ✨</div>
-      <p>Estás a abrir a Weddy dentro do Instagram, e por aqui não é possível instalar a app no teu telemóvel.</p>
-      <p><b>Toca nos "•••" ou "⋮" no canto superior direito</b> e escolhe <b>"Abrir no navegador"</b> (Safari ou Chrome).</p>
-      <p class="iab-warning-note">Depois, no Safari, toca no ícone de partilha e em "Adicionar ao ecrã principal" — fica com um atalho como uma app a sério.</p>
+      <div class="iab-warning-title" data-t="iabWarningTitle">Quase lá! ✨</div>
+      <p data-t="iabWarningP1">Estás a abrir a Weddy dentro do Instagram, e por aqui não é possível instalar a app no teu telemóvel.</p>
+      <p data-t-html="iabWarningP2"><b>Toca nos "•••" ou "⋮" no canto superior direito</b> e escolhe <b>"Abrir no navegador"</b> (Safari ou Chrome).</p>
+      <p class="iab-warning-note" data-t="iabWarningNote">Depois, no Safari, toca no ícone de partilha e em "Adicionar ao ecrã principal" — fica com um atalho como uma app a sério.</p>
     </div>
   </div>
 
@@ -1026,7 +1026,7 @@ html.rotate-blocked .rotate-lock-overlay{ display:flex; }
       <div class="iab-warning-icon" style="color:var(--rust-dark);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16v.01"/></svg></div>
       <div class="iab-warning-title" id="payment-alert-title">Pagamentos a terminar o prazo</div>
       <div id="payment-alert-body" style="text-align:left; margin-bottom:6px;"></div>
-      <button class="login-btn" id="payment-alert-ok" style="margin-top:14px;">Ok</button>
+      <button class="login-btn" id="payment-alert-ok" style="margin-top:14px;" data-t="btnOk">Ok</button>
     </div>
   </div>
 
@@ -1041,7 +1041,7 @@ html.rotate-blocked .rotate-lock-overlay{ display:flex; }
       <div class="mesa3d-canvas-wrap">
         <canvas id="mesa3d-canvas"></canvas>
         <div class="mesa3d-labels" id="mesa3d-labels"></div>
-        <div class="mesa3d-hint">arrasta para rodar · toca num lugar para atribuir</div>
+        <div class="mesa3d-hint" data-t="mesa3dHint">arrasta para rodar · toca num lugar para atribuir</div>
       </div>
     </div>
     <div class="mesa3d-view" id="mesa3d-view-sala">
@@ -1052,134 +1052,134 @@ html.rotate-blocked .rotate-lock-overlay{ display:flex; }
   <div class="sheet-backdrop" id="sheet-backdrop"></div>
   <div class="sheet" id="todo-notes-sheet">
     <div class="sheet-handle"></div>
-    <div class="sheet-title">As minhas notas</div>
-    <div class="sheet-field"><textarea id="todo-notes-text" rows="8" placeholder="Escreve aqui as tuas notas…" style="all:unset; box-sizing:border-box; width:100%; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px; font-family:inherit; font-size:14px; color:var(--ink); resize:vertical;"></textarea></div>
+    <div class="sheet-title" data-t="sheetTitleMyNotes">As minhas notas</div>
+    <div class="sheet-field"><textarea id="todo-notes-text" rows="8" data-t-placeholder="phMyNotes" placeholder="Escreve aqui as tuas notas…" style="all:unset; box-sizing:border-box; width:100%; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px; font-family:inherit; font-size:14px; color:var(--ink); resize:vertical;"></textarea></div>
     <div class="sheet-btns">
-      <button class="btn-cancel" id="todo-notes-cancel">Cancelar</button>
-      <button class="btn-save" id="todo-notes-save">Guardar</button>
+      <button class="btn-cancel" id="todo-notes-cancel" data-t="btnCancel">Cancelar</button>
+      <button class="btn-save" id="todo-notes-save" data-t="btnSave">Guardar</button>
     </div>
-    <button class="visit-action-btn danger" id="todo-notes-delete" style="width:100%; margin-top:9px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h14M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2m-8 0 1 13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1l1-13"/></svg> Apagar notas</button>
+    <button class="visit-action-btn danger" id="todo-notes-delete" style="width:100%; margin-top:9px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h14M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2m-8 0 1 13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1l1-13"/></svg> <span data-t="btnDeleteNotes">Apagar notas</span></button>
   </div>
   <div class="sheet" id="todo-cat-sheet">
     <div class="sheet-handle"></div>
-    <div class="sheet-title" id="tc-sheet-title">Nova categoria</div>
-    <div class="sheet-field"><label>Etiqueta (ex: Flores)</label><input type="text" id="tc-label" placeholder="Ex: Flores"></div>
-    <div class="sheet-field"><label>Título</label><input type="text" id="tc-title" placeholder="Ex: Decoração floral"></div>
-    <div class="sheet-field"><label>Descrição</label><input type="text" id="tc-desc" placeholder="Ex: As flores para o altar e as mesas."></div>
+    <div class="sheet-title" id="tc-sheet-title" data-t="tcSheetTitleNew">Nova categoria</div>
+    <div class="sheet-field"><label data-t="labelTcLabel">Etiqueta (ex: Flores)</label><input type="text" id="tc-label" data-t-placeholder="phTcLabelExample" placeholder="Ex: Flores"></div>
+    <div class="sheet-field"><label data-t="labelTcTitle">Título</label><input type="text" id="tc-title" data-t-placeholder="phTcTitleExample" placeholder="Ex: Decoração floral"></div>
+    <div class="sheet-field"><label data-t="labelTcDesc">Descrição</label><input type="text" id="tc-desc" data-t-placeholder="phTcDescExample" placeholder="Ex: As flores para o altar e as mesas."></div>
     <div class="sheet-btns">
-      <button class="btn-cancel" id="tc-cancel">Cancelar</button>
-      <button class="btn-save" id="tc-save">Guardar</button>
+      <button class="btn-cancel" id="tc-cancel" data-t="btnCancel">Cancelar</button>
+      <button class="btn-save" id="tc-save" data-t="btnSave">Guardar</button>
     </div>
   </div>
   <div class="sheet" id="hm-option-sheet">
     <div class="sheet-handle"></div>
-    <div class="sheet-title" id="hm-option-sheet-title">Nova ideia</div>
-    <div class="sheet-field"><label>Nome</label><input type="text" id="hm-name" placeholder="Ex: Maldivas"></div>
-    <div class="sheet-field"><label>Categoria</label><select id="hm-category"></select></div>
-    <div class="sheet-field"><label>Foto (escolhe um tema)</label>
+    <div class="sheet-title" id="hm-option-sheet-title" data-t="hmOptionSheetTitleNew">Nova ideia</div>
+    <div class="sheet-field"><label data-t="labelHmName">Nome</label><input type="text" id="hm-name" data-t-placeholder="phHmNameExample" placeholder="Ex: Maldivas"></div>
+    <div class="sheet-field"><label data-t="labelHmCategory">Categoria</label><select id="hm-category"></select></div>
+    <div class="sheet-field"><label data-t="labelHmPhotoTheme">Foto (escolhe um tema)</label>
       <div class="hm-theme-picker">
-        <button type="button" class="hm-theme-btn" data-theme="praia">${ICONS.beach}<span>Praia</span></button>
-        <button type="button" class="hm-theme-btn" data-theme="cidade">${ICONS.city}<span>Cidade</span></button>
-        <button type="button" class="hm-theme-btn" data-theme="montanha">${ICONS.mountain}<span>Montanha</span></button>
+        <button type="button" class="hm-theme-btn" data-theme="praia">${ICONS.beach}<span data-t="hmTypeBeach">Praia</span></button>
+        <button type="button" class="hm-theme-btn" data-theme="cidade">${ICONS.city}<span data-t="hmTypeCity">Cidade</span></button>
+        <button type="button" class="hm-theme-btn" data-theme="montanha">${ICONS.mountain}<span data-t="hmTypeMountain">Montanha</span></button>
       </div>
       <input type="hidden" id="hm-theme-value" value="">
     </div>
-    <div class="sheet-field"><label>Preço mínimo (€)</label><input type="number" min="0" id="hm-price-min" placeholder="0"></div>
-    <div class="sheet-field"><label>Preço máximo (€)</label><input type="number" min="0" id="hm-price-max" placeholder="0"></div>
-    <div class="sheet-field"><label>Data limite de pagamento (opcional)</label><input type="date" id="hm-duedate"></div>
+    <div class="sheet-field"><label data-t="labelHmPriceMin">Preço mínimo (€)</label><input type="number" min="0" id="hm-price-min" placeholder="0"></div>
+    <div class="sheet-field"><label data-t="labelHmPriceMax">Preço máximo (€)</label><input type="number" min="0" id="hm-price-max" placeholder="0"></div>
+    <div class="sheet-field"><label data-t="labelHmDueDate">Data limite de pagamento (opcional)</label><input type="date" id="hm-duedate"></div>
     <div class="sheet-btns">
-      <button class="btn-cancel" id="hm-option-cancel">Cancelar</button>
-      <button class="btn-save" id="hm-option-save">Guardar</button>
+      <button class="btn-cancel" id="hm-option-cancel" data-t="btnCancel">Cancelar</button>
+      <button class="btn-save" id="hm-option-save" data-t="btnSave">Guardar</button>
     </div>
-    <button class="visit-action-btn danger" id="hm-option-delete" style="width:100%; margin-top:9px; display:none;">${ICONS.trash} Eliminar ideia</button>
+    <button class="visit-action-btn danger" id="hm-option-delete" style="width:100%; margin-top:9px; display:none;">${ICONS.trash} <span data-t="btnDeleteIdea">Eliminar ideia</span></button>
   </div>
   <div class="sheet" id="delete-account-sheet">
     <div class="sheet-handle"></div>
-    <div class="sheet-title" style="color:var(--rust-dark);">Eliminar a minha conta</div>
+    <div class="sheet-title" style="color:var(--rust-dark);" data-t="sheetTitleDeleteAccount">Eliminar a minha conta</div>
     <p id="delete-account-explain" style="font-size:13px; color:var(--ink); line-height:1.6; margin:0 4px 16px;"></p>
-    <div class="sheet-field"><label>Confirma a tua password</label><input type="password" id="delete-account-pass" placeholder="A tua password atual"></div>
+    <div class="sheet-field"><label data-t="labelConfirmPassword">Confirma a tua password</label><input type="password" id="delete-account-pass" data-t-placeholder="phCurrentPassword" placeholder="A tua password atual"></div>
     <div id="delete-account-msg" class="login-msg" style="margin:6px 4px 0;"></div>
     <div class="sheet-btns">
-      <button class="btn-cancel" id="delete-account-cancel">Cancelar</button>
-      <button class="btn-save" id="delete-account-confirm" style="background:var(--rust-dark);">Eliminar definitivamente</button>
+      <button class="btn-cancel" id="delete-account-cancel" data-t="btnCancel">Cancelar</button>
+      <button class="btn-save" id="delete-account-confirm" style="background:var(--rust-dark);" data-t="btnDeletePermanently">Eliminar definitivamente</button>
     </div>
   </div>
   <div class="sheet" id="visit-sheet">
     <div class="sheet-handle"></div>
-    <div class="sheet-title" id="visit-sheet-title">Nova visita</div>
-    <div class="sheet-field"><label>Nome da loja</label><input type="text" id="vf-loja" placeholder="Ex: Atelier Bela Noiva"></div>
-    <div class="sheet-field"><label>Morada</label><input type="text" id="vf-morada" placeholder="Ex: Rua das Flores, Porto"></div>
-    <div class="sheet-field"><label>Data</label><input type="date" id="vf-data"></div>
-    <div class="sheet-field"><label>Quem foi convosco</label><input type="text" id="vf-convidados" placeholder="Ex: Mãe, Joana"></div>
-    <div class="sheet-field"><label>Notas</label><input type="text" id="vf-notas" placeholder="O que acharam, preços…"></div>
+    <div class="sheet-title" id="visit-sheet-title" data-t="visitSheetTitleNew">Nova visita</div>
+    <div class="sheet-field"><label data-t="labelStoreName">Nome da loja</label><input type="text" id="vf-loja" data-t-placeholder="phStoreNameExample" placeholder="Ex: Atelier Bela Noiva"></div>
+    <div class="sheet-field"><label data-t="labelStoreAddress">Morada</label><input type="text" id="vf-morada" data-t-placeholder="phAddressExample" placeholder="Ex: Rua das Flores, Porto"></div>
+    <div class="sheet-field"><label data-t="labelDate">Data</label><input type="date" id="vf-data"></div>
+    <div class="sheet-field"><label data-t="labelWhoWentWithYou">Quem foi convosco</label><input type="text" id="vf-convidados" data-t-placeholder="phWhoWentExample" placeholder="Ex: Mãe, Joana"></div>
+    <div class="sheet-field"><label data-t="sectionNotes">Notas</label><input type="text" id="vf-notas" data-t-placeholder="phVisitNotesExample" placeholder="O que acharam, preços…"></div>
     <div class="sheet-btns">
-      <button class="btn-cancel" id="vf-cancel">Cancelar</button>
-      <button class="btn-save" id="vf-save">Guardar</button>
+      <button class="btn-cancel" id="vf-cancel" data-t="btnCancel">Cancelar</button>
+      <button class="btn-save" id="vf-save" data-t="btnSave">Guardar</button>
     </div>
   </div>
   <div class="sheet" id="guest-sheet">
     <div class="sheet-handle"></div>
-    <div class="sheet-title">Adicionar convidado</div>
-    <div class="sheet-field"><label>Nome</label><input type="text" id="gf-name" placeholder="Ex: Maria Santos"></div>
+    <div class="sheet-title" data-t="sheetTitleAddGuest">Adicionar convidado</div>
+    <div class="sheet-field"><label data-t="labelGuestName">Nome</label><input type="text" id="gf-name" data-t-placeholder="phGuestNameExample" placeholder="Ex: Maria Santos"></div>
     <div class="sheet-field">
-      <label>Lado</label>
+      <label data-t="labelSide">Lado</label>
       <div class="segmented" id="gf-side-seg">
-        <button data-gfside="noiva" class="active">Noiva</button>
-        <button data-gfside="noivo">Noivo</button>
+        <button data-gfside="noiva" class="active" data-t="sideBride">Noiva</button>
+        <button data-gfside="noivo" data-t="sideGroom">Noivo</button>
       </div>
     </div>
     <div class="sheet-field" id="gf-cat-wrap">
-      <label>Categoria</label>
+      <label data-t="labelHmCategory">Categoria</label>
       <select id="gf-cat"></select>
     </div>
     <div class="sheet-btns">
-      <button class="btn-cancel" id="gf-cancel">Cancelar</button>
-      <button class="btn-save" id="gf-save">Guardar</button>
+      <button class="btn-cancel" id="gf-cancel" data-t="btnCancel">Cancelar</button>
+      <button class="btn-save" id="gf-save" data-t="btnSave">Guardar</button>
     </div>
   </div>
   <div class="sheet" id="event-sheet">
     <div class="sheet-handle"></div>
-    <div class="sheet-title" id="event-sheet-title">Novo momento</div>
-    <div class="sheet-field"><label>Nome</label><input type="text" id="ef-label" placeholder="Ex: Cerimónia, Cocktail, Jantar…"></div>
-    <div class="sheet-field"><label>Hora</label><input type="time" id="ef-time"></div>
-    <div class="sheet-field"><label>Local (opcional)</label><input type="text" id="ef-place" placeholder="Ex: Igreja de Aldreu"></div>
+    <div class="sheet-title" id="event-sheet-title" data-t="eventSheetTitleNew">Novo momento</div>
+    <div class="sheet-field"><label data-t="labelEventName">Nome</label><input type="text" id="ef-label" data-t-placeholder="phEventNameExample" placeholder="Ex: Cerimónia, Cocktail, Jantar…"></div>
+    <div class="sheet-field"><label data-t="labelTime">Hora</label><input type="time" id="ef-time"></div>
+    <div class="sheet-field"><label data-t="labelPlaceOptional">Local (opcional)</label><input type="text" id="ef-place" data-t-placeholder="phEventPlaceExample" placeholder="Ex: Igreja de Aldreu"></div>
     <div class="sheet-toggle-row">
-      <div class="toggle-label">Mostrar aos convidados<small>Aparece no "Programa do dia" do link de RSVP de cada um</small></div>
+      <div class="toggle-label"><span data-t="labelShowToGuests">Mostrar aos convidados</span><small data-t="subShowToGuests">Aparece no "Programa do dia" do link de RSVP de cada um</small></div>
       <button type="button" class="mini-toggle" id="ef-guestvisible"><span class="knob"></span></button>
     </div>
     <div class="sheet-btns">
-      <button class="btn-cancel" id="ef-cancel">Cancelar</button>
-      <button class="btn-save" id="ef-save">Guardar</button>
+      <button class="btn-cancel" id="ef-cancel" data-t="btnCancel">Cancelar</button>
+      <button class="btn-save" id="ef-save" data-t="btnSave">Guardar</button>
     </div>
   </div>
   <div class="sheet" id="expense-sheet">
     <div class="sheet-handle"></div>
-    <div class="sheet-title">Novo movimento</div>
-    <div class="sheet-field"><label>Descrição</label><input type="text" id="sf-desc" placeholder="Ex: Sinal do fotógrafo"></div>
-    <div class="sheet-field"><label>Data *</label><input type="date" id="sf-date"></div>
-    <div class="sheet-field"><label>Valor total (€) *</label><input type="number" min="0" id="sf-value" placeholder="0"></div>
-    <div class="sheet-field"><label>Já pago (€) *</label><input type="number" min="0" id="sf-paid" placeholder="0"></div>
-    <div class="sheet-field"><label>Data limite para pagar o resto (opcional)</label><input type="date" id="sf-duedate"></div>
-    <div class="sheet-field"><label>Categoria</label><select id="sf-cat"></select></div>
-    <div class="sheet-field"><label>Método de pagamento</label>
+    <div class="sheet-title" data-t="sheetTitleNewExpense">Novo movimento</div>
+    <div class="sheet-field"><label data-t="labelExpenseDescription">Descrição</label><input type="text" id="sf-desc" data-t-placeholder="phExpenseDescExample" placeholder="Ex: Sinal do fotógrafo"></div>
+    <div class="sheet-field"><label data-t="labelDateRequired">Data *</label><input type="date" id="sf-date"></div>
+    <div class="sheet-field"><label data-t="labelTotalValueRequired">Valor total (€) *</label><input type="number" min="0" id="sf-value" placeholder="0"></div>
+    <div class="sheet-field"><label data-t="labelAlreadyPaidRequired">Já pago (€) *</label><input type="number" min="0" id="sf-paid" placeholder="0"></div>
+    <div class="sheet-field"><label data-t="labelPayByDateOptional">Data limite para pagar o resto (opcional)</label><input type="date" id="sf-duedate"></div>
+    <div class="sheet-field"><label data-t="labelHmCategory">Categoria</label><select id="sf-cat"></select></div>
+    <div class="sheet-field"><label data-t="labelPaymentMethod">Método de pagamento</label>
       <select id="sf-method">
-        <option value="">Não definido</option>
-        <option value="transferencia">Transferência</option>
-        <option value="dinheiro">Dinheiro</option>
-        <option value="cartao">Cartão</option>
+        <option value="" data-t="paymentMethodNone">Não definido</option>
+        <option value="transferencia" data-t="paymentMethodTransfer">Transferência</option>
+        <option value="dinheiro" data-t="paymentMethodCash">Dinheiro</option>
+        <option value="cartao" data-t="paymentMethodCard">Cartão</option>
         <option value="mbway">MB WAY</option>
       </select>
     </div>
     <div class="sheet-btns">
-      <button class="btn-cancel" id="sf-cancel">Cancelar</button>
-      <button class="btn-save" id="sf-save">Guardar</button>
+      <button class="btn-cancel" id="sf-cancel" data-t="btnCancel">Cancelar</button>
+      <button class="btn-save" id="sf-save" data-t="btnSave">Guardar</button>
     </div>
   </div>
 
   <div class="sheet" id="seat-sheet">
     <div class="sheet-handle"></div>
-    <div class="sheet-title" id="seat-sheet-title">Atribuir lugar</div>
-    <div class="picker-search"><svg viewBox="0 0 20 20" fill="none"><circle cx="9" cy="9" r="6" stroke="currentColor" stroke-width="1.7"/><path d="M17 17l-3.5-3.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg><input type="text" id="seat-picker-search" placeholder="Procurar convidado"></div>
+    <div class="sheet-title" id="seat-sheet-title" data-t="seatSheetTitleDefault">Atribuir lugar</div>
+    <div class="picker-search"><svg viewBox="0 0 20 20" fill="none"><circle cx="9" cy="9" r="6" stroke="currentColor" stroke-width="1.7"/><path d="M17 17l-3.5-3.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg><input type="text" id="seat-picker-search" data-t-placeholder="phSearchGuestGeneric" placeholder="Procurar convidado"></div>
     <div class="picker-list" id="seat-picker-list"></div>
   </div>
 
@@ -1188,7 +1188,7 @@ html.rotate-blocked .rotate-lock-overlay{ display:flex; }
 
   <div class="save-toast" id="save-toast"></div>
   <div class="img-lightbox" id="img-lightbox">
-    <button class="img-lightbox-close" id="img-lightbox-close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 5l14 14M19 5 5 19"/></svg> Fechar</button>
+    <button class="img-lightbox-close" id="img-lightbox-close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 5l14 14M19 5 5 19"/></svg> <span data-t="btnClose">Fechar</span></button>
     <img id="img-lightbox-img" src="" alt="">
   </div>
 
@@ -1221,7 +1221,7 @@ html.rotate-blocked .rotate-lock-overlay{ display:flex; }
     </div>
     <div class="login-inner" id="login-inner">
 
-      <div class="login-tag">A carregar…</div>
+      <div class="login-tag" data-t="loginLoading">A carregar…</div>
     </div>
   </div>
 </div>
@@ -2103,7 +2103,7 @@ function currentWeekDates(){
 }
 let weekAgendaSelectedDate = null;
 function weekStripHTML(duedItems, selectedISO){
-  const dayNames = ['seg','ter','qua','qui','sex','sáb','dom'];
+  const dayNames = ta('weekDayAbbrevs');
   return currentWeekDates().map((d,i)=>{
     const iso = toLocalISODate(d);
     const isSelected = iso===selectedISO;
@@ -2135,12 +2135,12 @@ function weekAgendaHTML(){
       </div>
       <div class="agenda-chevron">${ICONS.chev}</div>
     </div>`;
-  }).join('') : `<div class="agenda-empty">Sem tarefas neste dia</div>`;
+  }).join('') : `<div class="agenda-empty">${ta('agendaEmptyDay')}</div>`;
   return `
   <div class="week-agenda">
     <div class="week-agenda-head">
-      <div class="week-agenda-title"><span class="week-agenda-icon">${ICONS.calendar||ICONS.checklist}</span>Calendário da semana</div>
-      <button class="week-agenda-link" data-goto="todo">Ver todas ${ICONS.chev}</button>
+      <div class="week-agenda-title"><span class="week-agenda-icon">${ICONS.calendar||ICONS.checklist}</span>${ta('weekAgendaTitle')}</div>
+      <button class="week-agenda-link" data-goto="todo">${ta('weekAgendaSeeAll')} ${ICONS.chev}</button>
     </div>
     <div class="week-strip">${weekStripHTML(allDued, selected)}</div>
     ${overdueCount ? `<div class="agenda-overdue">${overdueCount} tarefa${overdueCount>1?'s':''} atrasada${overdueCount>1?'s':''}</div>` : ''}
@@ -2392,6 +2392,7 @@ const APP_I18N = {
     labelNotesHelp:'Notas / ajudas de familiares e amigos',
     phNotesHelpExample:'Ex: os padrinhos vão ajudar nos voos',
     btnSave:'Guardar',
+    btnCancel:'Cancelar',
     btnDeleteThisOption:'Eliminar esta hipótese',
 
     statusConsider:'A considerar',
@@ -2490,6 +2491,16 @@ const APP_I18N = {
     phDressCode:'Dress code (ex: Traje de cerimónia, cores a evitar…)',
     phGuestNotes:'Outras notas (como chegar, transporte, alojamento perto…)',
     btnSaveInfo:'Guardar informações',
+    conciergeLabel:'Weddy Concierge (chat dos convidados)',
+    conciergeSubLabel:'(o que o assistente de cada convidado vai saber responder)',
+    phParking:'Estacionamento (ex: gratuito no local, parque a 200m…)',
+    phTransport:'Transporte (ex: shuttle às 18h do hotel X…)',
+    phAccommodation:'Alojamento (ex: hotéis recomendados, desconto com o código X…)',
+    phGifts:'Presentes / lista de casamento (ex: IBAN, lua de mel, sem prendas…)',
+    phContact:'Contacto para dúvidas (ex: telefone ou email dos noivos)',
+    conciergeFaqLabel:'Perguntas e respostas personalizadas',
+    phConciergeFaq:'P: Posso levar crianças?\nR: Sim, adoramos ter as crianças connosco!\n\nP: Há vegetariano?\nR: Sim, é só dizeres no RSVP.',
+    conciergeFaqHint:'Escreve pares "P:" (pergunta) e "R:" (resposta), separados por uma linha em branco. O chat só responde com base no que aqui escreveres.',
     updatingLabel:'A atualizar…',
     btnUpdateResponses:'Atualizar respostas',
     lastUpdateLabel:(x)=>`Última atualização: ${x}.`,
@@ -2650,7 +2661,9 @@ const APP_I18N = {
     privacyWhoSeesTitle:'Nota sobre quem vê os teus dados',
     privacyWhoSeesText:'Só as pessoas com o email que tu convidares (em "Convidar"), listadas em "Segurança", conseguem ver os dados do teu casamento. Podes remover o acesso de alguém a qualquer momento.',
     privacyGuestsTitle:'Nota sobre os teus convidados (Convites RSVP)',
-    privacyGuestsText:'Quando geras um link de RSVP para um convidado, criamos um registo próprio e independente só para essa pessoa — com o nome que lhe deste, a data e o local do casamento, e (depois de responder) a presença, a escolha de refeição, restrições alimentares ou alergias, e se precisa de transporte ou alojamento. Esse convidado nunca vê a lista completa de convidados nem o orçamento do casamento — só a sua própria informação. Ele pode consultar, atualizar ou apagar a sua resposta a qualquer momento através do próprio link, sem precisar de criar conta. Tu, como responsável pelo tratamento destes dados, podes remover o link de um convidado a qualquer momento em "Convites RSVP"; ao fazê-lo, deixa de ser possível responder ou consultar essa resposta através do link. É tua responsabilidade informar os teus convidados de que os dados que partilham contigo através deste link servem apenas para organizar o casamento.',
+    privacyGuestsText:'Quando geras um link de RSVP para um convidado, criamos um registo próprio e independente só para essa pessoa — com o nome que lhe deste, a data e o local do casamento, e (depois de responder) a presença, a escolha de refeição, restrições alimentares ou alergias, e se precisa de transporte ou alojamento. Esse convidado nunca vê a lista completa de convidados nem o orçamento do casamento — só a sua própria informação. Ele pode consultar, atualizar ou apagar a sua resposta a qualquer momento através do próprio link, sem precisar de criar conta. Tu, como responsável pelo tratamento destes dados, podes remover o link de um convidado a qualquer momento em "Convites RSVP"; ao fazê-lo, deixa de ser possível responder ou consultar essa resposta através do link. Quando agrupas vários convidados da mesma família num único link partilhado, esse registo passa a guardar a resposta de cada pessoa da família separadamente (num campo próprio para cada uma) — mas continua a ser um único link, por isso qualquer pessoa que o receba consegue ver e alterar a resposta de todos os membros desse grupo; só quem tem o link consegue aceder a estes dados. É tua responsabilidade informar os teus convidados de que os dados que partilham contigo através deste link servem apenas para organizar o casamento.',
+    privacyConciergeTitle:'Nota sobre o assistente de conversa (Weddy Concierge)',
+    privacyConciergeText:'Cada link de convidado inclui um pequeno assistente de conversa que responde a perguntas sobre o casamento (local, horário, dress code, estacionamento, transporte, alojamento, presentes, e outras perguntas e respostas que tu próprio(a) escreveres em Definições → Convites RSVP → Weddy Concierge). Se o convidado disser, por exemplo, que afinal não vai poder vir ou que tem uma restrição alimentar, o assistente pede sempre confirmação antes de alterar a resposta guardada — nunca altera nada sem essa confirmação explícita. Este assistente não usa nenhum modelo de inteligência artificial real: responde apenas com base na informação que tu preencheste, nunca inventa respostas, e a conversa em si fica só no dispositivo do convidado — não é guardada nem fica visível para ti, apenas o resultado de uma alteração que o convidado confirme (tal como se tivesse usado o formulário normal).',
 
     defExportTitle:'Exportar dados',
     exportIncludesLabel:'O que vai incluído',
@@ -2676,6 +2689,83 @@ const APP_I18N = {
     reportWhatHappenedLabel:'O que aconteceu?',
     phReportDescribe:'Descreve o problema, o que esperavas que acontecesse e em que ecrã da app estavas…',
     btnSend:'Enviar',
+
+    // Sheets e avisos estáticos (fora do #app-body, nunca reconstruídos por
+    // render()) — ver applyStaticSheetTranslations().
+    rotateLockTitle:'Roda o telemóvel',
+    rotateLockText:'A Weddy foi pensada para seres usada na vertical. Volta a rodar o teu telemóvel para continuares.',
+    iabWarningTitle:'Quase lá! ✨',
+    iabWarningP1:'Estás a abrir a Weddy dentro do Instagram, e por aqui não é possível instalar a app no teu telemóvel.',
+    iabWarningP2:'<b>Toca nos "•••" ou "⋮" no canto superior direito</b> e escolhe <b>"Abrir no navegador"</b> (Safari ou Chrome).',
+    iabWarningNote:'Depois, no Safari, toca no ícone de partilha e em "Adicionar ao ecrã principal" — fica com um atalho como uma app a sério.',
+    btnOk:'Ok',
+    paymentAlertTitle:(n)=>`${n} pagamento${n>1?'s':''} a terminar o prazo`,
+    paymentOverdueSuffix:(d)=>`(atrasado ${d}d)`,
+    paymentDueInSuffix:(d)=>`(em ${d}d)`,
+    defaultExpenseLabel:'Gasto',
+    sheetTitleMyNotes:'As minhas notas',
+    phMyNotes:'Escreve aqui as tuas notas…',
+    btnDeleteNotes:'Apagar notas',
+    labelTcLabel:'Etiqueta (ex: Flores)',
+    phTcLabelExample:'Ex: Flores',
+    labelTcTitle:'Título',
+    phTcTitleExample:'Ex: Decoração floral',
+    labelTcDesc:'Descrição',
+    phTcDescExample:'Ex: As flores para o altar e as mesas.',
+    labelHmName:'Nome',
+    phHmNameExample:'Ex: Maldivas',
+    labelHmCategory:'Categoria',
+    labelHmPhotoTheme:'Foto (escolhe um tema)',
+    labelHmPriceMin:'Preço mínimo (€)',
+    labelHmPriceMax:'Preço máximo (€)',
+    labelHmDueDate:'Data limite de pagamento (opcional)',
+    btnDeleteIdea:'Eliminar ideia',
+    hmOptionSheetTitleNew:'Nova ideia',
+    hmOptionSheetTitleEdit:'Editar ideia',
+    sheetTitleDeleteAccount:'Eliminar a minha conta',
+    labelConfirmPassword:'Confirma a tua password',
+    phCurrentPassword:'A tua password atual',
+    labelStoreName:'Nome da loja',
+    phStoreNameExample:'Ex: Atelier Bela Noiva',
+    labelStoreAddress:'Morada',
+    phAddressExample:'Ex: Rua das Flores, Porto',
+    labelWhoWentWithYou:'Quem foi convosco',
+    phWhoWentExample:'Ex: Mãe, Joana',
+    phVisitNotesExample:'O que acharam, preços…',
+    visitSheetTitleNew:'Nova visita',
+    visitSheetTitleEdit:'Editar visita',
+    sheetTitleAddGuest:'Adicionar convidado',
+    labelGuestName:'Nome',
+    phGuestNameExample:'Ex: Maria Santos',
+    labelSide:'Lado',
+    labelEventName:'Nome',
+    phEventNameExample:'Ex: Cerimónia, Cocktail, Jantar…',
+    labelTime:'Hora',
+    labelPlaceOptional:'Local (opcional)',
+    phEventPlaceExample:'Ex: Igreja de Aldreu',
+    labelShowToGuests:'Mostrar aos convidados',
+    subShowToGuests:'Aparece no "Programa do dia" do link de RSVP de cada um',
+    eventSheetTitleNew:'Novo momento',
+    eventSheetTitleEdit:'Editar momento',
+    sheetTitleNewExpense:'Novo movimento',
+    labelExpenseDescription:'Descrição',
+    phExpenseDescExample:'Ex: Sinal do fotógrafo',
+    labelDateRequired:'Data *',
+    labelTotalValueRequired:'Valor total (€) *',
+    labelAlreadyPaidRequired:'Já pago (€) *',
+    labelPayByDateOptional:'Data limite para pagar o resto (opcional)',
+    labelPaymentMethod:'Método de pagamento',
+    paymentMethodNone:'Não definido',
+    paymentMethodTransfer:'Transferência',
+    paymentMethodCash:'Dinheiro',
+    paymentMethodCard:'Cartão',
+    seatSheetTitleDefault:'Atribuir lugar',
+    phSearchGuestGeneric:'Procurar convidado',
+    mesa3dHint:'arrasta para rodar · toca num lugar para atribuir',
+    weekAgendaTitle:'Calendário da semana',
+    weekAgendaSeeAll:'Ver todas',
+    agendaEmptyDay:'Sem tarefas neste dia',
+    weekDayAbbrevs:['seg','ter','qua','qui','sex','sáb','dom'],
   },
   en: {
     tabHome:'Home', tabBudget:'Budget', tabGuests:'Guests', tabExpenses:'Expenses', tabTables:'Tables', tabSeating:'Seating',
@@ -2840,6 +2930,7 @@ const APP_I18N = {
     labelNotesHelp:'Notes / help from family and friends',
     phNotesHelpExample:'E.g. the godparents will help with flights',
     btnSave:'Save',
+    btnCancel:'Cancel',
     btnDeleteThisOption:'Delete this option',
 
     statusConsider:'Considering',
@@ -2969,6 +3060,16 @@ const APP_I18N = {
     phDressCode:'Dress code (e.g. Formal attire, colors to avoid…)',
     phGuestNotes:'Other notes (how to get there, transport, nearby accommodation…)',
     btnSaveInfo:'Save information',
+    conciergeLabel:'Weddy Concierge (guest chat)',
+    conciergeSubLabel:'(what each guest\'s assistant will know how to answer)',
+    phParking:'Parking (e.g. free on-site, parking lot 200m away…)',
+    phTransport:'Transport (e.g. shuttle at 6pm from hotel X…)',
+    phAccommodation:'Accommodation (e.g. recommended hotels, discount code X…)',
+    phGifts:'Gifts / registry (e.g. IBAN, honeymoon fund, no gifts please…)',
+    phContact:'Contact for questions (e.g. couple\'s phone or email)',
+    conciergeFaqLabel:'Custom questions and answers',
+    phConciergeFaq:'Q: Can we bring kids?\nA: Yes, we\'d love to have them there!\n\nQ: Is there a vegetarian option?\nA: Yes, just mention it in your RSVP.',
+    conciergeFaqHint:'Write "Q:" (question) and "A:" (answer) pairs, separated by a blank line. The chat only answers based on what you write here.',
     updatingLabel:'Updating…',
     btnUpdateResponses:'Update responses',
     lastUpdateLabel:(x)=>`Last updated: ${x}.`,
@@ -3129,7 +3230,9 @@ const APP_I18N = {
     privacyWhoSeesTitle:'Note about who sees your data',
     privacyWhoSeesText:'Only the people whose email you\'ve invited (in "Invite"), listed in "Security", can see your wedding\'s data. You can remove someone\'s access at any time.',
     privacyGuestsTitle:'Note about your guests (RSVP invitations)',
-    privacyGuestsText:'When you generate an RSVP link for a guest, we create a separate, independent record just for that person — with the name you gave them, the wedding date and venue, and (once they respond) their attendance, meal choice, dietary restrictions or allergies, and whether they need transport or accommodation. That guest never sees the full guest list or the wedding budget — only their own information. They can view, update or delete their response at any time through their own link, without creating an account. As the controller of this data, you can remove a guest\'s link at any time in "RSVP invitations"; doing so makes it impossible to respond to or view that response through the link any longer. It is your responsibility to inform your guests that the data they share with you through this link is used solely to organize the wedding.',
+    privacyGuestsText:'When you generate an RSVP link for a guest, we create a separate, independent record just for that person — with the name you gave them, the wedding date and venue, and (once they respond) their attendance, meal choice, dietary restrictions or allergies, and whether they need transport or accommodation. That guest never sees the full guest list or the wedding budget — only their own information. They can view, update or delete their response at any time through their own link, without creating an account. As the controller of this data, you can remove a guest\'s link at any time in "RSVP invitations"; doing so makes it impossible to respond to or view that response through the link any longer. When you group several guests from the same family into one shared link, that record keeps each family member\'s response separately (in its own field) — but it is still a single link, so anyone who has it can see and change every family member\'s response; only whoever has the link can access this data. It is your responsibility to inform your guests that the data they share with you through this link is used solely to organize the wedding.',
+    privacyConciergeTitle:'Note about the chat assistant (Weddy Concierge)',
+    privacyConciergeText:"Each guest link includes a small chat assistant that answers questions about the wedding (venue, schedule, dress code, parking, transport, accommodation, gifts, and any other questions and answers you write yourself in Settings → RSVP invitations → Weddy Concierge). If the guest says, for example, that they can no longer attend or that they have a dietary restriction, the assistant always asks for confirmation before changing the saved response — it never changes anything without that explicit confirmation. This assistant does not use any real artificial intelligence model: it only answers based on the information you filled in, never makes up answers, and the conversation itself stays on the guest's own device — it is not saved or visible to you, only the result of a change the guest confirms (just as if they had used the regular form).",
 
     defExportTitle:'Export data',
     exportIncludesLabel:'What\'s included',
@@ -3155,19 +3258,119 @@ const APP_I18N = {
     reportWhatHappenedLabel:'What happened?',
     phReportDescribe:'Describe the problem, what you expected to happen and which screen of the app you were on…',
     btnSend:'Send',
+
+    // Static sheets and warnings (outside #app-body, never rebuilt by
+    // render()) — see applyStaticSheetTranslations().
+    rotateLockTitle:'Rotate your phone',
+    rotateLockText:'Weddy was designed to be used in portrait mode. Rotate your phone back to continue.',
+    iabWarningTitle:'Almost there! ✨',
+    iabWarningP1:"You're opening Weddy inside Instagram, and from here it isn't possible to install the app on your phone.",
+    iabWarningP2:'<b>Tap the "•••" or "⋮" in the top-right corner</b> and choose <b>"Open in browser"</b> (Safari or Chrome).',
+    iabWarningNote:'Then, in Safari, tap the share icon and "Add to Home Screen" — you\'ll get a shortcut just like a real app.',
+    btnOk:'Ok',
+    paymentAlertTitle:(n)=>`${n} payment${n>1?'s':''} coming due`,
+    paymentOverdueSuffix:(d)=>`(${d}d overdue)`,
+    paymentDueInSuffix:(d)=>`(in ${d}d)`,
+    defaultExpenseLabel:'Expense',
+    sheetTitleMyNotes:'My notes',
+    phMyNotes:'Write your notes here…',
+    btnDeleteNotes:'Delete notes',
+    labelTcLabel:'Label (e.g. Flowers)',
+    phTcLabelExample:'E.g. Flowers',
+    labelTcTitle:'Title',
+    phTcTitleExample:'E.g. Floral decoration',
+    labelTcDesc:'Description',
+    phTcDescExample:'E.g. Flowers for the altar and tables.',
+    labelHmName:'Name',
+    phHmNameExample:'E.g. Maldives',
+    labelHmCategory:'Category',
+    labelHmPhotoTheme:'Photo (pick a theme)',
+    labelHmPriceMin:'Minimum price (€)',
+    labelHmPriceMax:'Maximum price (€)',
+    labelHmDueDate:'Payment deadline (optional)',
+    btnDeleteIdea:'Delete idea',
+    hmOptionSheetTitleNew:'New idea',
+    hmOptionSheetTitleEdit:'Edit idea',
+    sheetTitleDeleteAccount:'Delete my account',
+    labelConfirmPassword:'Confirm your password',
+    phCurrentPassword:'Your current password',
+    labelStoreName:'Store name',
+    phStoreNameExample:'E.g. Atelier Bela Noiva',
+    labelStoreAddress:'Address',
+    phAddressExample:'E.g. Rua das Flores, Porto',
+    labelWhoWentWithYou:'Who went with you',
+    phWhoWentExample:'E.g. Mom, Joana',
+    phVisitNotesExample:'What you thought, prices…',
+    visitSheetTitleNew:'New visit',
+    visitSheetTitleEdit:'Edit visit',
+    sheetTitleAddGuest:'Add guest',
+    labelGuestName:'Name',
+    phGuestNameExample:'E.g. Maria Santos',
+    labelSide:'Side',
+    labelEventName:'Name',
+    phEventNameExample:'E.g. Ceremony, Cocktail, Dinner…',
+    labelTime:'Time',
+    labelPlaceOptional:'Place (optional)',
+    phEventPlaceExample:'E.g. Aldreu Church',
+    labelShowToGuests:'Show to guests',
+    subShowToGuests:'Shows up in each guest\'s RSVP link, under "Day\'s schedule"',
+    eventSheetTitleNew:'New moment',
+    eventSheetTitleEdit:'Edit moment',
+    sheetTitleNewExpense:'New expense',
+    labelExpenseDescription:'Description',
+    phExpenseDescExample:'E.g. Photographer deposit',
+    labelDateRequired:'Date *',
+    labelTotalValueRequired:'Total amount (€) *',
+    labelAlreadyPaidRequired:'Already paid (€) *',
+    labelPayByDateOptional:'Deadline to pay the rest (optional)',
+    labelPaymentMethod:'Payment method',
+    paymentMethodNone:'Not set',
+    paymentMethodTransfer:'Bank transfer',
+    paymentMethodCash:'Cash',
+    paymentMethodCard:'Card',
+    seatSheetTitleDefault:'Assign seat',
+    phSearchGuestGeneric:'Search guest',
+    mesa3dHint:'drag to rotate · tap a seat to assign',
+    weekAgendaTitle:'This week\'s calendar',
+    weekAgendaSeeAll:'See all',
+    agendaEmptyDay:'No tasks on this day',
+    weekDayAbbrevs:['mon','tue','wed','thu','fri','sat','sun'],
   }
 };
 function ta(key){
   const dict = APP_I18N[appLang] || APP_I18N.pt;
   return (key in dict) ? dict[key] : APP_I18N.pt[key];
 }
+// As "sheets" (modais de fundo: nova categoria, nova visita, novo momento,
+// eliminar conta, etc.) e alguns avisos (rodar o telemóvel, aviso do
+// Instagram, alerta de pagamentos) vivem FORA do #app-body — nunca são
+// reconstruídos por render(), por isso precisam da sua própria passagem de
+// tradução, à parte, tal como o rsvp.html já faz. Corre uma vez no arranque
+// e sempre que o idioma muda. data-t-html é só para os poucos casos com
+// <b> dentro do texto (conteúdo fixo nosso, nunca dados do utilizador).
+function applyStaticSheetTranslations(){
+  document.querySelectorAll('[data-t]').forEach(el=>{
+    const val = ta(el.dataset.t);
+    if(typeof val === 'string') el.textContent = val;
+  });
+  document.querySelectorAll('[data-t-html]').forEach(el=>{
+    const val = ta(el.dataset.tHtml);
+    if(typeof val === 'string') el.innerHTML = val;
+  });
+  document.querySelectorAll('[data-t-placeholder]').forEach(el=>{
+    const val = ta(el.dataset.tPlaceholder);
+    if(typeof val === 'string') el.placeholder = val;
+  });
+}
 function setAppLang(lang){
   appLang = lang==='en' ? 'en' : 'pt';
   try{ localStorage.setItem('weddy_app_lang', appLang); }catch(e){}
   updateLoginLangSwitch();
+  applyStaticSheetTranslations();
   if(typeof lastLoginRender==='function') lastLoginRender();
   if(typeof firstSyncDone!=='undefined' && firstSyncDone) render();
 }
+applyStaticSheetTranslations();
 // O seletor de idioma do ecrã de login vive fora do que render() reconstrói
 // (mesma lógica do chat-fab) — atualiza-se aqui, sempre que o idioma muda.
 function updateLoginLangSwitch(){
@@ -3273,9 +3476,9 @@ function maybeShowPaymentAlert(){
   if(paymentAlertDismissed || activeTab!=='inicio'){ popup.classList.remove('show'); return; }
   const upcoming = getUpcomingPayments();
   if(!upcoming.length){ popup.classList.remove('show'); return; }
-  document.getElementById('payment-alert-title').textContent = `${upcoming.length} pagamento${upcoming.length>1?'s':''} a terminar o prazo`;
+  document.getElementById('payment-alert-title').textContent = ta('paymentAlertTitle')(upcoming.length);
   document.getElementById('payment-alert-body').innerHTML = upcoming.map(u=>
-    `<p>${escapeHTML(u.label)} — <b>${fmtEUR(u.amount)}</b> ${u.overdue?`(atrasado ${Math.abs(u.days)}d)`:`(em ${u.days}d)`}</p>`
+    `<p>${escapeHTML(u.label)} — <b>${fmtEUR(u.amount)}</b> ${u.overdue?ta('paymentOverdueSuffix')(Math.abs(u.days)):ta('paymentDueInSuffix')(u.days)}</p>`
   ).join('');
   popup.classList.add('show');
 }
@@ -3293,7 +3496,7 @@ function getUpcomingPayments(){
     const remaining = Math.max(0, Number(e.value)-Number(e.paid||0));
     if(remaining>0 && e.dueDate){
       const days = Math.ceil((new Date(e.dueDate+'T00:00:00')-now)/86400000);
-      if(days>=0 && days<=15) list.push({ label:e.desc||'Gasto', amount:remaining, days, overdue:false });
+      if(days>=0 && days<=15) list.push({ label:e.desc||ta('defaultExpenseLabel'), amount:remaining, days, overdue:false });
     }
   });
   return list.sort((a,b)=>a.days-b.days);
@@ -5100,6 +5303,33 @@ function buildGuestVisibleProgram(){
     .map(ev=>({ time: ev.time||'', label: ev.label||'', place: ev.place||'' }))
     .sort((a,b)=>(a.time||'99:99').localeCompare(b.time||'99:99'));
 }
+// Converte a lista de perguntas/respostas do Concierge para o formato de
+// texto livre editável ("P: ...\nR: ...") e vice-versa. Guarda-se sempre a
+// lista já estruturada (guestFaqList) no Firestore — o texto é só a forma
+// como o casal a edita no ecrã de Definições.
+function faqListToRaw(list){
+  if(!Array.isArray(list) || !list.length) return '';
+  return list.map(f=>`P: ${f.q||''}\nR: ${f.a||''}`).join('\n\n');
+}
+function rawToFaqList(raw){
+  if(!raw || !raw.trim()) return [];
+  const blocks = raw.split(/\n\s*\n/);
+  const out = [];
+  blocks.forEach(block=>{
+    const lines = block.split('\n').map(l=>l.trim()).filter(Boolean);
+    let q = '', a = '';
+    lines.forEach(line=>{
+      const mQ = line.match(/^[PQ]\s*[:\-]\s*(.+)$/i);
+      const mA = line.match(/^[RA]\s*[:\-]\s*(.+)$/i);
+      if(mQ) q = mQ[1].trim();
+      else if(mA) a = a ? a + ' ' + mA[1].trim() : mA[1].trim();
+      else if(q && !a) q = q + ' ' + line;
+      else if(a) a = a + ' ' + line;
+    });
+    if(q && a) out.push({ q, a });
+  });
+  return out;
+}
 function ensureRSVPLink(item){
   if(item.entry.rsvpToken){
     return Promise.resolve(item.entry.rsvpToken);
@@ -5117,6 +5347,12 @@ function ensureRSVPLink(item){
     rsvpDeadline: s.rsvpDeadline || '',
     guestDressCode: s.guestDressCode || '',
     guestInfoNotes: s.guestInfoNotes || '',
+    guestParkingInfo: s.guestParkingInfo || '',
+    guestTransportInfo: s.guestTransportInfo || '',
+    guestAccommodationInfo: s.guestAccommodationInfo || '',
+    guestGiftsInfo: s.guestGiftsInfo || '',
+    guestContactInfo: s.guestContactInfo || '',
+    guestFaqList: s.guestFaqList || [],
     guestProgram: buildGuestVisibleProgram(),
     attending: null,
     meal: '',
@@ -5156,6 +5392,12 @@ function ensureFamilyRSVPLink(items){
     rsvpDeadline: s.rsvpDeadline || '',
     guestDressCode: s.guestDressCode || '',
     guestInfoNotes: s.guestInfoNotes || '',
+    guestParkingInfo: s.guestParkingInfo || '',
+    guestTransportInfo: s.guestTransportInfo || '',
+    guestAccommodationInfo: s.guestAccommodationInfo || '',
+    guestGiftsInfo: s.guestGiftsInfo || '',
+    guestContactInfo: s.guestContactInfo || '',
+    guestFaqList: s.guestFaqList || [],
     guestProgram: buildGuestVisibleProgram(),
     responses: {},
     createdAt: firebase.firestore.FieldValue.serverTimestamp()
@@ -5424,12 +5666,28 @@ function getProactiveSuggestions(){
   }
   return out.slice(0,2);
 }
-// Ações que o Assistente Weddy consegue mesmo executar (mudar o estado da
-// app), não só responder — tudo por regras simples (regex), sem nenhuma IA
-// real por trás, como combinado. Devolve o texto de resposta se reconheceu
-// e executou uma ação, ou null se a pergunta deve seguir para as respostas
-// informativas normais (respostaSimuladaAssistente).
-function executeAssistantAction(pergunta){
+// ============================================================
+// WEDDY COPILOT (lado dos noivos) — Fase 3A do roadmap: a mesma
+// arquitetura Intent → Permission check → Action → Resposta já usada no
+// Weddy Concierge (rsvp.html, Fase 2.5), agora aplicada ao Assistente dos
+// noivos. Continua sem qualquer IA real: classifyCopilotIntent() é a única
+// função que "lê" a pergunta (por regex/keywords), tal como antes — no dia
+// em que isso for trocado por um classificador (Fase 3B), o resto
+// (permissões, ações, respostas) fica exatamente igual.
+// ============================================================
+
+const WEDDY_COPILOT_INTENTS = {
+  CREATE_TASK:'CREATE_TASK', GET_UPCOMING_TASKS:'GET_UPCOMING_TASKS',
+  GET_PENDING_RSVPS:'GET_PENDING_RSVPS', GET_DIETARY_LIST:'GET_DIETARY_LIST', GET_RSVP_INFO:'GET_RSVP_INFO',
+  GET_REMAINING_PAYMENTS:'GET_REMAINING_PAYMENTS', GET_BUDGET:'GET_BUDGET',
+  GET_GUEST_COUNT:'GET_GUEST_COUNT', GET_COUNTDOWN:'GET_COUNTDOWN', GET_TABLE_COUNT:'GET_TABLE_COUNT',
+  SEARCH_DOCUMENTS:'SEARCH_DOCUMENTS', UNKNOWN:'UNKNOWN'
+};
+
+// 1) CLASSIFICAÇÃO — por keywords, nenhuma IA real. Devolve sempre
+// { intent, value? }; nunca decide sozinha se pode executar nem como
+// responder — isso é o trabalho dos passos seguintes.
+function classifyCopilotIntent(pergunta){
   const p = pergunta.toLowerCase().trim();
 
   // "cria uma tarefa para X" / "adiciona tarefa X" / "lembra-me de X"
@@ -5440,38 +5698,174 @@ function executeAssistantAction(pergunta){
       .replace(/^(?:cria(?:r)?|adiciona(?:r)?)\s+(?:uma\s+)?tarefa\s+(?:para|de)?\s*/i,'')
       .replace(/^lembra-?me\s+de\s+/i,'');
     texto = texto.charAt(0).toUpperCase()+texto.slice(1);
-    const cat = state.todoCategories.find(c=>c.id==='tc3') || state.todoCategories[0];
-    if(cat){
-      cat.items.push({ text: texto, done:false, due:'', time:'' });
-      render();
-      return `Criei a tarefa "${texto}" em Tarefas → ${cat.label}. Já a consegues ver e editar lá.`;
-    }
+    return { intent: WEDDY_COPILOT_INTENTS.CREATE_TASK, value: texto };
+  }
+
+  // "o que tenho esta semana" / "tarefas desta semana" / "agenda da semana"
+  if(/esta semana|nesta semana|essa semana|this week|agenda da semana|tarefas (desta|da) semana|o que tenho (para )?(esta semana|hoje)/.test(p)){
+    return { intent: WEDDY_COPILOT_INTENTS.GET_UPCOMING_TASKS };
   }
 
   // "quem ainda não respondeu" / "quem falta responder" / "quem não confirmou"
   if(/quem.*(ainda n[aã]o respond|falta respond|n[aã]o confirmou|n[aã]o respondeu)/.test(p)){
-    const pendentes = flattenAllGuestsForRSVP().filter(g=>{
-      return !g.entry.rsvpToken || !rsvpHasResponded(memberRSVPResponse(g));
-    }).map(g=>g.name).filter(Boolean);
-    if(!pendentes.length) return 'Todos os convidados com link de RSVP já responderam — não falta ninguém.';
-    const lista = pendentes.slice(0,15).join(', ');
-    return `Ainda falta responder: ${lista}${pendentes.length>15 ? ` e mais ${pendentes.length-15}` : ''}.`;
+    return { intent: WEDDY_COPILOT_INTENTS.GET_PENDING_RSVPS };
   }
 
   // "quem é vegetariano" / "quem tem restrições alimentares" / "alergias"
   if(/vegetarian|vegan|alergia/.test(p) || (/restri[cç]/.test(p) && /alimentar/.test(p))){
-    const comRestricao = flattenAllGuestsForRSVP().filter(g=>{
+    return { intent: WEDDY_COPILOT_INTENTS.GET_DIETARY_LIST };
+  }
+
+  // "quanto falta pagar" / "próximos pagamentos" / "pagamentos pendentes"
+  if(/falta pagar|pagamentos? (pendentes|por pagar|em falta)|quanto (falta|tenho) (ainda )?(a )?pagar|pr[oó]ximos pagamentos/.test(p)){
+    return { intent: WEDDY_COPILOT_INTENTS.GET_REMAINING_PAYMENTS };
+  }
+
+  if(/rsvp/.test(p)){
+    return { intent: WEDDY_COPILOT_INTENTS.GET_RSVP_INFO };
+  }
+  if(/convidad/.test(p)){
+    return { intent: WEDDY_COPILOT_INTENTS.GET_GUEST_COUNT };
+  }
+  if(/orçamento|orcamento|gast|dinheiro|pago|paguei/.test(p)){
+    return { intent: WEDDY_COPILOT_INTENTS.GET_BUDGET };
+  }
+  if(/data|dias|falta/.test(p) && weddingSettings.weddingDate){
+    return { intent: WEDDY_COPILOT_INTENTS.GET_COUNTDOWN };
+  }
+  if(/mesa/.test(p)){
+    return { intent: WEDDY_COPILOT_INTENTS.GET_TABLE_COUNT };
+  }
+  if(state.weddingDocuments && state.weddingDocuments.length){
+    return { intent: WEDDY_COPILOT_INTENTS.SEARCH_DOCUMENTS };
+  }
+  return { intent: WEDDY_COPILOT_INTENTS.UNKNOWN };
+}
+
+// 2) PERMISSÕES — hoje o ecrã do Assistente já só é acessível com
+// subscrição ativa (viewDefAssistente/zona premium), por isso não há aqui
+// nenhuma distinção adicional a fazer; fica como ponto de extensão único
+// para o dia em que, por exemplo, uma ação de escrita precise de uma
+// verificação própria antes de correr.
+function checkCopilotIntentPermission(intent, context){
+  return { allowed:true };
+}
+
+// 3) REGISTO DE AÇÕES — o único sítio que lê o estado do casamento ou
+// escreve nele. As "primeiras ações" do roadmap para o lado dos noivos;
+// createTask/updateTask (edição/remoção por chat), getBudget "completo",
+// getPayments detalhado, getGuests, getPendingRSVPs como função reutilizável
+// fora do chat, etc. ficam para a Fase 3B, quando isto ganhar mais alcance.
+const WeddyActions = {
+  createTask(texto){
+    const cat = state.todoCategories.find(c=>c.id==='tc3') || state.todoCategories[0];
+    if(!cat) return null;
+    cat.items.push({ text: texto, done:false, due:'', time:'' });
+    render();
+    return cat;
+  },
+  getUpcomingTasks(){
+    return getDuedTodoItems().filter(it => it.days>=0 && it.days<=7);
+  },
+  getPendingRSVPs(){
+    return flattenAllGuestsForRSVP().filter(g=>{
+      return !g.entry.rsvpToken || !rsvpHasResponded(memberRSVPResponse(g));
+    }).map(g=>g.name).filter(Boolean);
+  },
+  getDietaryList(){
+    return flattenAllGuestsForRSVP().filter(g=>{
       const resp = g.entry.rsvpToken ? memberRSVPResponse(g) : null;
       return resp && resp.dietary && resp.dietary.trim();
     }).map(g=>{
       const resp = memberRSVPResponse(g);
       return `${g.name} (${resp.dietary.trim()})`;
     });
-    if(!comRestricao.length) return 'Ainda não há nenhuma restrição alimentar registada nas respostas de RSVP.';
-    return `Convidados com restrições alimentares: ${comRestricao.join(', ')}.`;
+  },
+  getRemainingPayments(){
+    const gasto = totalExpenseValue();
+    const pago = totalExpensePaid();
+    return { totalRemaining: Math.max(0, gasto-pago), upcoming: getUpcomingPayments() };
   }
+};
 
-  return null;
+// 4) RESPOSTA — junta classificação + permissão + ação numa frase de texto
+// só (este chat, ao contrário do Concierge, não tem passo de confirmação —
+// as ações de hoje, como criar tarefa, são de baixo risco e reversíveis
+// diretamente no ecrã).
+function respondeAssistente(pergunta){
+  const context = {};
+  const classified = classifyCopilotIntent(pergunta);
+  const permission = checkCopilotIntentPermission(classified.intent, context);
+  const I = WEDDY_COPILOT_INTENTS;
+  if(!permission.allowed) return 'Não consigo fazer isso por aqui.';
+
+  const totalConvidados = countGuests('noiva') + countGuests('noivo');
+  const totalConfirmados = countConfirmed('noiva') + countConfirmed('noivo');
+
+  switch(classified.intent){
+    case I.CREATE_TASK: {
+      const cat = WeddyActions.createTask(classified.value);
+      return cat ? `Criei a tarefa "${classified.value}" em Tarefas → ${cat.label}. Já a consegues ver e editar lá.` : null;
+    }
+    case I.GET_UPCOMING_TASKS: {
+      const items = WeddyActions.getUpcomingTasks();
+      if(!items.length) return 'Não tens tarefas com prazo nos próximos 7 dias.';
+      const lista = items.slice(0,10).map(it=>`${it.text} (${formatDatePT(it.due)}${it.time?` às ${it.time}`:''})`).join('; ');
+      return `Esta semana tens: ${lista}${items.length>10 ? `, e mais ${items.length-10}` : ''}.`;
+    }
+    case I.GET_PENDING_RSVPS: {
+      const pendentes = WeddyActions.getPendingRSVPs();
+      if(!pendentes.length) return 'Todos os convidados com link de RSVP já responderam — não falta ninguém.';
+      const lista = pendentes.slice(0,15).join(', ');
+      return `Ainda falta responder: ${lista}${pendentes.length>15 ? ` e mais ${pendentes.length-15}` : ''}.`;
+    }
+    case I.GET_DIETARY_LIST: {
+      const comRestricao = WeddyActions.getDietaryList();
+      if(!comRestricao.length) return 'Ainda não há nenhuma restrição alimentar registada nas respostas de RSVP.';
+      return `Convidados com restrições alimentares: ${comRestricao.join(', ')}.`;
+    }
+    case I.GET_REMAINING_PAYMENTS: {
+      const { totalRemaining, upcoming } = WeddyActions.getRemainingPayments();
+      if(totalRemaining<=0) return 'Não há nenhum pagamento pendente neste momento — está tudo pago. 🎉';
+      const base = `Falta pagar ${fmtEUR(totalRemaining)} no total.`;
+      if(!upcoming.length) return base;
+      const lista = upcoming.slice(0,8).map(u=>`${u.label} — ${fmtEUR(u.amount)} (${u.days===0?'hoje':`em ${u.days} dia${u.days===1?'':'s'}`})`).join('; ');
+      return `${base} Nos próximos 15 dias: ${lista}.`;
+    }
+    case I.GET_RSVP_INFO: {
+      const pendentes = flattenAllGuestsForRSVP().filter(g=>{
+        if(!g.entry.rsvpToken) return true;
+        return !rsvpHasResponded(memberRSVPResponse(g));
+      }).length;
+      return `Em Definições → Convites RSVP consegues gerar um link individual para cada convidado — ele responde lá se vai, a refeição e restrições, sem ver a lista toda nem o orçamento. Neste momento tens ${fmtGuestCount(pendentes)} convidado${pendentes===1?'':'s'} por responder.`;
+    }
+    case I.GET_GUEST_COUNT:
+      return `Tens ${fmtGuestCount(totalConvidados)} convidados na lista, dos quais ${fmtGuestCount(totalConfirmados)} já confirmaram presença (contando pelo peso de cada um — crianças e staff podem contar meio ou nada, consoante o que definiste).`;
+    case I.GET_BUDGET: {
+      const gasto = totalExpenseValue();
+      const pago = totalExpensePaid();
+      const orcamento = state.budget && state.budget.total ? state.budget.total : 0;
+      return `O orçamento definido é de ${fmtEUR(orcamento)}. Já tens ${fmtEUR(gasto)} em despesas registadas, das quais ${fmtEUR(pago)} já foram pagas.`;
+    }
+    case I.GET_COUNTDOWN: {
+      const dias = daysUntil(weddingSettings.weddingDate);
+      return dias>=0 ? `Faltam ${dias} dias para o grande dia (${formatDatePT(weddingSettings.weddingDate)}).` : `O casamento foi a ${formatDatePT(weddingSettings.weddingDate)}. Espero que tenha corrido tudo lindamente!`;
+    }
+    case I.GET_TABLE_COUNT: {
+      const nTables = (state.seating && state.seating.tables) ? state.seating.tables.length : 0;
+      return `Tens ${nTables} mesas configuradas na secção de Mesas.`;
+    }
+    case I.SEARCH_DOCUMENTS: {
+      // "Wedding Brain" leve: pesquisa por palavras-chave nos documentos que o
+      // casal carregou, sem nenhuma IA real — devolve sempre o texto tal como
+      // está escrito no documento, nunca uma resposta "inventada".
+      const found = searchWeddingDocuments(pergunta);
+      if(found) return `Encontrei isto em "${found.doc}":\n\n"${found.snippet}"`;
+      return 'Ainda estou em modo de demonstração (sem ligação a um modelo de IA real), mas já consigo responder sobre convidados, orçamento, datas, mesas, pagamentos, tarefas da semana e procurar nos documentos que carregaste — pergunta-me, por exemplo, "quantos convidados já confirmaram?".';
+    }
+    default:
+      return 'Ainda estou em modo de demonstração (sem ligação a um modelo de IA real), mas já consigo responder sobre convidados, orçamento, datas, mesas, pagamentos, tarefas da semana e procurar nos documentos que carregaste — pergunta-me, por exemplo, "quantos convidados já confirmaram?".';
+  }
 }
 // "Wedding Brain" leve — pesquisa por palavras-chave nos documentos que o
 // casal carregou (ver viewDefDocumentos), sem nenhuma IA real: procura o
@@ -5565,47 +5959,6 @@ async function handleDocumentUpload(fileList){
     if(statusEl) statusEl.textContent = ta('statusPdfReadError');
   }
   if(input) input.value = '';
-}
-function respostaSimuladaAssistente(pergunta){
-  const p = pergunta.toLowerCase();
-  const totalConvidados = countGuests('noiva') + countGuests('noivo');
-  const totalConfirmados = countConfirmed('noiva') + countConfirmed('noivo');
-  const gasto = totalExpenseValue();
-  const pago = totalExpensePaid();
-  const orcamento = state.budget && state.budget.total ? state.budget.total : 0;
-  if(/rsvp/.test(p)){
-    const pendentes = flattenAllGuestsForRSVP().filter(g=>{
-      if(!g.entry.rsvpToken) return true;
-      return !rsvpHasResponded(memberRSVPResponse(g));
-    }).length;
-    return `Em Definições → Convites RSVP consegues gerar um link individual para cada convidado — ele responde lá se vai, a refeição e restrições, sem ver a lista toda nem o orçamento. Neste momento tens ${fmtGuestCount(pendentes)} convidado${pendentes===1?'':'s'} por responder.`;
-  }
-  if(/convidad/.test(p)){
-    return `Tens ${fmtGuestCount(totalConvidados)} convidados na lista, dos quais ${fmtGuestCount(totalConfirmados)} já confirmaram presença (contando pelo peso de cada um — crianças e staff podem contar meio ou nada, consoante o que definiste).`;
-  }
-  if(/orçamento|orcamento|gast|dinheiro|pago|paguei/.test(p)){
-    return `O orçamento definido é de ${fmtEUR(orcamento)}. Já tens ${fmtEUR(gasto)} em despesas registadas, das quais ${fmtEUR(pago)} já foram pagas.`;
-  }
-  if(/data|dias|falta/.test(p) && weddingSettings.weddingDate){
-    const dias = daysUntil(weddingSettings.weddingDate);
-    return dias>=0 ? `Faltam ${dias} dias para o grande dia (${formatDatePT(weddingSettings.weddingDate)}).` : `O casamento foi a ${formatDatePT(weddingSettings.weddingDate)}. Espero que tenha corrido tudo lindamente!`;
-  }
-  if(/mesa/.test(p)){
-    const nTables = (state.seating && state.seating.tables) ? state.seating.tables.length : 0;
-    return `Tens ${nTables} mesas configuradas na secção de Mesas.`;
-  }
-  // "Wedding Brain" leve: antes de desistir com a resposta genérica,
-  // procura nos documentos carregados (contratos em PDF) por trechos que
-  // batam com as palavras da pergunta. Isto é só pesquisa por palavras-
-  // chave (sem IA nenhuma) — por isso devolve sempre o texto tal como está
-  // no documento, nunca uma resposta "inventada".
-  if(state.weddingDocuments && state.weddingDocuments.length){
-    const found = searchWeddingDocuments(pergunta);
-    if(found){
-      return `Encontrei isto em "${found.doc}":\n\n"${found.snippet}"`;
-    }
-  }
-  return `Ainda estou em modo de demonstração (sem ligação a um modelo de IA real), mas já consigo responder sobre convidados, orçamento, datas, mesas e procurar nos documentos que carregaste — pergunta-me, por exemplo, "quantos convidados já confirmaram?".`;
 }
 
 function viewDefPremiumLocked(title){
@@ -5806,6 +6159,18 @@ function viewDefRSVP(){
     <textarea id="rsvp-guestnotes-input" placeholder="${ta('phGuestNotes')}" style="width:100%; min-height:70px; border:1.6px solid var(--line); border-radius:12px; padding:10px 12px; font-size:13.5px; font-family:inherit; color:var(--ink); resize:vertical;">${escapeHTML(weddingSettings.guestInfoNotes||'')}</textarea>
     <button class="rsvp-deadline-save" id="rsvp-guestinfo-save" style="margin-top:10px; width:100%;">${ta('btnSaveInfo')}</button>
   </div>
+  <div class="stat-card" style="margin:0 16px 12px;">
+    <div class="l" style="margin:0 0 8px;">${ta('conciergeLabel')} <span style="font-weight:400;">${ta('conciergeSubLabel')}</span></div>
+    <input class="field-input big" id="rsvp-parking-input" type="text" placeholder="${ta('phParking')}" value="${escapeHTML(weddingSettings.guestParkingInfo||'')}" style="text-align:left; margin-bottom:8px;">
+    <input class="field-input big" id="rsvp-transport-input" type="text" placeholder="${ta('phTransport')}" value="${escapeHTML(weddingSettings.guestTransportInfo||'')}" style="text-align:left; margin-bottom:8px;">
+    <input class="field-input big" id="rsvp-accommodation-input" type="text" placeholder="${ta('phAccommodation')}" value="${escapeHTML(weddingSettings.guestAccommodationInfo||'')}" style="text-align:left; margin-bottom:8px;">
+    <input class="field-input big" id="rsvp-gifts-input" type="text" placeholder="${ta('phGifts')}" value="${escapeHTML(weddingSettings.guestGiftsInfo||'')}" style="text-align:left; margin-bottom:8px;">
+    <input class="field-input big" id="rsvp-contact-input" type="text" placeholder="${ta('phContact')}" value="${escapeHTML(weddingSettings.guestContactInfo||'')}" style="text-align:left; margin-bottom:10px;">
+    <div class="l" style="margin:0 0 6px;">${ta('conciergeFaqLabel')}</div>
+    <textarea id="rsvp-faq-input" placeholder="${ta('phConciergeFaq')}" style="width:100%; min-height:110px; border:1.6px solid var(--line); border-radius:12px; padding:10px 12px; font-size:13.5px; font-family:inherit; color:var(--ink); resize:vertical;">${escapeHTML(faqListToRaw(weddingSettings.guestFaqList))}</textarea>
+    <div class="empty-note" style="margin:6px 0 0; font-style:normal;">${ta('conciergeFaqHint')}</div>
+    <button class="rsvp-deadline-save" id="rsvp-concierge-save" style="margin-top:10px; width:100%;">${ta('btnSaveInfo')}</button>
+  </div>
   <button class="rsvp-refresh-btn" id="rsvp-refresh-respostas" ${rsvpLoadingResponses?'disabled':''}>${ICONS.refresh} ${rsvpLoadingResponses? ta('updatingLabel') : ta('btnUpdateResponses')}</button>
   <div class="rsvp-updated-note">${lastRSVPRefreshAt? ta('lastUpdateLabel')(fmtRelativeTime(lastRSVPRefreshAt)) : ta('neverUpdatedLabel')}</div>
   ${lastRSVPSyncSummary ? `<div class="empty-note" style="margin:0 16px 10px; font-style:normal;">${rsvpSyncSummaryText(lastRSVPSyncSummary)}</div>` : ''}
@@ -5938,8 +6303,7 @@ function bindChatPanelHandlers(){
     const texto = (presetText!==undefined ? presetText : (assistInput? assistInput.value : '')).trim();
     if(!texto) return;
     assistChatHistory.push({ role:'user', text:texto });
-    const acao = executeAssistantAction(texto);
-    assistChatHistory.push({ role:'bot', text: acao!==null ? acao : respostaSimuladaAssistente(texto) });
+    assistChatHistory.push({ role:'bot', text: respondeAssistente(texto) });
     renderChatPanelBody();
     const freshInput = document.getElementById('assist-chat-input');
     if(freshInput) freshInput.focus();
@@ -6220,7 +6584,7 @@ function viewDefMemories(){
 // carrega ficam com o texto extraído no próprio browser (pdf.js, sem
 // nenhuma IA nem servidor externo) e guardado no documento do casamento.
 // O Assistente Weddy depois pesquisa por palavras-chave nesse texto — ver
-// searchWeddingDocuments() e a sua utilização em executeAssistantAction().
+// searchWeddingDocuments() e a sua utilização em respondeAssistente().
 function viewDefDocumentos(){
   if(!hasActiveSubscription()) return viewDefPremiumLocked(ta('documentsTitle'));
   const docs = state.weddingDocuments || [];
@@ -6282,6 +6646,9 @@ function viewDefPrivacidade(){
 
     <p><b>${ta('privacyGuestsTitle')}</b><br>
     ${ta('privacyGuestsText')}</p>
+
+    <p><b>${ta('privacyConciergeTitle')}</b><br>
+    ${ta('privacyConciergeText')}</p>
 
   </div>
   `;
@@ -7102,6 +7469,23 @@ function bindHandlers(){
       guestInfoNotes: notesInput? notesInput.value.trim() : ''
     });
   });
+  const rsvpConciergeSave = document.getElementById('rsvp-concierge-save');
+  if(rsvpConciergeSave) rsvpConciergeSave.addEventListener('click', ()=>{
+    const parkingInput = document.getElementById('rsvp-parking-input');
+    const transportInput = document.getElementById('rsvp-transport-input');
+    const accommodationInput = document.getElementById('rsvp-accommodation-input');
+    const giftsInput = document.getElementById('rsvp-gifts-input');
+    const contactInput = document.getElementById('rsvp-contact-input');
+    const faqInput = document.getElementById('rsvp-faq-input');
+    saveAndSyncWeddingSettingsToGuests(rsvpConciergeSave, {
+      guestParkingInfo: parkingInput? parkingInput.value.trim() : '',
+      guestTransportInfo: transportInput? transportInput.value.trim() : '',
+      guestAccommodationInfo: accommodationInput? accommodationInput.value.trim() : '',
+      guestGiftsInfo: giftsInput? giftsInput.value.trim() : '',
+      guestContactInfo: contactInput? contactInput.value.trim() : '',
+      guestFaqList: rawToFaqList(faqInput? faqInput.value : '')
+    });
+  });
   const rsvpCopyLembretes = document.getElementById('rsvp-copy-lembretes');
   if(rsvpCopyLembretes) rsvpCopyLembretes.addEventListener('click', async ()=>{
     const allGuests2 = flattenAllGuestsForRSVP();
@@ -7521,7 +7905,7 @@ function openEventSheet(eventId){
   closeAllSheets();
   editingEventId = eventId || null;
   const ev = eventId ? (state.daySchedule||[]).find(e=>e.id===eventId) : null;
-  document.getElementById('event-sheet-title').textContent = ev ? 'Editar momento' : 'Novo momento';
+  document.getElementById('event-sheet-title').textContent = ev ? ta('eventSheetTitleEdit') : ta('eventSheetTitleNew');
   document.getElementById('ef-label').value = ev ? ev.label : '';
   document.getElementById('ef-time').value = ev ? ev.time : '';
   document.getElementById('ef-place').value = ev ? (ev.place||'') : '';
@@ -8442,7 +8826,7 @@ function openVisitSheet(visitId){
   closeAllSheets();
   editingVisitId = visitId || null;
   const v = visitId ? state.dressVisits.find(x=>x.id===visitId) : null;
-  document.getElementById('visit-sheet-title').textContent = v ? 'Editar visita' : 'Nova visita';
+  document.getElementById('visit-sheet-title').textContent = v ? ta('visitSheetTitleEdit') : ta('visitSheetTitleNew');
   document.getElementById('vf-loja').value = v ? v.loja : '';
   document.getElementById('vf-morada').value = v ? v.morada : '';
   document.getElementById('vf-data').value = v ? v.data : '';
@@ -8592,7 +8976,7 @@ function openHmOptionSheet(ideaId){
   closeAllSheets();
   editingHmOptionId = ideaId || null;
   const o = ideaId ? state.honeymoon.ideas.find(x=>x.id===ideaId) : null;
-  document.getElementById('hm-option-sheet-title').textContent = o ? 'Editar ideia' : 'Nova ideia';
+  document.getElementById('hm-option-sheet-title').textContent = o ? ta('hmOptionSheetTitleEdit') : ta('hmOptionSheetTitleNew');
   document.getElementById('hm-name').value = o ? o.name : '';
   document.getElementById('hm-category').innerHTML = HM_CATEGORIES.map(c=>`<option value="${c.id}">${c.label}</option>`).join('');
   document.getElementById('hm-category').value = o ? o.category : hmFilter;
