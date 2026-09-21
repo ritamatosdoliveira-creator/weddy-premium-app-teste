@@ -1161,6 +1161,7 @@ html.rotate-blocked .rotate-lock-overlay{ display:flex; }
     <div class="sheet-field"><label data-t="labelAlreadyPaidRequired">Já pago (€) *</label><input type="number" min="0" id="sf-paid" placeholder="0"></div>
     <div class="sheet-field"><label data-t="labelPayByDateOptional">Data limite para pagar o resto (opcional)</label><input type="date" id="sf-duedate"></div>
     <div class="sheet-field"><label data-t="labelHmCategory">Categoria</label><select id="sf-cat"></select></div>
+    <div class="sheet-field"><label data-t="labelSupplierOptional">Fornecedor (opcional)</label><select id="sf-supplier"></select></div>
     <div class="sheet-field"><label data-t="labelPaymentMethod">Método de pagamento</label>
       <select id="sf-method">
         <option value="" data-t="paymentMethodNone">Não definido</option>
@@ -2493,6 +2494,12 @@ const APP_I18N = {
     errStoragePhoto:'Não foi possível guardar a foto — o telemóvel pode estar sem espaço de armazenamento.',
     errStorageContract:'Não foi possível guardar o contrato — o telemóvel pode estar sem espaço de armazenamento.',
     defaultNewSupplierName:'Novo fornecedor',
+    labelSupplierOptional:'Fornecedor (opcional)',
+    noSupplierOption:'Sem fornecedor',
+    autoPaymentDesc:(name)=>`Pagamento a ${name}`,
+    contractSyncedNote:'Sincronizado — visível em todos os dispositivos e pesquisável pelo Assistente.',
+    contractLocalOnlyNote:'Guardado só neste telemóvel. Carrega o contrato novamente para o sincronizar.',
+    statusUploadingContract:'A carregar contrato…',
 
     premiumLockedText:(title)=>`"${title}" e as restantes funcionalidades Premium ficam disponíveis assim que teres uma subscrição ativa.`,
     premiumFeatureRSVP:'Convites RSVP com link individual por convidado',
@@ -3058,6 +3065,12 @@ const APP_I18N = {
     errStoragePhoto:'Could not save the photo — your phone may be out of storage space.',
     errStorageContract:'Could not save the contract — your phone may be out of storage space.',
     defaultNewSupplierName:'New supplier',
+    labelSupplierOptional:'Supplier (optional)',
+    noSupplierOption:'No supplier',
+    autoPaymentDesc:(name)=>`Payment to ${name}`,
+    contractSyncedNote:'Synced — visible on every device and searchable by the Assistant.',
+    contractLocalOnlyNote:'Saved only on this phone. Upload the contract again to sync it.',
+    statusUploadingContract:'Uploading contract…',
 
     premiumLockedText:(title)=>`"${title}" and the remaining Premium features become available once you have an active subscription.`,
     premiumFeatureRSVP:'RSVP invitations with an individual link per guest',
@@ -4280,6 +4293,13 @@ function viewGastos(){
           <option value="mbway" ${e.method==='mbway'?'selected':''}>MB WAY</option>
         </select>
       </div>
+      <div class="exp-method-row">
+        <span>${ta('labelSupplierOptional')}</span>
+        <select data-exp="supplierId|${i}">
+          <option value="" ${!e.supplierId?'selected':''}>${ta('noSupplierOption')}</option>
+          ${state.suppliers.map(s=>`<option value="${s.id}" ${e.supplierId===s.id?'selected':''}>${escapeHTML(s.name)}</option>`).join('')}
+        </select>
+      </div>
       ${remaining>0 && e.dueDate ? `
       <div class="exp-due-row${dueWarn}" data-duerow="${i}">
         <span data-dueremaining="${i}">${ta('remainingToPayLabel')(fmtEUR(remaining))}</span>
@@ -5057,7 +5077,65 @@ function removeSupplierPhoto(id){ try{ localStorage.removeItem(supplierPhotoKey(
 function getSupplierContract(id){ try{ const raw = localStorage.getItem(supplierContractKey(id)); return raw ? JSON.parse(raw) : null; }catch(e){ return null; } }
 function setSupplierContract(id, obj){ try{ localStorage.setItem(supplierContractKey(id), JSON.stringify(obj)); }catch(e){ showSaveToast(true); alert(ta('errStorageContract')); } }
 function removeSupplierContract(id){ try{ localStorage.removeItem(supplierContractKey(id)); }catch(e){} }
-function supplierPaidTotal(s){ return (s.payments||[]).reduce((sum,p)=>sum+(Number(p.amount)||0),0); }
+// Fase 6.1 — Budget passa a ser a fonte única de verdade para dinheiro.
+// s.payments (localStorage-menos, na verdade Firestore) fica como o livro
+// "antigo": nunca é apagado nem migrado automaticamente, para não perder
+// dados de casamentos existentes. Novos pagamentos passam a ser criados
+// como despesas ligadas por supplierId (ver bindFornecedorDetalheHandlers).
+// O total pago é a soma aditiva dos dois — nunca um substituto do outro.
+function supplierPaidTotal(s){
+  const legacy = (s.payments||[]).reduce((sum,p)=>sum+(Number(p.amount)||0),0);
+  const linked = (state.expenses||[]).filter(e=>e.supplierId===s.id).reduce((sum,e)=>sum+(Number(e.paid)||0),0);
+  return legacy + linked;
+}
+// Lista combinada de pagamentos para o ecrã de detalhe do fornecedor —
+// junta o livro antigo (s.payments) com as despesas do Budget ligadas a
+// este fornecedor, ordenados por data. kind diferencia a origem para o
+// botão de eliminar saber que caminho seguir.
+function supplierCombinedPayments(s){
+  const legacy = (s.payments||[]).map(p=>({ date:p.date, amount:Number(p.amount)||0, kind:'legacy', id:p.id }));
+  const linked = (state.expenses||[])
+    .map((e,idx)=>({e,idx}))
+    .filter(({e})=>e.supplierId===s.id)
+    .map(({e,idx})=>({ date:e.date, amount:Number(e.paid)||0, kind:'expense', id:String(idx), desc:e.desc }));
+  return [...legacy, ...linked].sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+}
+// Fase 6.1 — contrato do fornecedor: passa a ser guardado no Firestore
+// (via state.weddingDocuments, reaproveitando exatamente a mesma
+// infraestrutura dos Documentos gerais: Storage + extractPdfText), em vez
+// de ficar só em localStorage. Isto resolve, ao mesmo tempo, a
+// sincronização entre dispositivos e a pesquisa pelo Assistente
+// (searchWeddingDocuments já procura em todos os state.weddingDocuments).
+// getSupplierContract/localStorage fica como fallback só-leitura para
+// contratos carregados antes desta alteração — nunca é apagado sozinho.
+function supplierContractDoc(id){
+  return (state.weddingDocuments||[]).find(d=>d.supplierId===id) || null;
+}
+async function uploadSupplierContract(supplierId, file){
+  if(!file) return null;
+  const isPdf = file.type === 'application/pdf';
+  const isImage = file.type && file.type.startsWith('image/');
+  if(!isPdf && !isImage) return null;
+  let text = '';
+  try{ if(isPdf) text = await extractPdfText(file); }catch(e){ text = ''; }
+  let storagePath = null;
+  if(storage && FIREBASE_READY && auth && auth.currentUser && currentWeddingId){
+    storagePath = `documents/${currentWeddingId}/${Date.now()}_${file.name}`;
+    try{ await storage.ref(storagePath).put(file); }catch(err){ storagePath = null; }
+  }
+  if(!state.weddingDocuments) state.weddingDocuments = [];
+  // Substitui um contrato Firestore anterior do mesmo fornecedor (mantém
+  // só um contrato "ativo" por fornecedor nesta lista; não mexe no
+  // fallback localStorage).
+  const prev = state.weddingDocuments.find(d=>d.supplierId===supplierId);
+  if(prev){
+    if(prev.storagePath && storage) storage.ref(prev.storagePath).delete().catch(()=>{});
+    state.weddingDocuments = state.weddingDocuments.filter(d=>d!==prev);
+  }
+  const doc = { name:file.name, text, storagePath, uploadedAt:new Date().toISOString(), supplierId };
+  state.weddingDocuments.push(doc);
+  return doc;
+}
 function openSupplierDetail(id){
   closeAllSheets();
   openSupplierDetailId = id;
@@ -5069,16 +5147,18 @@ function viewFornecedorDetalhe(){
   if(!s){ fornecedoresSubview = 'lista'; openSupplierDetailId = null; return viewFornecedores(); }
   const statusInfo = SUPPLIER_STATUS[s.status] || SUPPLIER_STATUS.considerar;
   const photo = getSupplierPhoto(s.id);
-  const contract = getSupplierContract(s.id);
+  const syncedContract = supplierContractDoc(s.id);
+  const legacyContract = syncedContract ? null : getSupplierContract(s.id);
+  const contract = syncedContract || legacyContract;
   const paid = supplierPaidTotal(s);
   const total = Number(s.valorTotal)||0;
   const rest = Math.max(0, total-paid);
   const pct = total ? Math.min(100, Math.round(paid/total*100)) : 0;
-  const paymentsHTML = (s.payments||[]).slice().sort((a,b)=>(b.date||'').localeCompare(a.date||'')).map(p=>`
+  const paymentsHTML = supplierCombinedPayments(s).map(p=>`
     <div class="supd-pay-row">
-      <div class="title" style="flex:1; font-size:13.5px; color:var(--ink);">${p.date?formatDateShortPT(p.date):ta('noDateLabel')}</div>
-      <div class="amount">${fmtEUR(Number(p.amount)||0)}</div>
-      <button class="remove-x" data-delsuppay="${p.id}">✕</button>
+      <div class="title" style="flex:1; font-size:13.5px; color:var(--ink);">${p.date?formatDateShortPT(p.date):ta('noDateLabel')}${p.kind==='expense'?` · ${escapeHTML(p.desc||'')}`:''}</div>
+      <div class="amount">${fmtEUR(p.amount)}</div>
+      <button class="remove-x" data-delsuppay="${p.kind}|${p.id}">✕</button>
     </div>`).join('');
 
   return `
@@ -5151,7 +5231,7 @@ function viewFornecedorDetalhe(){
     <div class="supd-contract-icon">${ICONS.docnote}</div>
     <div class="supd-contract-text">
       <div class="supd-contract-name">${contract? escapeHTML(contract.name) : ta('addContractLabel')}</div>
-      <div class="supd-contract-sub">${contract? ta('tapToView') : ta('contractHint')}</div>
+      <div class="supd-contract-sub">${contract? (syncedContract? `${ta('tapToView')} · ${ta('contractSyncedNote')}` : `${ta('tapToView')} · ${ta('contractLocalOnlyNote')}`) : ta('contractHint')}</div>
     </div>
     ${contract? `<button class="remove-x" id="supd-contract-remove">✕</button>` : ICONS.chev}
   </div>
@@ -5244,26 +5324,47 @@ function bindFornecedorDetalheHandlers(){
   const contractRow = document.getElementById('supd-contract-row');
   const contractInput = document.getElementById('supd-contract-input');
   const contractQuickBtn = document.getElementById('supd-contact-contract');
-  const openOrPickContract = ()=>{
-    const c = getSupplierContract(s.id);
-    if(c && c.dataUrl) window.open(c.dataUrl, '_blank');
-    else if(contractInput) contractInput.click();
+  const openOrPickContract = async ()=>{
+    const synced = supplierContractDoc(s.id);
+    if(synced && synced.storagePath && storage){
+      try{ const url = await storage.ref(synced.storagePath).getDownloadURL(); window.open(url, '_blank'); return; }catch(err){}
+    }
+    const legacy = synced ? null : getSupplierContract(s.id);
+    if(legacy && legacy.dataUrl){ window.open(legacy.dataUrl, '_blank'); return; }
+    if(contractInput) contractInput.click();
   };
   if(contractRow) contractRow.addEventListener('click', (e)=>{ if(e.target.closest('#supd-contract-remove')) return; openOrPickContract(); });
   if(contractQuickBtn) contractQuickBtn.addEventListener('click', openOrPickContract);
   const contractRemove = document.getElementById('supd-contract-remove');
   if(contractRemove) contractRemove.addEventListener('click', e=>{
     e.stopPropagation();
-    if(confirm(ta('confirmRemoveContract'))){ removeSupplierContract(s.id); _origRender(); }
+    if(confirm(ta('confirmRemoveContract'))){
+      const synced = supplierContractDoc(s.id);
+      if(synced){
+        if(synced.storagePath && storage) storage.ref(synced.storagePath).delete().catch(()=>{});
+        state.weddingDocuments = (state.weddingDocuments||[]).filter(d=>d!==synced);
+        pushRemote(true);
+      }else{
+        removeSupplierContract(s.id);
+      }
+      _origRender();
+    }
   });
   if(contractInput) contractInput.addEventListener('change', async (e)=>{
     const file = e.target.files && e.target.files[0];
     if(!file) return;
     try{
-      let dataUrl;
-      if(file.type && file.type.startsWith('image/')) dataUrl = await resizeImageFile(file, 1400, 0.82);
-      else dataUrl = await new Promise((resolve,reject)=>{ const r = new FileReader(); r.onload=()=>resolve(r.result); r.onerror=reject; r.readAsDataURL(file); });
-      setSupplierContract(s.id, { name:file.name, dataUrl });
+      const doc = await uploadSupplierContract(s.id, file);
+      if(!doc){
+        // Fallback: sem Firestore/Storage disponível (ou tipo de ficheiro
+        // inesperado), mantém o comportamento antigo para não perder o
+        // contrato do utilizador.
+        let dataUrl;
+        if(file.type && file.type.startsWith('image/')) dataUrl = await resizeImageFile(file, 1400, 0.82);
+        else dataUrl = await new Promise((resolve,reject)=>{ const r = new FileReader(); r.onload=()=>resolve(r.result); r.onerror=reject; r.readAsDataURL(file); });
+        setSupplierContract(s.id, { name:file.name, dataUrl });
+      }
+      pushRemote(true);
       _origRender();
     }catch(err){}
     e.target.value = '';
@@ -5272,20 +5373,34 @@ function bindFornecedorDetalheHandlers(){
   const valorTotalInp = document.getElementById('supd-valortotal');
   if(valorTotalInp) valorTotalInp.addEventListener('input', e=>{ s.valorTotal = Math.max(0, Number(e.target.value)||0); softUpdateSupplierPayments(); });
 
+  // Fase 6.1 — Budget como fonte única de verdade para dinheiro: um novo
+  // pagamento a um fornecedor passa a ser criado como despesa do Budget,
+  // ligada por supplierId, em vez de ser empurrado para s.payments. Os
+  // pagamentos antigos em s.payments não são tocados nem migrados — ficam
+  // a contar para o total (ver supplierPaidTotal) exatamente como sempre
+  // contaram.
   const payAddBtn = document.getElementById('supd-pay-add');
   if(payAddBtn) payAddBtn.addEventListener('click', ()=>{
     const dateEl = document.getElementById('supd-pay-date');
     const amountEl = document.getElementById('supd-pay-amount');
     const amount = Number(amountEl.value);
     if(!amount || amount<=0){ flagRequiredField(amountEl); return; }
-    if(!s.payments) s.payments = [];
-    s.payments.push({ id:'suppay'+Date.now()+Math.random().toString(36).slice(2,6), date:dateEl.value, amount });
+    const date = dateEl.value || new Date().toISOString().slice(0,10);
+    state.expenses.unshift({
+      date, desc: ta('autoPaymentDesc')(s.name), value: amount, paid: amount,
+      category: s.category, dueDate:'', method:'', supplierId: s.id
+    });
     render();
     pushRemote(true);
   });
   document.querySelectorAll('[data-delsuppay]').forEach(btn=>{
     btn.addEventListener('click', e=>{
-      s.payments = (s.payments||[]).filter(p=>p.id!==e.currentTarget.dataset.delsuppay);
+      const [kind,id] = e.currentTarget.dataset.delsuppay.split('|');
+      if(kind==='expense'){
+        state.expenses.splice(Number(id),1);
+      }else{
+        s.payments = (s.payments||[]).filter(p=>p.id!==id);
+      }
       render();
       pushRemote(true);
     });
@@ -5309,9 +5424,18 @@ function bindFornecedorDetalheHandlers(){
       state.suppliers = state.suppliers.filter(x=>x.id!==s.id);
       removeSupplierPhoto(s.id);
       removeSupplierContract(s.id);
+      // Também remove o contrato sincronizado no Firestore, se existir.
+      // As despesas já ligadas a este fornecedor (Budget) não são
+      // apagadas — continuam a fazer parte do histórico do orçamento.
+      const synced = supplierContractDoc(s.id);
+      if(synced){
+        if(synced.storagePath && storage) storage.ref(synced.storagePath).delete().catch(()=>{});
+        state.weddingDocuments = (state.weddingDocuments||[]).filter(d=>d!==synced);
+      }
       fornecedoresSubview = 'lista';
       openSupplierDetailId = null;
       render();
+      pushRemote(true);
     }
   });
 }
@@ -7010,8 +7134,13 @@ function viewDefMemories(){
 // searchWeddingDocuments() e a sua utilização em respondeAssistente().
 function viewDefDocumentos(){
   if(!hasActiveSubscription()) return viewDefPremiumLocked(ta('documentsTitle'));
-  const docs = state.weddingDocuments || [];
-  const listHtml = docs.length ? docs.map((d,i)=>`
+  // Fase 6.1 — contratos ligados a um fornecedor (d.supplierId) já são
+  // mostrados na própria ficha do fornecedor, por isso ficam de fora desta
+  // lista geral para não duplicar. O índice original de cada documento em
+  // state.weddingDocuments é preservado no filtro (não o índice da lista
+  // filtrada), para que data-docdel continue a apagar o documento certo.
+  const docs = (state.weddingDocuments || []).map((d,i)=>({d,i})).filter(({d})=>!d.supplierId);
+  const listHtml = docs.length ? docs.map(({d,i})=>`
     <div class="list-row" style="align-items:center;">
       <div class="def-row-icon" style="${chipStyle(4)}">${ICONS.docnote||ICONS.checklist}</div>
       <div class="def-row-mid">
@@ -8318,12 +8447,15 @@ function openExpenseSheet(){
   closeAllSheets();
   const sel = document.getElementById('sf-cat');
   sel.innerHTML = state.categories.map(c=>`<option value="${c.id}">${escapeHTML(c.name)}</option>`).join('');
+  const supSel = document.getElementById('sf-supplier');
+  if(supSel) supSel.innerHTML = `<option value="">${ta('noSupplierOption')}</option>` + (state.suppliers||[]).map(s=>`<option value="${s.id}">${escapeHTML(s.name)}</option>`).join('');
   document.getElementById('sf-desc').value='';
   document.getElementById('sf-date').value='';
   document.getElementById('sf-value').value='';
   document.getElementById('sf-paid').value='';
   document.getElementById('sf-duedate').value='';
   document.getElementById('sf-method').value='';
+  if(supSel) supSel.value='';
   document.getElementById('expense-sheet').classList.add('show');
   document.getElementById('sheet-backdrop').classList.add('show');
 }
@@ -8498,13 +8630,15 @@ document.getElementById('sf-save').addEventListener('click', ()=>{
   const dueDate = document.getElementById('sf-duedate').value;
   const category = document.getElementById('sf-cat').value;
   const method = document.getElementById('sf-method').value;
+  const supplierEl = document.getElementById('sf-supplier');
+  const supplierId = supplierEl ? (supplierEl.value || null) : null;
   if(!desc){ flagRequiredField(descEl); return; }
   if(!date){ flagRequiredField(dateEl); return; }
   if(valueEl.value.trim()==='' || Number(valueEl.value)<=0){ flagRequiredField(valueEl); return; }
   if(paidEl.value.trim()===''){ flagRequiredField(paidEl); return; }
   const value = Math.max(0, Number(valueEl.value)||0);
   const paid = Math.max(0, Number(paidEl.value)||0);
-  state.expenses.unshift({date,desc,value,paid,category,dueDate,method});
+  state.expenses.unshift({date,desc,value,paid,category,dueDate,method,supplierId});
   closeExpenseSheet();
   render();
   pushRemote(true);
