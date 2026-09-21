@@ -139,13 +139,16 @@ percebi" quando uma pergunta não bate com nenhuma regra.
 ### O que precisas de ter antes de começar
 
 1. **Plano Blaze no Firebase**, tal como para os lembretes de RSVP acima
-   (uma Cloud Function chamar uma API externa como a do Gemini exige
+   (uma Cloud Function chamar uma API externa como a da OpenAI exige
    sempre o plano Blaze, independentemente de ser agendada ou não).
-2. **Uma API key da Gemini API** — cria uma gratuitamente em
-   [aistudio.google.com/apikey](https://aistudio.google.com/apikey) com
-   qualquer conta Google. Consulta os preços atuais na própria consola
-   antes de usar isto a sério — o uso além do nível gratuito é faturado à
-   tua conta Google, não à Anthropic nem a mim.
+2. **Uma API key da OpenAI, com faturação ativa** — cria uma em
+   [platform.openai.com/api-keys](https://platform.openai.com/api-keys).
+   Ao contrário do Gemini, a OpenAI normalmente não tem nível gratuito
+   contínuo — vais precisar de associar um cartão à tua conta OpenAI.
+   Confirma o nome exato e o preço atual do modelo (`gpt-5.6-luna` neste
+   ficheiro, ou o que puseres na constante `OPENAI_MODEL`) na própria
+   consola antes de usar isto a sério — o uso é faturado à tua conta
+   OpenAI, não à Anthropic nem a mim.
 
 ### Passo a passo
 
@@ -155,12 +158,13 @@ percebi" quando uma pergunta não bate com nenhuma regra.
 2. No mesmo ficheiro `functions/.env.weddy-premium-teste` que já usas
    para o SMTP, acrescenta uma linha nova:
    ```
-   GEMINI_API_KEY=a-tua-chave-aqui
+   OPENAI_API_KEY=a-tua-chave-aqui
    ```
    **Nunca** coloques esta chave em `index.html`, `rsvp.html`, nem em
    nenhum outro ficheiro do frontend — só aqui, no backend. E, tal como o
    ficheiro do SMTP, este ficheiro nunca deve ir para um repositório
-   público.
+   público. (Se já tinhas configurado a versão anterior com Gemini, podes
+   apagar a linha `GEMINI_API_KEY=...` — já não é usada.)
 3. Deploy:
    ```
    firebase deploy --only functions:classifyWeddyIntent
@@ -182,10 +186,28 @@ mensagem "A pensar…" antes da resposta. Para depurar sem gastar chamadas à
 API, usa o emulador local (`firebase emulators:start`) e olha para os
 logs da função no terminal.
 
+Nota sobre o modelo: `gpt-5.6-luna` e a Responses API da OpenAI usados
+neste ficheiro são posteriores ao que eu consigo verificar diretamente
+daqui (não tenho acesso à documentação viva da OpenAI nem forma de testar
+uma chamada real a partir deste ambiente). Antes do primeiro deploy a
+sério, vale a pena confirmares na consola/documentação da OpenAI que o
+nome do modelo e o formato do pedido (`/v1/responses` com
+`text.format.type: "json_schema"`) ainda batem certo — se algo tiver
+mudado, diz-me o que a documentação atual mostra e eu ajusto o código.
+
 ### Custo e limites
 
-Cada chamada consome a tua quota/faturação da Gemini API — isto é
-completamente independente do preço do Firebase. Por decisão tua, esta
-função **não tem, por agora, nenhum limite de chamadas por casal/dia** —
-se decidires que queres um, é uma alteração pequena (um contador no
-Firestore antes de chamar o Gemini) que posso fazer quando pedires.
+Cada chamada (que não seja bloqueada pelo limite abaixo) consome a tua
+quota/faturação da OpenAI API — isto é completamente independente do
+preço do Firebase.
+
+Por decisão tua, esta função tem agora um **limite diário de chamadas por
+casamento**: a constante `AI_DAILY_LIMIT_PER_WEDDING` no topo do
+`index.js` (60 por omissão, ajustável à vontade). O contador vive na
+coleção `aiUsage` do Firestore (um documento por `weddingId`) e reinicia
+à meia-noite UTC. Ao atingir o limite num dia, a função passa a devolver
+`{ intent: "UNKNOWN" }` sem chamar a OpenAI — o Concierge/Assistente
+caem na resposta genérica de sempre, sem erro nem crash. É uma proteção
+de custo, não uma proteção de segurança: o `weddingId` vem do próprio
+frontend e não é verificado contra nada — por isso não o uses para mais
+do que isto.

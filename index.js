@@ -86,7 +86,7 @@ const SMTP_PASS = defineString('SMTP_PASS');
 const SMTP_FROM = defineString('SMTP_FROM');
 // Só é preciso se ligares o classificador de IA (ver classifyWeddyIntent,
 // mais abaixo) — não tem nada a ver com os lembretes de RSVP acima.
-const GEMINI_API_KEY = defineString('GEMINI_API_KEY', { default: '' });
+const OPENAI_API_KEY = defineString('OPENAI_API_KEY', { default: '' });
 
 const RSVP_BASE_URL = 'https://ritamatosdoliveira-creator.github.io/weddy-premium-app-teste/rsvp.html';
 
@@ -220,57 +220,74 @@ exports.sendRsvpReminders = onSchedule(
  * casamento — isso não muda aqui. Esta função só entra quando essas
  * regras NÃO reconhecem a mensagem: recebe o texto da pergunta e devolve
  * qual das intenções já existentes melhor a descreve (ex: "GET_VENUE",
- * "CONFIRM_ATTENDANCE"), usando o Gemini só para essa classificação.
+ * "CONFIRM_ATTENDANCE"), usando a OpenAI (modelo "Luna") só para essa
+ * classificação.
  *
  * A IA NUNCA vê os dados do casamento (nem os recebe, nem os pode
  * inventar) e NUNCA escreve a resposta final — isso continua a ser
  * sempre feito no frontend, a partir do WeddyActions, com os dados reais.
- * Esta função também não escreve nada no Firestore por si própria.
+ * Esta função também não escreve nada no Firestore por si própria, a não
+ * ser o próprio contador de utilização (ver "LIMITE DE UTILIZAÇÃO" abaixo).
  *
  * PERMISSÕES — "guest" só pode receber intenções da lista de convidado,
  * "couple" só as do lado dos noivos, e isso NUNCA depende do que o
  * cliente diz que é: só é tratado como "couple" quem chamar esta função
  * com uma sessão Firebase Auth válida (o rsvp.html nunca faz login, por
  * isso um convidado não consegue fingir ser o casal só mudando o valor
- * enviado no pedido). A própria lista de intenções permitidas (enviada ao
- * Gemini como "enum" no schema da resposta) é outra camada da mesma
+ * enviado no pedido). A própria lista de intenções permitidas (enviada à
+ * OpenAI como "enum" no schema da resposta) é outra camada da mesma
  * proteção: o modelo não consegue devolver uma intenção fora da lista.
  *
  * PRÉ-REQUISITOS PARA ISTO FUNCIONAR
- * 1) Uma API key da Gemini API (aistudio.google.com/apikey — conta
- *    Google gratuita chega para começar, mas o uso em produção pode ter
- *    custo; consulta os preços atuais na própria consola).
+ * 1) Uma API key da OpenAI (platform.openai.com/api-keys — precisa de
+ *    faturação ativa na tua conta OpenAI; consulta os preços atuais do
+ *    modelo escolhido na própria consola antes de usar isto a sério).
  * 2) A mesma pasta "functions" e o mesmo ficheiro ".env.<project-id>" que
  *    já usas para os lembretes de RSVP (ver topo deste ficheiro) — não é
  *    preciso nenhum projeto Firebase novo nem nenhuma função separada.
  *
  * COMO INSTALAR
- * 1) Cria a tua API key em aistudio.google.com/apikey.
+ * 1) Cria a tua API key em platform.openai.com/api-keys.
  * 2) No ficheiro ".env.weddy-premium-teste" dentro de "functions/" (o
  *    mesmo do SMTP), acrescenta uma linha nova:
- *      GEMINI_API_KEY=a-tua-chave-aqui
+ *      OPENAI_API_KEY=a-tua-chave-aqui
  *    Nunca coloques esta chave em nenhum ficheiro do frontend
  *    (index.html/rsvp.html) — só aqui, no backend.
  * 3) Deploy:
  *      firebase deploy --only functions:classifyWeddyIntent
  *
  * SEM CHAVE CONFIGURADA
- * A função devolve sempre { intent: "UNKNOWN" } sem tentar chamar o
- * Gemini — o Concierge/Assistente continuam a funcionar exatamente como
+ * A função devolve sempre { intent: "UNKNOWN" } sem tentar chamar a
+ * OpenAI — o Concierge/Assistente continuam a funcionar exatamente como
  * hoje, só sem a segunda opinião da IA para perguntas fora das regex.
  *
+ * LIMITE DE UTILIZAÇÃO (por decisão tua, adicionado nesta versão)
+ * Cada casamento (identificado pelo weddingId que o frontend envia) tem
+ * um limite diário de chamadas — ver AI_DAILY_LIMIT_PER_WEDDING abaixo.
+ * O contador vive na coleção "aiUsage" (um documento por weddingId) e
+ * reinicia à meia-noite UTC. Ao atingir o limite, a função devolve
+ * { intent: "UNKNOWN" } em vez de chamar a OpenAI — o Concierge/
+ * Assistente caem na resposta genérica de sempre, sem crash nem erro
+ * visível. Isto é uma proteção de custo, não de segurança: o weddingId
+ * vem do cliente e não é verificado contra o Firebase Auth, por isso não
+ * o uses para nada além de contar pedidos.
+ *
  * CUSTO
- * Cada chamada desta função consome a tua quota/faturação da Gemini API
- * (fora do controlo da Firebase) — não há, por agora, nenhum limite de
- * chamadas por casal/dia aqui dentro. Se um dia quiseres um limite,
- * dá para acrescentar um contador simples no Firestore antes da chamada
- * ao Gemini (pergunta-me quando quiseres isso).
+ * Cada chamada desta função (quando não bloqueada pelo limite acima)
+ * consome a tua quota/faturação da OpenAI API — fora do controlo da
+ * Firebase.
  */
 
-// Modelo do Gemini a usar — muda aqui se quiseres experimentar outro
-// (confirma sempre o nome exato/disponibilidade na consola do Gemini,
-// já que isto muda com alguma frequência).
-const GEMINI_MODEL = 'gemini-2.0-flash';
+// Modelo da OpenAI a usar — muda aqui se quiseres experimentar outro.
+// Confirma sempre o nome exato/disponibilidade e o preço atual na
+// consola da OpenAI antes do deploy, já que isto muda com frequência.
+const OPENAI_MODEL = 'gpt-5.6-luna';
+
+// Limite diário de chamadas por casamento (soma Concierge + Assistente).
+// Ajusta este número à vontade — é só esta constante que precisas de
+// mudar. Serve para nunca teres uma surpresa na fatura da OpenAI se
+// alguém (ou um script) martelar perguntas sem parar.
+const AI_DAILY_LIMIT_PER_WEDDING = 60;
 
 // Intenções que o CONVIDADO (rsvp.html / Weddy Concierge) pode pedir.
 // Tem de bater certo com WEDDY_INTENTS em clone-app/rsvp.html.
@@ -299,40 +316,56 @@ function buildClassifyPrompt(question, allowedIntents) {
   ].join('\n');
 }
 
-async function callGemini(question, allowedIntents) {
-  const key = GEMINI_API_KEY.value();
+async function callOpenAI(question, allowedIntents) {
+  const key = OPENAI_API_KEY.value();
   if (!key) return { intent: 'UNKNOWN' };
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${key}`;
-  const body = {
-    contents: [{ role: 'user', parts: [{ text: buildClassifyPrompt(question, allowedIntents) }] }],
-    generationConfig: {
-      responseMimeType: 'application/json',
-      responseSchema: {
-        type: 'OBJECT',
-        properties: {
-          intent: { type: 'STRING', enum: [...allowedIntents, 'UNKNOWN'] },
-          value: { type: 'STRING' },
-        },
-        required: ['intent'],
-      },
-      temperature: 0,
+  const schema = {
+    type: 'object',
+    properties: {
+      intent: { type: 'string', enum: [...allowedIntents, 'UNKNOWN'] },
+      value: { type: 'string' },
     },
+    required: ['intent'],
+    additionalProperties: false,
   };
-  const res = await fetch(url, {
+  const body = {
+    model: OPENAI_MODEL,
+    input: [{ role: 'user', content: buildClassifyPrompt(question, allowedIntents) }],
+    text: {
+      format: {
+        type: 'json_schema',
+        name: 'weddy_intent',
+        schema,
+        strict: true,
+      },
+    },
+    temperature: 0,
+  };
+  // Usa a Responses API da OpenAI (POST /v1/responses). Se a forma exata
+  // do pedido/resposta tiver mudado entretanto, confirma na documentação
+  // atual da OpenAI (platform.openai.com/docs) antes do deploy — isto foi
+  // escrito com base no formato conhecido até início de 2026.
+  const res = await fetch('https://api.openai.com/v1/responses', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
     body: JSON.stringify(body),
   });
   if (!res.ok) {
-    throw new Error(`Gemini respondeu ${res.status}: ${await res.text().catch(() => '')}`);
+    throw new Error(`OpenAI respondeu ${res.status}: ${await res.text().catch(() => '')}`);
   }
   const json = await res.json();
-  const text = json.candidates && json.candidates[0] && json.candidates[0].content
-    && json.candidates[0].content.parts && json.candidates[0].content.parts[0]
-    && json.candidates[0].content.parts[0].text;
-  if (!text) throw new Error('Resposta vazia do Gemini.');
+  let text = json.output_text;
+  if (!text && Array.isArray(json.output)) {
+    for (const item of json.output) {
+      if (Array.isArray(item.content)) {
+        const part = item.content.find((c) => typeof c.text === 'string');
+        if (part) { text = part.text; break; }
+      }
+    }
+  }
+  if (!text) throw new Error('Resposta vazia da OpenAI.');
   const parsed = JSON.parse(text);
-  // Nunca confiar cegamente no que voltou, mesmo com responseSchema —
+  // Nunca confiar cegamente no que voltou, mesmo com json_schema/strict —
   // é a validação final antes de devolver ao frontend.
   if (!parsed || typeof parsed.intent !== 'string' || !allowedIntents.includes(parsed.intent)) {
     return { intent: 'UNKNOWN' };
@@ -344,9 +377,35 @@ async function callGemini(question, allowedIntents) {
   return out;
 }
 
+// Verifica e incrementa, numa única transação, o contador diário de
+// chamadas de IA de um casamento. Sem weddingId (nunca deveria acontecer
+// vindo do frontend atual, mas por segurança) não há como aplicar o
+// limite, por isso deixa passar — a proteção de custo cai, mas o
+// classificador continua a funcionar.
+async function checkAndIncrementAiUsage(weddingId) {
+  if (!weddingId || typeof weddingId !== 'string') return { allowed: true };
+  const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD (UTC)
+  const ref = db.collection('aiUsage').doc(weddingId);
+  return db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    const data = snap.exists ? snap.data() : {};
+    const count = data.day === today ? (data.count || 0) : 0;
+    if (count >= AI_DAILY_LIMIT_PER_WEDDING) {
+      return { allowed: false };
+    }
+    tx.set(ref, {
+      day: today,
+      count: count + 1,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    return { allowed: true };
+  });
+}
+
 exports.classifyWeddyIntent = onCall({ region: 'europe-west1' }, async (request) => {
   const question = request.data && request.data.question;
   const requestedRole = request.data && request.data.role;
+  const weddingId = request.data && request.data.weddingId;
   if (!question || typeof question !== 'string' || !question.trim() || question.length > 500) {
     throw new HttpsError('invalid-argument', 'Pergunta em falta, vazia ou demasiado longa.');
   }
@@ -359,9 +418,14 @@ exports.classifyWeddyIntent = onCall({ region: 'europe-west1' }, async (request)
   const allowedIntents = isCouple ? COUPLE_INTENTS : GUEST_INTENTS;
 
   try {
-    return await callGemini(question.trim(), allowedIntents);
+    const usage = await checkAndIncrementAiUsage(weddingId);
+    if (!usage.allowed) {
+      logger.info(`classifyWeddyIntent: limite diário atingido para o casamento ${weddingId}.`);
+      return { intent: 'UNKNOWN' };
+    }
+    return await callOpenAI(question.trim(), allowedIntents);
   } catch (err) {
-    logger.error('Erro a chamar o Gemini em classifyWeddyIntent:', err);
+    logger.error('Erro a chamar a OpenAI em classifyWeddyIntent:', err);
     // Nunca propaga o erro ao frontend como falha — do ponto de vista de
     // quem está a conversar, "não percebi" é sempre uma resposta válida,
     // e o Concierge/Assistente já sabem cair na resposta genérica quando

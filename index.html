@@ -1352,8 +1352,8 @@ if(FIREBASE_READY){
 }
 // ============================================================
 // AI SERVICE (Fase 3B.1) — única porta de entrada para qualquer chamada a
-// um modelo de IA real em toda a app. Não sabe nada sobre "Gemini" nem
-// sobre nenhum fornecedor — fala sempre com a nossa própria Cloud Function
+// um modelo de IA real em toda a app. Não sabe qual fornecedor está por
+// trás (OpenAI, Gemini, ou outro) — fala sempre com a nossa própria Cloud Function
 // (classifyWeddyIntent), que é quem de facto guarda a chave da API e chama
 // o modelo. Isto é só um CLASSIFICADOR: nunca devolve a resposta final ao
 // utilizador, só a intenção — quem responde continua a ser sempre
@@ -1367,7 +1367,10 @@ const AIService = {
     if(!cloudFunctions) return { intent:'UNKNOWN' };
     try{
       const call = cloudFunctions.httpsCallable('classifyWeddyIntent');
-      const res = await call({ question, role });
+      // weddingId vai só para a função poder aplicar o limite diário de
+      // chamadas por casamento (Fase 3B.1) — nunca é usado para saber
+      // dados do casamento, só para contar pedidos.
+      const res = await call({ question, role, weddingId: currentWeddingId });
       const data = res && res.data;
       return (data && typeof data.intent === 'string') ? data : { intent:'UNKNOWN' };
     }catch(err){
