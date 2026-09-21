@@ -4198,6 +4198,14 @@ function bindGuestGroupHandlers(scope){
         ? ta('confirmDeleteCategoryWithGuests')(label, arr.length)
         : ta('confirmDeleteCategorySimple')(label);
       if(!confirm(msg)) return;
+      // Fix 3 da auditoria pós-fixes (Set 2026): apagar uma categoria
+      // inteira só removia os convidados do array local — os documentos
+      // guests/{token} no Firestore de cada um deles ficavam órfãos e os
+      // links de RSVP antigos continuavam a funcionar, mesmo o diálogo de
+      // confirmação dizendo ao casal que os convidados "também se
+      // perdiam". Agora limpamos o Firestore de cada convidado da
+      // categoria com o mesmo helper usado no botão "✕" individual.
+      arr.forEach(entry=>{ deleteGuestRSVPDoc(entry).catch(()=>{}); });
       state.guests[side].custom = state.guests[side].custom.filter(c=>c.id!==cat);
       const prefix = side+'|'+cat+'|';
       Object.keys(state.confirmed).forEach(k=>{ if(k.startsWith(prefix)) delete state.confirmed[k]; });
@@ -5099,8 +5107,13 @@ function bindSupplierResultHandlers(){
    dados (pagamentos, notas, etc.) fazem parte do state normal.
 ============================================================ */
 const SUPPLIER_STATUS_BG = { considerar:'#F3E4DC', contactado:'#EAE6E0', contratado:'#E7EBE1' };
-function supplierPhotoKey(id){ return 'weddy-sup-photo-'+id; }
-function supplierContractKey(id){ return 'weddy-sup-contract-'+id; }
+// Fix 6 da auditoria pós-fixes (Set 2026): estas chaves eram globais ao
+// browser, não delimitadas por casamento. Num dispositivo partilhado
+// (ex.: computador de família, demo), trocar de conta podia mostrar a foto
+// do fornecedor de OUTRO casamento com o mesmo device. Agora incluímos o
+// currentWeddingId na própria chave.
+function supplierPhotoKey(id){ return 'weddy-sup-photo-'+(currentWeddingId||'none')+'-'+id; }
+function supplierContractKey(id){ return 'weddy-sup-contract-'+(currentWeddingId||'none')+'-'+id; }
 function getSupplierPhoto(id){ try{ return localStorage.getItem(supplierPhotoKey(id)); }catch(e){ return null; } }
 function setSupplierPhoto(id, dataUrl){ try{ localStorage.setItem(supplierPhotoKey(id), dataUrl); }catch(e){ showSaveToast(true); alert(ta('errStoragePhoto')); } }
 function removeSupplierPhoto(id){ try{ localStorage.removeItem(supplierPhotoKey(id)); }catch(e){} }
@@ -5906,10 +5919,22 @@ function ensureFamilyRSVPLink(items){
     responses: {},
     createdAt: firebase.firestore.FieldValue.serverTimestamp()
   }).then(()=>{
+    // Fix 3 da auditoria pós-fixes (Set 2026): antes, quando um convidado
+    // com link individual passava a fazer parte de um link de família, só
+    // a referência local (m.item.entry.rsvpToken) era substituída — o
+    // documento guests/{oldToken} antigo no Firestore nunca era apagado,
+    // pelo que o link individual antigo continuava ativo e editável,
+    // apesar do comentário desta função dizer o contrário. Guardamos os
+    // tokens antigos antes de os substituir e limpamos-lhes o Firestore
+    // com o mesmo helper usado nas outras remoções.
+    const oldEntries = members
+      .map(m=>({ ...m.item.entry }))
+      .filter(e=>e.rsvpToken && e.rsvpToken!==token);
     members.forEach(m=>{
       m.item.entry.rsvpToken = token;
       m.item.entry.rsvpMemberId = m.memberId;
     });
+    oldEntries.forEach(oldEntry=>{ deleteGuestRSVPDoc(oldEntry).catch(()=>{}); });
     render();
     return token;
   });
@@ -9490,7 +9515,7 @@ function updateMesa3DLabels(){
     const x = (p.x*0.5+0.5) * rect.width;
     const y = (1-(p.y*0.5+0.5)) * rect.height;
     const cls = ch.name ? ('assigned '+ch.side) : '';
-    html += `<div class="mesa3d-label ${cls}" style="left:${x}px; top:${y}px;">${ch.name || ch.index}</div>`;
+    html += `<div class="mesa3d-label ${cls}" style="left:${x}px; top:${y}px;">${ch.name ? escapeHTML(ch.name) : ch.index}</div>`;
   });
   labelsEl.innerHTML = html;
 }
@@ -9730,20 +9755,35 @@ function resizeImageFile(file, maxDim, quality){
     reader.readAsDataURL(file);
   });
 }
+// Fix 6 da auditoria pós-fixes (Set 2026): "weddy-inspiracoes" era uma
+// chave global ao browser, não ao casamento — num dispositivo partilhado
+// entre duas contas, as fotos de inspiração de uma apareciam na outra.
+// Passa a existir uma chave por casamento; mantém-se a migração das
+// contas antigas (globais, de antes deste fix e de quando a app ainda se
+// chamava "Rita & Tiago") para a primeira conta que abrir no dispositivo.
+function inspirationsKey(){ return 'weddy-inspiracoes-'+(currentWeddingId||'none'); }
 function saveInspirations(){
-  try{ localStorage.setItem('weddy-inspiracoes', JSON.stringify(inspirations)); }
+  try{ localStorage.setItem(inspirationsKey(), JSON.stringify(inspirations)); }
   catch(e){ showSaveToast(true); alert(ta('alertPhotoSaveError')); }
 }
 function loadInspirations(){
   try{
-    let raw = localStorage.getItem('weddy-inspiracoes');
+    let raw = localStorage.getItem(inspirationsKey());
     if(!raw){
-      // Migração de contas antigas, de quando a app ainda se chamava "Rita & Tiago"
-      const legacy = localStorage.getItem('rita-tiago-inspiracoes');
-      if(legacy){ raw = legacy; localStorage.setItem('weddy-inspiracoes', legacy); }
+      // Migração de contas antigas (antes do namespacing por casamento, e
+      // de quando a app ainda se chamava "Rita & Tiago")
+      const legacyGlobal = localStorage.getItem('weddy-inspiracoes');
+      const legacy = legacyGlobal || localStorage.getItem('rita-tiago-inspiracoes');
+      if(legacy){ raw = legacy; localStorage.setItem(inspirationsKey(), legacy); }
     }
-    if(raw) inspirations = JSON.parse(raw);
-  }catch(e){}
+    // Fix 6 da auditoria pós-fixes (Set 2026): se não houver dados
+    // (locais nem legado) para este casamento, o array em memória tem de
+    // ser esvaziado — caso contrário, ao trocar de conta na mesma sessão
+    // do browser (sem recarregar a página), as inspirações da conta
+    // anterior continuavam visíveis em memória mesmo sem estarem no
+    // localStorage desta conta.
+    inspirations = raw ? JSON.parse(raw) : [];
+  }catch(e){ inspirations = []; }
 }
 document.getElementById('insp-file-input').addEventListener('change', async (e)=>{
   const files = Array.from(e.target.files || []);
@@ -9758,15 +9798,27 @@ document.getElementById('insp-file-input').addEventListener('change', async (e)=
   render();
   e.target.value = '';
 });
+// Fix 6 da auditoria pós-fixes (Set 2026): mesmo problema e correção de
+// "weddy-inspiracoes" acima, aplicado às fotos de inspiração de vestido.
+function dressInspirationsKey(){ return 'weddy-dress-inspiracoes-'+(currentWeddingId||'none'); }
 function saveDressInspirations(){
-  try{ localStorage.setItem('weddy-dress-inspiracoes', JSON.stringify(dressInspirations)); }
+  try{ localStorage.setItem(dressInspirationsKey(), JSON.stringify(dressInspirations)); }
   catch(e){ showSaveToast(true); alert(ta('alertPhotoSaveError')); }
 }
 function loadDressInspirations(){
   try{
-    const raw = localStorage.getItem('weddy-dress-inspiracoes');
-    if(raw) dressInspirations = JSON.parse(raw);
-  }catch(e){}
+    let raw = localStorage.getItem(dressInspirationsKey());
+    if(!raw){
+      // Migração de contas antigas (antes do namespacing por casamento)
+      const legacy = localStorage.getItem('weddy-dress-inspiracoes');
+      if(legacy){ raw = legacy; localStorage.setItem(dressInspirationsKey(), legacy); }
+    }
+    // Fix 6 da auditoria pós-fixes (Set 2026): mesmo cuidado que em
+    // loadInspirations() — esvaziar o array em memória quando não há
+    // dados para este casamento, para não mostrar dados da conta anterior
+    // ao trocar de conta sem recarregar a página.
+    dressInspirations = raw ? JSON.parse(raw) : [];
+  }catch(e){ dressInspirations = []; }
 }
 document.getElementById('dress-insp-file-input').addEventListener('change', async (e)=>{
   const files = Array.from(e.target.files || []);
@@ -10762,6 +10814,14 @@ function findOrCreateFlow(user, isRetry){
   WEDDINGS().where('ownerEmails','array-contains', user.email.toLowerCase()).limit(1).get().then(qs=>{
     if(!qs.empty){
       currentWeddingId = qs.docs[0].id;
+      // Fix 6 da auditoria pós-fixes (Set 2026): as inspirações de
+      // fotos/vestido só podem ser lidas do localStorage DEPOIS de
+      // currentWeddingId estar definido (as chaves agora são por
+      // casamento) — chamado aqui, e não uma única vez ao carregar a
+      // página, também garante que trocar de conta na mesma sessão do
+      // browser recarrega as inspirações certas para a nova conta.
+      loadInspirations();
+      loadDressInspirations();
       attachFirestoreSync();
       CURRENT_DOC().update({
         ['lastLoginByEmail.'+sanitizeEmailKey(user.email.toLowerCase())]: firebase.firestore.FieldValue.serverTimestamp(),
@@ -10770,6 +10830,8 @@ function findOrCreateFlow(user, isRetry){
       }).catch(()=>{});
     } else {
       currentWeddingId = null;
+      inspirations = [];
+      dressInspirations = [];
       renderOnboarding();
     }
   }).catch(err=>{
@@ -10904,9 +10966,6 @@ document.getElementById('payment-alert-popup').addEventListener('click', e=>{
     document.getElementById('iab-warning').classList.add('show');
   }
 })();
-
-loadInspirations();
-loadDressInspirations();
 
 if(FIREBASE_READY){
   auth.onAuthStateChanged(user=>{
