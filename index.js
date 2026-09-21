@@ -69,6 +69,7 @@
  */
 
 const { onSchedule } = require('firebase-functions/v2/scheduler');
+const { onCall, HttpsError } = require('firebase-functions/v2/https');
 const { defineString } = require('firebase-functions/params');
 const logger = require('firebase-functions/logger');
 const admin = require('firebase-admin');
@@ -83,6 +84,9 @@ const SMTP_PORT = defineString('SMTP_PORT', { default: '465' });
 const SMTP_USER = defineString('SMTP_USER');
 const SMTP_PASS = defineString('SMTP_PASS');
 const SMTP_FROM = defineString('SMTP_FROM');
+// Só é preciso se ligares o classificador de IA (ver classifyWeddyIntent,
+// mais abaixo) — não tem nada a ver com os lembretes de RSVP acima.
+const GEMINI_API_KEY = defineString('GEMINI_API_KEY', { default: '' });
 
 const RSVP_BASE_URL = 'https://ritamatosdoliveira-creator.github.io/weddy-premium-app-teste/rsvp.html';
 
@@ -204,3 +208,164 @@ exports.sendRsvpReminders = onSchedule(
     logger.info(`Lembretes de RSVP: ${sent}/${jobs.length} enviados com sucesso.`);
   }
 );
+
+/**
+ * ========================================================
+ * classifyWeddyIntent — classificador de intenção por IA (Fase 3B.1)
+ * ========================================================
+ *
+ * O QUE ISTO FAZ
+ * O Weddy Concierge (rsvp.html) e o Assistente Weddy (index.html) já
+ * respondem a tudo por regras (regex/keywords) sobre os dados reais do
+ * casamento — isso não muda aqui. Esta função só entra quando essas
+ * regras NÃO reconhecem a mensagem: recebe o texto da pergunta e devolve
+ * qual das intenções já existentes melhor a descreve (ex: "GET_VENUE",
+ * "CONFIRM_ATTENDANCE"), usando o Gemini só para essa classificação.
+ *
+ * A IA NUNCA vê os dados do casamento (nem os recebe, nem os pode
+ * inventar) e NUNCA escreve a resposta final — isso continua a ser
+ * sempre feito no frontend, a partir do WeddyActions, com os dados reais.
+ * Esta função também não escreve nada no Firestore por si própria.
+ *
+ * PERMISSÕES — "guest" só pode receber intenções da lista de convidado,
+ * "couple" só as do lado dos noivos, e isso NUNCA depende do que o
+ * cliente diz que é: só é tratado como "couple" quem chamar esta função
+ * com uma sessão Firebase Auth válida (o rsvp.html nunca faz login, por
+ * isso um convidado não consegue fingir ser o casal só mudando o valor
+ * enviado no pedido). A própria lista de intenções permitidas (enviada ao
+ * Gemini como "enum" no schema da resposta) é outra camada da mesma
+ * proteção: o modelo não consegue devolver uma intenção fora da lista.
+ *
+ * PRÉ-REQUISITOS PARA ISTO FUNCIONAR
+ * 1) Uma API key da Gemini API (aistudio.google.com/apikey — conta
+ *    Google gratuita chega para começar, mas o uso em produção pode ter
+ *    custo; consulta os preços atuais na própria consola).
+ * 2) A mesma pasta "functions" e o mesmo ficheiro ".env.<project-id>" que
+ *    já usas para os lembretes de RSVP (ver topo deste ficheiro) — não é
+ *    preciso nenhum projeto Firebase novo nem nenhuma função separada.
+ *
+ * COMO INSTALAR
+ * 1) Cria a tua API key em aistudio.google.com/apikey.
+ * 2) No ficheiro ".env.weddy-premium-teste" dentro de "functions/" (o
+ *    mesmo do SMTP), acrescenta uma linha nova:
+ *      GEMINI_API_KEY=a-tua-chave-aqui
+ *    Nunca coloques esta chave em nenhum ficheiro do frontend
+ *    (index.html/rsvp.html) — só aqui, no backend.
+ * 3) Deploy:
+ *      firebase deploy --only functions:classifyWeddyIntent
+ *
+ * SEM CHAVE CONFIGURADA
+ * A função devolve sempre { intent: "UNKNOWN" } sem tentar chamar o
+ * Gemini — o Concierge/Assistente continuam a funcionar exatamente como
+ * hoje, só sem a segunda opinião da IA para perguntas fora das regex.
+ *
+ * CUSTO
+ * Cada chamada desta função consome a tua quota/faturação da Gemini API
+ * (fora do controlo da Firebase) — não há, por agora, nenhum limite de
+ * chamadas por casal/dia aqui dentro. Se um dia quiseres um limite,
+ * dá para acrescentar um contador simples no Firestore antes da chamada
+ * ao Gemini (pergunta-me quando quiseres isso).
+ */
+
+// Modelo do Gemini a usar — muda aqui se quiseres experimentar outro
+// (confirma sempre o nome exato/disponibilidade na consola do Gemini,
+// já que isto muda com alguma frequência).
+const GEMINI_MODEL = 'gemini-2.0-flash';
+
+// Intenções que o CONVIDADO (rsvp.html / Weddy Concierge) pode pedir.
+// Tem de bater certo com WEDDY_INTENTS em clone-app/rsvp.html.
+const GUEST_INTENTS = [
+  'GET_VENUE', 'GET_SCHEDULE', 'GET_DRESS_CODE', 'GET_PARKING', 'GET_TRANSPORT',
+  'GET_ACCOMMODATION', 'GET_GIFTS', 'GET_CONTACT', 'GET_FAQ', 'GET_TABLE', 'GET_RSVP',
+  'ASK_CHILDREN', 'CONFIRM_ATTENDANCE', 'DECLINE_ATTENDANCE', 'SET_RSVP_UNDECIDED',
+  'ADD_COMPANION', 'SET_DIETARY_RESTRICTION',
+];
+// Intenções que os NOIVOS (index.html / Assistente Weddy) podem pedir.
+// Tem de bater certo com WEDDY_COPILOT_INTENTS em clone-app/index.html.
+const COUPLE_INTENTS = [
+  'CREATE_TASK', 'GET_UPCOMING_TASKS', 'GET_PENDING_RSVPS', 'GET_DIETARY_LIST',
+  'GET_REMAINING_PAYMENTS', 'GET_RSVP_INFO', 'GET_GUEST_COUNT', 'GET_BUDGET',
+  'GET_COUNTDOWN', 'GET_TABLE_COUNT', 'SEARCH_DOCUMENTS',
+];
+
+function buildClassifyPrompt(question, allowedIntents) {
+  return [
+    'Classificas mensagens de um chat de casamento numa de várias intenções pré-definidas.',
+    'Nunca respondes à pergunta nem inventas informação sobre nenhum casamento — só decides qual das intenções abaixo melhor descreve a mensagem.',
+    'Intenções possíveis: ' + allowedIntents.join(', ') + ', UNKNOWN.',
+    'Se nenhuma intenção corresponder claramente, usa UNKNOWN.',
+    'Se a intenção envolver um valor extraído da própria mensagem (por exemplo, uma restrição alimentar dita pela pessoa, ou o texto de uma tarefa a criar), inclui-o em "value", tal como a pessoa escreveu, sem reformular nem resumir. Caso contrário, não incluas "value".',
+    `Mensagem: "${String(question).replace(/"/g, '\\"').slice(0, 500)}"`,
+  ].join('\n');
+}
+
+async function callGemini(question, allowedIntents) {
+  const key = GEMINI_API_KEY.value();
+  if (!key) return { intent: 'UNKNOWN' };
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${key}`;
+  const body = {
+    contents: [{ role: 'user', parts: [{ text: buildClassifyPrompt(question, allowedIntents) }] }],
+    generationConfig: {
+      responseMimeType: 'application/json',
+      responseSchema: {
+        type: 'OBJECT',
+        properties: {
+          intent: { type: 'STRING', enum: [...allowedIntents, 'UNKNOWN'] },
+          value: { type: 'STRING' },
+        },
+        required: ['intent'],
+      },
+      temperature: 0,
+    },
+  };
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    throw new Error(`Gemini respondeu ${res.status}: ${await res.text().catch(() => '')}`);
+  }
+  const json = await res.json();
+  const text = json.candidates && json.candidates[0] && json.candidates[0].content
+    && json.candidates[0].content.parts && json.candidates[0].content.parts[0]
+    && json.candidates[0].content.parts[0].text;
+  if (!text) throw new Error('Resposta vazia do Gemini.');
+  const parsed = JSON.parse(text);
+  // Nunca confiar cegamente no que voltou, mesmo com responseSchema —
+  // é a validação final antes de devolver ao frontend.
+  if (!parsed || typeof parsed.intent !== 'string' || !allowedIntents.includes(parsed.intent)) {
+    return { intent: 'UNKNOWN' };
+  }
+  const out = { intent: parsed.intent };
+  if (typeof parsed.value === 'string' && parsed.value.trim()) {
+    out.value = parsed.value.trim().slice(0, 200);
+  }
+  return out;
+}
+
+exports.classifyWeddyIntent = onCall({ region: 'europe-west1' }, async (request) => {
+  const question = request.data && request.data.question;
+  const requestedRole = request.data && request.data.role;
+  if (!question || typeof question !== 'string' || !question.trim() || question.length > 500) {
+    throw new HttpsError('invalid-argument', 'Pergunta em falta, vazia ou demasiado longa.');
+  }
+
+  // O papel nunca vem só do que o cliente diz: só é tratado como "couple"
+  // quem tiver mesmo uma sessão Firebase Auth válida neste pedido — o
+  // rsvp.html (lado do convidado) nunca inicia sessão, por isso não há
+  // forma de um convidado se fazer passar pelo casal só mudando "role".
+  const isCouple = !!request.auth && requestedRole === 'couple';
+  const allowedIntents = isCouple ? COUPLE_INTENTS : GUEST_INTENTS;
+
+  try {
+    return await callGemini(question.trim(), allowedIntents);
+  } catch (err) {
+    logger.error('Erro a chamar o Gemini em classifyWeddyIntent:', err);
+    // Nunca propaga o erro ao frontend como falha — do ponto de vista de
+    // quem está a conversar, "não percebi" é sempre uma resposta válida,
+    // e o Concierge/Assistente já sabem cair na resposta genérica quando
+    // recebem UNKNOWN.
+    return { intent: 'UNKNOWN' };
+  }
+});

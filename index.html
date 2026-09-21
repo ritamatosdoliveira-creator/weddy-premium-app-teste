@@ -1230,6 +1230,7 @@ html.rotate-blocked .rotate-lock-overlay{ display:flex; }
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
@@ -1337,13 +1338,44 @@ const firebaseConfig = {
   appId: "1:319051198074:web:f4a3f7ed8d8a0dc4c015c3"
 };
 const FIREBASE_READY = !firebaseConfig.apiKey.startsWith('COLOCA_AQUI');
-let auth = null, db = null, storage = null;
+// Região onde a Cloud Function de classificação por IA (Fase 3B) é
+// implantada — tem de bater certo com a região usada no deploy
+// (functions-deliverable/index.js), senão a chamada falha.
+const WEDDY_FUNCTIONS_REGION = 'europe-west1';
+let auth = null, db = null, storage = null, cloudFunctions = null;
 if(FIREBASE_READY){
   firebase.initializeApp(firebaseConfig);
   auth = firebase.auth();
   db = firebase.firestore();
   storage = firebase.storage();
+  cloudFunctions = (typeof firebase.functions==='function') ? firebase.app().functions(WEDDY_FUNCTIONS_REGION) : null;
 }
+// ============================================================
+// AI SERVICE (Fase 3B.1) — única porta de entrada para qualquer chamada a
+// um modelo de IA real em toda a app. Não sabe nada sobre "Gemini" nem
+// sobre nenhum fornecedor — fala sempre com a nossa própria Cloud Function
+// (classifyWeddyIntent), que é quem de facto guarda a chave da API e chama
+// o modelo. Isto é só um CLASSIFICADOR: nunca devolve a resposta final ao
+// utilizador, só a intenção — quem responde continua a ser sempre
+// WeddyActions + os dados reais deste casamento (ver respondeAssistente/
+// respondeConcierge), nunca o modelo de IA a inventar ou calcular nada.
+// Se um dia trocarmos de fornecedor, ou tivermos mais do que uma chamada
+// de IA na app, é só este bloco que muda.
+// ============================================================
+const AIService = {
+  async classify(question, role){
+    if(!cloudFunctions) return { intent:'UNKNOWN' };
+    try{
+      const call = cloudFunctions.httpsCallable('classifyWeddyIntent');
+      const res = await call({ question, role });
+      const data = res && res.data;
+      return (data && typeof data.intent === 'string') ? data : { intent:'UNKNOWN' };
+    }catch(err){
+      console.error('Weddy AIService.classify error:', err.code, err.message);
+      return { intent:'UNKNOWN' };
+    }
+  }
+};
 if(typeof pdfjsLib !== 'undefined'){
   pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 }
@@ -2469,6 +2501,7 @@ const APP_I18N = {
     assistChipSuppliers:'Quero saber sobre fornecedores', assistChipRSVP:'Como funciona o RSVP?', assistChipQuestion:'Tenho uma dúvida sobre a app', assistChipFeatures:'Quero ver novas funcionalidades',
     assistHeroEyebrow:'Assistente Weddy', assistHeroTitle:'O seu aliado no<br>planeamento do casamento', assistHeroText:'Tire as suas dúvidas, receba sugestões<br>e tenha tudo mais simples.',
     assistInputPlaceholder:'Escreve a tua pergunta…', assistSendLabel:'Enviar', btnClose:'Fechar',
+    assistThinking:'A pensar…',
     testAccountNote:'(Esta conta é de testes — a subscrição real ainda não está ligada a nenhum pagamento.)',
     rsvpSyncChanged: parts => `O que mudou: ${parts}.`, rsvpSyncNothing:'Sem alterações novas desde a última vez.',
     rsvpConfirmedChanged: n => `${n} confirmaç${n===1?'ão':'ões'} atualizada${n===1?'':'s'}`,
@@ -2676,8 +2709,10 @@ const APP_I18N = {
     privacyWhoSeesText:'Só as pessoas com o email que tu convidares (em "Convidar"), listadas em "Segurança", conseguem ver os dados do teu casamento. Podes remover o acesso de alguém a qualquer momento.',
     privacyGuestsTitle:'Nota sobre os teus convidados (Convites RSVP)',
     privacyGuestsText:'Quando geras um link de RSVP para um convidado, criamos um registo próprio e independente só para essa pessoa — com o nome que lhe deste, a data e o local do casamento, e (depois de responder) a presença, a escolha de refeição, restrições alimentares ou alergias, e se precisa de transporte ou alojamento. Esse convidado nunca vê a lista completa de convidados nem o orçamento do casamento — só a sua própria informação. Ele pode consultar, atualizar ou apagar a sua resposta a qualquer momento através do próprio link, sem precisar de criar conta. Tu, como responsável pelo tratamento destes dados, podes remover o link de um convidado a qualquer momento em "Convites RSVP"; ao fazê-lo, deixa de ser possível responder ou consultar essa resposta através do link. Quando agrupas vários convidados da mesma família num único link partilhado, esse registo passa a guardar a resposta de cada pessoa da família separadamente (num campo próprio para cada uma) — mas continua a ser um único link, por isso qualquer pessoa que o receba consegue ver e alterar a resposta de todos os membros desse grupo; só quem tem o link consegue aceder a estes dados. É tua responsabilidade informar os teus convidados de que os dados que partilham contigo através deste link servem apenas para organizar o casamento.',
+    privacyAssistantTitle:'Nota sobre o Assistente Weddy (Copilot dos noivos)',
+    privacyAssistantText:'O Assistente Weddy responde a perguntas sobre o teu próprio casamento (convidados, orçamento, pagamentos, tarefas) e só executa ações simples e de baixo risco quando pedes explicitamente (como criar uma tarefa) — nunca altera dados de convidados nem pagamentos através do chat. As respostas vêm sempre dos dados reais deste casamento, nunca inventadas: quando a tua pergunta não é reconhecida por regras simples, pode ser enviada (só o texto da pergunta, nunca os dados do casamento) a um modelo de inteligência artificial só para tentar perceber a que tipo de pedido corresponde — nunca para gerar a resposta final. A conversa fica guardada no documento do teu casamento (tal como o resto dos teus dados), só para veres o histórico entre sessões.',
     privacyConciergeTitle:'Nota sobre o assistente de conversa (Weddy Concierge)',
-    privacyConciergeText:'Cada link de convidado inclui um pequeno assistente de conversa que responde a perguntas sobre o casamento (local, horário, dress code, estacionamento, transporte, alojamento, presentes, e outras perguntas e respostas que tu próprio(a) escreveres em Definições → Convites RSVP → Weddy Concierge). Se o convidado disser, por exemplo, que afinal não vai poder vir ou que tem uma restrição alimentar, o assistente pede sempre confirmação antes de alterar a resposta guardada — nunca altera nada sem essa confirmação explícita. Este assistente não usa nenhum modelo de inteligência artificial real: responde apenas com base na informação que tu preencheste, nunca inventa respostas, e a conversa em si fica só no dispositivo do convidado — não é guardada nem fica visível para ti, apenas o resultado de uma alteração que o convidado confirme (tal como se tivesse usado o formulário normal).',
+    privacyConciergeText:'Cada link de convidado inclui um pequeno assistente de conversa que responde a perguntas sobre o casamento (local, horário, dress code, estacionamento, transporte, alojamento, presentes, e outras perguntas e respostas que tu próprio(a) escreveres em Definições → Convites RSVP → Weddy Concierge). Se o convidado disser, por exemplo, que afinal não vai poder vir ou que tem uma restrição alimentar, o assistente pede sempre confirmação antes de alterar a resposta guardada — nunca altera nada sem essa confirmação explícita. As respostas vêm sempre da informação que tu preencheste, nunca inventadas: quando a mensagem do convidado não é reconhecida por regras simples, pode ser enviada (só o texto da pergunta, nunca dados do casamento) a um modelo de inteligência artificial só para tentar perceber a que tipo de pedido corresponde — nunca para gerar a resposta final nem para decidir sozinho uma alteração. A conversa em si fica só no dispositivo do convidado — não é guardada nem fica visível para ti, apenas o resultado de uma alteração que o convidado confirme (tal como se tivesse usado o formulário normal).',
 
     defExportTitle:'Exportar dados',
     exportIncludesLabel:'O que vai incluído',
@@ -3021,6 +3056,7 @@ const APP_I18N = {
     assistChipSuppliers:'I want to know about suppliers', assistChipRSVP:'How does RSVP work?', assistChipQuestion:'I have a question about the app', assistChipFeatures:'I want to see new features',
     assistHeroEyebrow:'Weddy Assistant', assistHeroTitle:'Your ally in<br>planning the wedding', assistHeroText:'Ask your questions, get suggestions<br>and make everything simpler.',
     assistInputPlaceholder:'Type your question…', assistSendLabel:'Send', btnClose:'Close',
+    assistThinking:'Thinking…',
     loginLoading:'Loading…',
     loginTagSignup:'Create your couple account', loginTagLogin:'Sign in to your account',
     emailPlaceholder:'your-email@example.com', passPlaceholder:'Password (min. 6 characters)', passConfirmPlaceholder:'Confirm password',
@@ -3259,8 +3295,10 @@ const APP_I18N = {
     privacyWhoSeesText:'Only the people whose email you\'ve invited (in "Invite"), listed in "Security", can see your wedding\'s data. You can remove someone\'s access at any time.',
     privacyGuestsTitle:'Note about your guests (RSVP invitations)',
     privacyGuestsText:'When you generate an RSVP link for a guest, we create a separate, independent record just for that person — with the name you gave them, the wedding date and venue, and (once they respond) their attendance, meal choice, dietary restrictions or allergies, and whether they need transport or accommodation. That guest never sees the full guest list or the wedding budget — only their own information. They can view, update or delete their response at any time through their own link, without creating an account. As the controller of this data, you can remove a guest\'s link at any time in "RSVP invitations"; doing so makes it impossible to respond to or view that response through the link any longer. When you group several guests from the same family into one shared link, that record keeps each family member\'s response separately (in its own field) — but it is still a single link, so anyone who has it can see and change every family member\'s response; only whoever has the link can access this data. It is your responsibility to inform your guests that the data they share with you through this link is used solely to organize the wedding.',
+    privacyAssistantTitle:'Note about the Weddy Assistant (couple Copilot)',
+    privacyAssistantText:"The Weddy Assistant answers questions about your own wedding (guests, budget, payments, tasks) and only carries out simple, low-risk actions when you explicitly ask for them (like creating a task) — it never changes guest data or payments through the chat. Answers always come from this wedding's real data, never invented: when your question isn't recognized by simple rules, it may be sent (just the question's text, never wedding data) to an AI model only to work out what kind of request it is — never to generate the final answer. The conversation is saved in your wedding's document (like the rest of your data), only so you can see the history across sessions.",
     privacyConciergeTitle:'Note about the chat assistant (Weddy Concierge)',
-    privacyConciergeText:"Each guest link includes a small chat assistant that answers questions about the wedding (venue, schedule, dress code, parking, transport, accommodation, gifts, and any other questions and answers you write yourself in Settings → RSVP invitations → Weddy Concierge). If the guest says, for example, that they can no longer attend or that they have a dietary restriction, the assistant always asks for confirmation before changing the saved response — it never changes anything without that explicit confirmation. This assistant does not use any real artificial intelligence model: it only answers based on the information you filled in, never makes up answers, and the conversation itself stays on the guest's own device — it is not saved or visible to you, only the result of a change the guest confirms (just as if they had used the regular form).",
+    privacyConciergeText:"Each guest link includes a small chat assistant that answers questions about the wedding (venue, schedule, dress code, parking, transport, accommodation, gifts, and any other questions and answers you write yourself in Settings → RSVP invitations → Weddy Concierge). If the guest says, for example, that they can no longer attend or that they have a dietary restriction, the assistant always asks for confirmation before changing the saved response — it never changes anything without that explicit confirmation. Answers always come from the information you filled in, never invented: when a guest's message isn't recognized by simple rules, it may be sent (just the question's text, never wedding data) to an AI model only to work out what kind of request it is — never to generate the final answer or to decide on a change by itself. The conversation itself stays on the guest's own device — it is not saved or visible to you, only the result of a change the guest confirms (just as if they had used the regular form).",
 
     defExportTitle:'Export data',
     exportIncludesLabel:'What\'s included',
@@ -5797,10 +5835,12 @@ function getProactiveSuggestions(){
 // WEDDY COPILOT (lado dos noivos) — Fase 3A do roadmap: a mesma
 // arquitetura Intent → Permission check → Action → Resposta já usada no
 // Weddy Concierge (rsvp.html, Fase 2.5), agora aplicada ao Assistente dos
-// noivos. Continua sem qualquer IA real: classifyCopilotIntent() é a única
-// função que "lê" a pergunta (por regex/keywords), tal como antes — no dia
-// em que isso for trocado por um classificador (Fase 3B), o resto
-// (permissões, ações, respostas) fica exatamente igual.
+// noivos. classifyCopilotIntent() continua a ser sempre a primeira
+// tentativa — é só regex/keywords, sem custo nem rede. Desde a Fase 3B.1,
+// quando isso não reconhece nada (UNKNOWN), respondeAssistente() (mais
+// abaixo) tenta uma segunda opinião do AIService antes de desistir — mas
+// só para escolher a intenção; quem lê o estado do casamento e escreve a
+// resposta final continua a ser sempre WeddyActions, nunca a IA.
 // ============================================================
 
 const WEDDY_COPILOT_INTENTS = {
@@ -5927,9 +5967,22 @@ const WeddyActions = {
 // só (este chat, ao contrário do Concierge, não tem passo de confirmação —
 // as ações de hoje, como criar tarefa, são de baixo risco e reversíveis
 // diretamente no ecrã).
-function respondeAssistente(pergunta){
+// A partir da Fase 3B.1: se as regex não reconhecerem nada (UNKNOWN), tenta
+// -se uma segunda opinião do AIService antes de desistir — mas só para
+// escolher a intenção; a IA nunca fica a saber os dados do casamento nem
+// escreve a resposta final, isso continua a ser sempre feito abaixo, a
+// partir do WeddyActions. Sem chave de IA configurada (ou em caso de
+// erro), AIService.classify() devolve sempre UNKNOWN e o comportamento
+// fica idêntico ao de antes desta camada existir.
+async function respondeAssistente(pergunta){
   const context = {};
-  const classified = classifyCopilotIntent(pergunta);
+  let classified = classifyCopilotIntent(pergunta);
+  if(classified.intent === WEDDY_COPILOT_INTENTS.UNKNOWN){
+    const aiGuess = await AIService.classify(pergunta, 'couple');
+    if(aiGuess && aiGuess.intent && aiGuess.intent!==WEDDY_COPILOT_INTENTS.UNKNOWN && WEDDY_COPILOT_INTENTS[aiGuess.intent]){
+      classified = aiGuess;
+    }
+  }
   const permission = checkCopilotIntentPermission(classified.intent, context);
   const I = WEDDY_COPILOT_INTENTS;
   if(!permission.allowed) return 'Não consigo fazer isso por aqui.';
@@ -6474,12 +6527,22 @@ function bindChatPanelHandlers(){
   const sendAssistMessage = (presetText)=>{
     const texto = (presetText!==undefined ? presetText : (assistInput? assistInput.value : '')).trim();
     if(!texto) return;
+    if(assistInput) assistInput.value = '';
     assistChatHistory.push({ role:'user', text:texto });
-    assistChatHistory.push({ role:'bot', text: respondeAssistente(texto) });
+    // Só mostra o indicador "a pensar…" quando as regex não reconheceram
+    // nada localmente e vai mesmo haver uma chamada de rede ao AIService —
+    // uma resposta já reconhecida continua instantânea, como antes.
+    const needsAI = classifyCopilotIntent(texto).intent === WEDDY_COPILOT_INTENTS.UNKNOWN;
+    if(needsAI) assistChatHistory.push({ role:'bot', text: ta('assistThinking') });
     renderChatPanelBody();
-    const freshInput = document.getElementById('assist-chat-input');
-    if(freshInput) freshInput.focus();
-    saveAssistChatHistory();
+    respondeAssistente(texto).then(resposta=>{
+      if(needsAI) assistChatHistory.pop();
+      assistChatHistory.push({ role:'bot', text: resposta });
+      renderChatPanelBody();
+      const freshInput = document.getElementById('assist-chat-input');
+      if(freshInput) freshInput.focus();
+      saveAssistChatHistory();
+    });
   };
   if(assistSendBtn) assistSendBtn.addEventListener('click', ()=>sendAssistMessage());
   if(assistInput) assistInput.addEventListener('keydown', e=>{
@@ -6823,6 +6886,9 @@ function viewDefPrivacidade(){
 
     <p><b>${ta('privacyConciergeTitle')}</b><br>
     ${ta('privacyConciergeText')}</p>
+
+    <p><b>${ta('privacyAssistantTitle')}</b><br>
+    ${ta('privacyAssistantText')}</p>
 
   </div>
   `;

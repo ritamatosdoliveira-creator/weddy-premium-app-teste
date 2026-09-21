@@ -1,14 +1,23 @@
-# Weddy — Lembretes automáticos de RSVP (Cloud Function)
+# Weddy — Cloud Functions (lembretes de RSVP + classificador de IA)
 
-Este é o backend que faltava para a Fase 1 do roadmap (item "Reminders"):
-uma Cloud Function agendada que, todos os dias, verifica quem ainda não
-respondeu ao RSVP e está perto do prazo, e manda-lhe um email de lembrete
-com o link para responder.
+Este ficheiro cobre as duas Cloud Functions que vivem no mesmo `index.js`:
+
+1. **`sendRsvpReminders`** — lembretes automáticos de RSVP por email (Fase 1
+   do roadmap). Corre sozinha, todos os dias.
+2. **`classifyWeddyIntent`** — o classificador de intenção por IA (Fase
+   3B.1) usado pelo Weddy Concierge e pelo Assistente Weddy só quando as
+   regex locais não reconhecem uma mensagem. Ver a secção própria mais
+   abaixo — é opcional e independente da primeira.
 
 **Isto só funciona depois de fazeres o deploy tu mesmo** — eu não consigo
 implantar Cloud Functions a partir deste ambiente (não tenho credenciais
-da Firebase CLI nem acesso à faturação do projeto). Os passos abaixo são
-tudo o que é preciso.
+da Firebase CLI nem acesso à faturação do projeto, nem a nenhuma chave de
+API de IA). Os passos abaixo são tudo o que é preciso.
+
+As duas funções podem ser implantadas juntas ou em separado
+(`firebase deploy --only functions:sendRsvpReminders,functions:classifyWeddyIntent`,
+ou só uma de cada vez) — usam o mesmo ficheiro `.env.<project-id>` para as
+suas respetivas variáveis, mas não dependem uma da outra.
 
 ## O que precisas de ter antes de começar
 
@@ -103,3 +112,80 @@ aqui o ficheiro `firestore.rules` que tens neste momento.
   lê/escreve a coleção `guests` (nunca a lista completa de convidados nem
   o orçamento), e corre só contra o Firestore do projeto
   `weddy-premium-teste` — nunca toca em `weddy-app-bd12f`.
+
+---
+
+## Ligar o classificador de IA — `classifyWeddyIntent` (Fase 3B.1)
+
+Isto é **opcional**. Sem isto configurado, o Weddy Concierge e o
+Assistente Weddy continuam a funcionar exatamente como hoje — só por
+regras — e simplesmente respondem com a mensagem genérica de "não
+percebi" quando uma pergunta não bate com nenhuma regra.
+
+### O que esta função faz e não faz
+
+- Recebe só o **texto** de uma pergunta que as regex locais não
+  reconheceram, e devolve qual de uma lista fixa de intenções (ex:
+  `GET_VENUE`, `CONFIRM_ATTENDANCE`) melhor a descreve.
+- **Nunca** recebe os dados do casamento, **nunca** inventa uma resposta,
+  e **nunca** escreve nada no Firestore. A resposta final ao convidado ou
+  ao casal continua sempre a vir do `WeddyActions` no frontend, com os
+  dados reais — a IA só ajuda a "apontar" para a intenção certa.
+- Separa automaticamente o que um **convidado** pode pedir (Weddy
+  Concierge) do que só os **noivos** podem pedir (Assistente Weddy) — e
+  isto não depende do que o pedido diz que é: só é tratado como "noivos"
+  quem chamar a função com uma sessão Firebase Auth válida.
+
+### O que precisas de ter antes de começar
+
+1. **Plano Blaze no Firebase**, tal como para os lembretes de RSVP acima
+   (uma Cloud Function chamar uma API externa como a do Gemini exige
+   sempre o plano Blaze, independentemente de ser agendada ou não).
+2. **Uma API key da Gemini API** — cria uma gratuitamente em
+   [aistudio.google.com/apikey](https://aistudio.google.com/apikey) com
+   qualquer conta Google. Consulta os preços atuais na própria consola
+   antes de usar isto a sério — o uso além do nível gratuito é faturado à
+   tua conta Google, não à Anthropic nem a mim.
+
+### Passo a passo
+
+1. Se ainda não tiveres a pasta `functions/` com o `sendRsvpReminders` já
+   configurado, segue primeiro os passos 1–3 da secção anterior deste
+   README.
+2. No mesmo ficheiro `functions/.env.weddy-premium-teste` que já usas
+   para o SMTP, acrescenta uma linha nova:
+   ```
+   GEMINI_API_KEY=a-tua-chave-aqui
+   ```
+   **Nunca** coloques esta chave em `index.html`, `rsvp.html`, nem em
+   nenhum outro ficheiro do frontend — só aqui, no backend. E, tal como o
+   ficheiro do SMTP, este ficheiro nunca deve ir para um repositório
+   público.
+3. Deploy:
+   ```
+   firebase deploy --only functions:classifyWeddyIntent
+   ```
+4. Confirma que `index.html` e `rsvp.html` já incluem o script
+   `firebase-functions-compat.js` (já vem incluído se estiveres a usar a
+   versão mais recente destes ficheiros) e que a região no frontend
+   (`WEDDY_FUNCTIONS_REGION`, no início do `<script>` de cada um) continua
+   `'europe-west1'` — tem de bater sempre certo com a região do deploy
+   acima.
+
+### Testar
+
+Abre o Assistente Weddy (ou o Weddy Concierge num link de convidado) e faz
+uma pergunta que sabes não bater com nenhuma regra — por exemplo "acho que
+me esqueci de alguma coisa, o que me falta tratar esta semana?" ou algo
+fora do guião. Se a IA estiver bem configurada, deves ver uma breve
+mensagem "A pensar…" antes da resposta. Para depurar sem gastar chamadas à
+API, usa o emulador local (`firebase emulators:start`) e olha para os
+logs da função no terminal.
+
+### Custo e limites
+
+Cada chamada consome a tua quota/faturação da Gemini API — isto é
+completamente independente do preço do Firebase. Por decisão tua, esta
+função **não tem, por agora, nenhum limite de chamadas por casal/dia** —
+se decidires que queres um, é uma alteração pequena (um contador no
+Firestore antes de chamar o Gemini) que posso fazer quando pedires.

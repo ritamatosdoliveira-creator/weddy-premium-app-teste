@@ -1,6 +1,6 @@
 {
-  "name": "weddy-rsvp-reminders",
-  "description": "Cloud Function do Weddy que envia lembretes automáticos de RSVP por email aos convidados que ainda não responderam.",
+  "name": "weddy-functions",
+  "description": "Cloud Functions do Weddy: lembretes automáticos de RSVP por email, e o classificador de intenção por IA (Fase 3B) usado pelo Weddy Concierge e pelo Assistente Weddy quando as regex locais não reconhecem uma mensagem.",
   "engines": { "node": "20" },
   "main": "index.js",
   "dependencies": {

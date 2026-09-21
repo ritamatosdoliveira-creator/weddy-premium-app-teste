@@ -106,8 +106,12 @@ h1{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:30px; col
 .member-card .field:last-child{ margin-bottom:0; }
 .member-status-note{ font-size:12px; color:var(--ink-soft); margin-top:-4px; }
 
-/* Weddy Concierge — chat do convidado. Tudo respostas por regras, nunca
-   IA real: o motor está em respondeConcierge() mais abaixo no <script>. */
+/* Weddy Concierge — chat do convidado. As respostas continuam a vir sempre
+   de regras (WeddyActions) sobre os dados reais deste casamento — nunca
+   inventadas por IA. Desde a Fase 3B.1, quando nenhuma regra reconhece a
+   mensagem, uma Cloud Function pode usar um modelo de IA real só para
+   ESCOLHER qual das intenções já existentes melhor descreve a pergunta;
+   o motor está em respondeConcierge() mais abaixo no <script>. */
 .concierge-fab{ all:unset; box-sizing:border-box; position:fixed; right:18px; bottom:18px; width:56px; height:56px; border-radius:50%; background:var(--rust); color:#fff; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 16px rgba(154,79,61,0.35); cursor:pointer; z-index:40; }
 .concierge-fab svg{ width:24px; height:24px; }
 .concierge-fab.state-hidden{ display:none !important; }
@@ -283,6 +287,7 @@ h1{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:30px; col
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
 <script>
 (function(){
   const firebaseConfig = {
@@ -296,6 +301,34 @@ h1{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:30px; col
   firebase.initializeApp(firebaseConfig);
   const db = firebase.firestore();
   const storage = firebase.storage();
+  // Região onde a Cloud Function de classificação por IA (Fase 3B) é
+  // implantada — tem de bater certo com a região usada no deploy
+  // (functions-deliverable/index.js).
+  const WEDDY_FUNCTIONS_REGION = 'europe-west1';
+  const cloudFunctions = (typeof firebase.functions==='function') ? firebase.app().functions(WEDDY_FUNCTIONS_REGION) : null;
+  // ============================================================
+  // AI SERVICE (Fase 3B.1) — mesma ideia que no lado dos noivos: única
+  // porta de entrada para qualquer chamada a um modelo de IA real. Só
+  // classifica a intenção da mensagem do convidado; nunca responde
+  // diretamente nem inventa dados do casamento — isso continua a ser
+  // sempre respondeConcierge + WeddyActions (ver abaixo). Sem Cloud
+  // Function disponível (ou em caso de erro), devolve sempre UNKNOWN e o
+  // Concierge comporta-se exatamente como antes desta camada existir.
+  // ============================================================
+  const AIService = {
+    async classify(question, role){
+      if(!cloudFunctions) return { intent:'UNKNOWN' };
+      try{
+        const call = cloudFunctions.httpsCallable('classifyWeddyIntent');
+        const res = await call({ question, role });
+        const data = res && res.data;
+        return (data && typeof data.intent === 'string') ? data : { intent:'UNKNOWN' };
+      }catch(err){
+        console.error('Weddy AIService.classify error:', err.code, err.message);
+        return { intent:'UNKNOWN' };
+      }
+    }
+  };
 
   /* ============================================================
      TRADUÇÃO (PT/EN) — tudo o que é texto fixo da interface vive
@@ -365,7 +398,7 @@ h1{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:30px; col
       memoriesThanks: 'Obrigado por partilhar! 💛',
       memoriesError: 'Não foi possível enviar esta foto. Verifica a internet e tenta novamente.',
       privacyToggle: 'Como tratamos os teus dados',
-      privacyText: 'Os dados que dás aqui (nome, resposta, refeição, restrições alimentares, transporte/alojamento) são vistos apenas pelos noivos e usados só para organizar este casamento — nunca são partilhados com mais ninguém. Este link não te mostra a lista de outros convidados nem informações do orçamento. Podes atualizar ou apagar a tua resposta a qualquer momento, neste mesmo link. O assistente de conversa (Weddy Concierge) não usa nenhuma inteligência artificial real — responde só com base na informação que os noivos escreveram, nunca altera a tua resposta sem primeiro pedires confirmação, e a conversa em si fica só neste dispositivo, não é guardada nem lida pelos noivos.',
+      privacyText: 'Os dados que dás aqui (nome, resposta, refeição, restrições alimentares, transporte/alojamento) são vistos apenas pelos noivos e usados só para organizar este casamento — nunca são partilhados com mais ninguém. Este link não te mostra a lista de outros convidados nem informações do orçamento. Podes atualizar ou apagar a tua resposta a qualquer momento, neste mesmo link. O assistente de conversa (Weddy Concierge) responde só com base na informação que os noivos escreveram, nunca inventa respostas, e nunca altera a tua resposta sem primeiro pedires confirmação. Quando não reconhece a tua mensagem por regras simples, pode enviar só o texto da pergunta (nunca os teus dados) a um modelo de inteligência artificial só para perceber que tipo de pedido é — nunca para decidir ou escrever a resposta final. A conversa em si fica só neste dispositivo, não é guardada nem lida pelos noivos.',
       deleteResponseLink: 'Apagar a minha resposta',
       deleteConfirm: 'Tens a certeza que queres apagar a tua resposta (presença, refeição, restrições, transporte e alojamento)? Isto não apaga o teu nome nem o link do convite — só a tua resposta.',
       deleteSuccessMsg: 'A tua resposta foi apagada. Podes responder de novo quando quiseres.',
@@ -411,6 +444,7 @@ h1{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:30px; col
       conciergeFallback: 'Não tenho essa informação disponível neste momento.',
       conciergeFallbackWithContact: v => `Não tenho essa informação disponível neste momento. Podes contactar os noivos através de: ${v}`,
       conciergeDidntUnderstand: 'Não percebi bem a tua pergunta — podes tentar de outra forma? Também podes usar os botões acima da resposta para confirmar presença.',
+      conciergeThinking: 'A pensar…',
       conciergeActionUnavailableFamily: 'Para alterar a tua resposta, usa os campos acima (cada pessoa da família tem o seu próprio cartão) — por aqui só posso responder a perguntas.',
       conciergeConfirmYesText: 'Vou marcar a tua presença como confirmada. Confirmas?',
       conciergeConfirmNoText: 'Vou marcar que não vais conseguir estar presente. Confirmas?',
@@ -486,7 +520,7 @@ h1{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:30px; col
       memoriesThanks: 'Thanks for sharing! 💛',
       memoriesError: 'Could not upload this photo. Check your connection and try again.',
       privacyToggle: 'How we handle your data',
-      privacyText: "The data you give here (name, response, meal, dietary restrictions, transport/accommodation) is only seen by the couple and used solely to organize this wedding — it's never shared with anyone else. This link never shows you the other guests' list or budget information. You can update or delete your response at any time, on this same link. The chat assistant (Weddy Concierge) does not use any real artificial intelligence — it only answers based on information the couple wrote, never changes your response without first asking you to confirm, and the conversation itself stays on this device only — it isn't saved or read by the couple.",
+      privacyText: "The data you give here (name, response, meal, dietary restrictions, transport/accommodation) is only seen by the couple and used solely to organize this wedding — it's never shared with anyone else. This link never shows you the other guests' list or budget information. You can update or delete your response at any time, on this same link. The chat assistant (Weddy Concierge) only answers based on information the couple wrote, never makes up answers, and never changes your response without first asking you to confirm. When it doesn't recognize your message through simple rules, it may send just the question's text (never your data) to an AI model only to work out what kind of request it is — never to decide or write the final answer. The conversation itself stays on this device only — it isn't saved or read by the couple.",
       deleteResponseLink: 'Delete my response',
       deleteConfirm: "Are you sure you want to delete your response (attendance, meal, restrictions, transport and accommodation)? This does not delete your name or the invitation link — only your response.",
       deleteSuccessMsg: 'Your response has been deleted. You can respond again whenever you like.',
@@ -532,6 +566,7 @@ h1{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:30px; col
       conciergeFallback: "I don't have that information available right now.",
       conciergeFallbackWithContact: v => `I don't have that information available right now. You can contact the couple at: ${v}`,
       conciergeDidntUnderstand: "I didn't quite get that — could you try rephrasing? You can also use the buttons above to confirm your attendance.",
+      conciergeThinking: 'Thinking…',
       conciergeActionUnavailableFamily: "To change your response, use the fields above (each family member has their own card) — here I can only answer questions.",
       conciergeConfirmYesText: "I'll mark your attendance as confirmed. Confirm?",
       conciergeConfirmNoText: "I'll mark that you won't be able to attend. Confirm?",
@@ -1193,16 +1228,19 @@ h1{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:30px; col
   // WEDDY CONCIERGE — chat do convidado.
   //
   // Fase 2.5 do roadmap "Weddy 2.0": camada intermédia entre o motor por
-  // regras (Fase 2) e um futuro motor com IA real. Em vez de ir direto de
-  // "texto → resposta", a mensagem passa sempre por quatro passos fixos:
+  // regras (Fase 2) e um motor híbrido com IA (Fase 3B). Em vez de ir
+  // direto de "texto → resposta", a mensagem passa sempre por quatro
+  // passos fixos:
   //
-  //   mensagem → classifyIntent → checkIntentPermission → WeddyActions → resposta
+  //   mensagem → classifyIntent (+ AIService de reserva) → checkIntentPermission → WeddyActions → resposta
   //
-  // O único sítio que hoje "não sabe nada de IA" é classifyIntent — é uma
-  // função de regex/keywords, tal como antes. No dia em que ligarmos um
-  // classificador real (Fase 3+), só essa função muda: devolve sempre a
-  // mesma forma { intent, value? }, por isso tudo o resto (permissões,
-  // ações, respostas) fica exatamente igual.
+  // classifyIntent continua a ser sempre a primeira tentativa — é uma
+  // função de regex/keywords, sem custo nem rede. Só quando não reconhece
+  // nada (UNKNOWN) é que respondeConcierge (abaixo) recorre ao AIService,
+  // que é a única peça desta cadeia que fala com um modelo de IA real —
+  // e mesmo essa só devolve uma intenção da mesma lista, nunca uma
+  // resposta nem dados do casamento inventados. Sem isso (ou em caso de
+  // erro), o comportamento é idêntico ao anterior à Fase 3B.
   // ============================================================
 
   const WEDDY_INTENTS = {
@@ -1372,10 +1410,19 @@ h1{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:30px; col
 
   // 4) RESPOSTA — junta classificação + permissão + ação numa única { text,
   // action? }, no mesmo formato que o resto do chat já esperava antes desta
-  // camada existir (conciergeHandleUserMessage não precisou de mudar nada).
-  function respondeConcierge(pergunta){
+  // camada existir. A partir da Fase 3B.1: se as regex não reconhecerem
+  // nada (UNKNOWN), tenta-se o AIService antes de desistir — só para
+  // escolher a intenção; a IA nunca sabe os dados deste convidado nem
+  // escreve a resposta final, que continua sempre a vir daqui de baixo.
+  async function respondeConcierge(pergunta){
     const context = { guestData, guestToken };
-    const classified = classifyIntent(pergunta);
+    let classified = classifyIntent(pergunta);
+    if(classified.intent === WEDDY_INTENTS.UNKNOWN){
+      const aiGuess = await AIService.classify(pergunta, 'guest');
+      if(aiGuess && aiGuess.intent && aiGuess.intent!==WEDDY_INTENTS.UNKNOWN && WEDDY_INTENTS[aiGuess.intent]){
+        classified = aiGuess;
+      }
+    }
     const permission = checkIntentPermission(classified.intent, context);
     const I = WEDDY_INTENTS;
 
@@ -1513,6 +1560,7 @@ h1{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:30px; col
     }
     log.appendChild(div);
     log.scrollTop = log.scrollHeight;
+    return div;
   }
 
   function conciergeRemoveLastConfirmRow(){
@@ -1536,13 +1584,21 @@ h1{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:30px; col
     const trimmed = (text||'').trim();
     if(!trimmed) return;
     conciergeAppend('user', trimmed);
-    const result = respondeConcierge(trimmed);
-    if(result && result.action){
-      conciergePendingAction = result.action;
-      conciergeAppend('bot', result.text, true);
-    } else {
-      conciergeAppend('bot', (result && result.text) || t('conciergeDidntUnderstand'));
-    }
+    // Só mostra "a pensar…" quando as regex não reconheceram nada
+    // localmente e vai mesmo haver uma chamada de rede ao AIService — uma
+    // pergunta já reconhecida continua a responder na hora, como antes.
+    const needsAI = classifyIntent(trimmed).intent === WEDDY_INTENTS.UNKNOWN;
+    let thinkingEl = null;
+    if(needsAI) thinkingEl = conciergeAppend('bot', t('conciergeThinking'));
+    respondeConcierge(trimmed).then(result=>{
+      if(thinkingEl) thinkingEl.remove();
+      if(result && result.action){
+        conciergePendingAction = result.action;
+        conciergeAppend('bot', result.text, true);
+      } else {
+        conciergeAppend('bot', (result && result.text) || t('conciergeDidntUnderstand'));
+      }
+    });
   }
 
   function conciergeRenderSuggestions(){
