@@ -46,58 +46,158 @@ h1{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:30px; col
 .child-seg button.active{ background:var(--sage); border-color:var(--sage); color:#fff; }
 .child-remove{ all:unset; box-sizing:border-box; width:34px; height:34px; flex-shrink:0; display:flex; align-items:center; justify-content:center; border-radius:10px; background:rgba(154,79,61,0.1); color:var(--rust-dark); cursor:pointer; font-size:16px; margin-top:1px; }
 .add-child-btn{ all:unset; box-sizing:border-box; display:block; width:100%; text-align:center; padding:11px 0; border-radius:12px; border:1.6px dashed var(--line); font-size:13px; font-weight:600; color:var(--rust); cursor:pointer; }
-.state-hidden{ display:none; }
+.state-hidden{ display:none !important; }
 .success-icon{ width:56px; height:56px; margin:0 auto 16px; color:var(--sage-dark); }
 .footer-logo{ margin-top:28px; font-family:'Cormorant Garamond',serif; font-weight:600; font-size:15px; color:var(--rust); opacity:.75; }
 .loading{ padding:60px 0; color:var(--ink-soft); font-size:13.5px; }
+.seg-3 .attend-btn{ font-size:12.5px; padding:13px 4px; }
+.toggle-row{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:12px 14px; border:1.6px solid var(--line); border-radius:14px; margin-bottom:12px; text-align:left; }
+.toggle-row .toggle-label{ font-size:13.5px; font-weight:600; }
+.toggle-row .toggle-label small{ display:block; font-weight:400; color:var(--ink-soft); font-size:11.5px; margin-top:2px; }
+.toggle-switch{ all:unset; box-sizing:border-box; width:44px; height:26px; border-radius:14px; background:var(--line); position:relative; flex-shrink:0; cursor:pointer; transition:background .15s; }
+.toggle-switch.on{ background:var(--sage); }
+.toggle-switch .knob{ position:absolute; top:3px; left:3px; width:20px; height:20px; border-radius:50%; background:#fff; transition:left .15s; box-shadow:0 1px 3px rgba(0,0,0,0.2); }
+.toggle-switch.on .knob{ left:21px; }
+.table-card{ text-align:left; margin-bottom:20px; padding:16px; border-radius:16px; background:rgba(122,150,105,0.09); border:1px solid rgba(122,150,105,0.25); }
+.table-card .tc-title{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:19px; color:var(--sage-dark); margin-bottom:4px; }
+.table-card .tc-sub{ font-size:12.5px; color:var(--ink-soft); }
+.faq-block{ text-align:left; margin-top:8px; }
+.faq-block > .faq-title{ font-size:12px; color:var(--ink-soft); margin-bottom:10px; font-weight:600; }
+.faq-item{ border-top:1px solid var(--line); }
+.faq-item:first-of-type{ border-top:none; }
+.faq-q{ all:unset; box-sizing:border-box; display:flex; align-items:center; justify-content:space-between; width:100%; padding:12px 2px; font-size:13.5px; font-weight:600; cursor:pointer; }
+.faq-a{ display:none; padding:0 2px 12px; font-size:13px; color:var(--ink-soft); line-height:1.5; }
+.faq-item.open .faq-a{ display:block; }
+.faq-item.open .faq-q .chevfaq{ transform:rotate(180deg); }
+.chevfaq{ transition:transform .15s; color:var(--ink-soft); }
+.privacy-block{ margin-top:22px; padding-top:16px; border-top:1px solid var(--line); text-align:left; }
+.privacy-toggle{ all:unset; box-sizing:border-box; display:block; font-size:11.5px; color:var(--ink-soft); cursor:pointer; text-decoration:underline; text-underline-offset:2px; }
+.privacy-text{ display:none; font-size:11.5px; color:var(--ink-soft); line-height:1.55; margin-top:10px; }
+.privacy-text.open{ display:block; }
+.delete-response-link{ all:unset; box-sizing:border-box; display:block; margin-top:12px; font-size:11.5px; color:var(--rust-dark); cursor:pointer; text-decoration:underline; text-underline-offset:2px; }
+.maps-link{ all:unset; box-sizing:border-box; display:inline-flex; align-items:center; gap:5px; font-size:12px; font-weight:600; color:var(--rust); cursor:pointer; margin-bottom:2px; }
+.maps-link svg{ width:13px; height:13px; }
+.program-block{ text-align:left; margin-bottom:20px; padding:14px 16px; border-radius:16px; background:rgba(154,79,61,0.06); border:1px solid var(--line); }
+.program-block .program-title{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:17px; color:var(--rust-dark); margin-bottom:10px; }
+.program-item{ display:flex; gap:12px; padding:7px 0; border-top:1px solid var(--line); }
+.program-item:first-of-type{ border-top:none; }
+.program-time{ flex:0 0 46px; font-weight:700; font-size:12.5px; color:var(--rust-dark); }
+.program-body .program-label{ font-size:13px; font-weight:600; }
+.program-body .program-place{ font-size:11.5px; color:var(--ink-soft); }
+.memories-block{ text-align:left; margin-top:22px; padding-top:18px; border-top:1px solid var(--line); }
+.memories-title{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:18px; color:var(--rust-dark); margin-bottom:4px; }
+.memories-sub{ font-size:12px; color:var(--ink-soft); margin-bottom:12px; }
+.memories-upload-btn{ display:inline-flex; align-items:center; gap:7px; padding:10px 16px; border-radius:12px; border:1.6px dashed var(--rust); color:var(--rust); font-size:13px; font-weight:600; cursor:pointer; }
+.memories-upload-btn svg{ width:15px; height:15px; }
+.memories-preview-grid{ display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
+.memories-thumb{ width:64px; height:64px; object-fit:cover; border-radius:10px; border:1px solid var(--line); }
+.lang-switch{ position:absolute; top:14px; right:14px; display:flex; gap:2px; background:var(--cream); border-radius:10px; padding:3px; }
+.lang-switch button{ all:unset; box-sizing:border-box; padding:5px 9px; border-radius:8px; font-size:11px; font-weight:700; color:var(--ink-soft); cursor:pointer; }
+.lang-switch button.active{ background:var(--rust); color:#fff; }
+.card{ position:relative; }
+.family-label{ font-family:'Cormorant Garamond',serif; font-size:24px; font-weight:600; color:var(--ink); margin-bottom:8px; }
+.family-sub{ font-size:12.5px; color:var(--ink-soft); margin-bottom:22px; text-align:left; }
+.member-card{ text-align:left; border:1.6px solid var(--line); border-radius:16px; padding:16px; margin-bottom:14px; }
+.member-name{ font-size:15px; font-weight:700; margin-bottom:10px; }
+.member-card .seg{ margin-bottom:14px; }
+.member-card .extra-fields{ display:none; }
+.member-card .extra-fields.show{ display:block; }
+.member-card .field{ margin-bottom:12px; }
+.member-card .field:last-child{ margin-bottom:0; }
+.member-status-note{ font-size:12px; color:var(--ink-soft); margin-top:-4px; }
 </style>
 </head>
 <body>
   <div class="card">
-    <div id="loading-state" class="loading">A carregar…</div>
+    <div class="lang-switch" id="lang-switch">
+      <button type="button" data-lang="pt">PT</button>
+      <button type="button" data-lang="en">EN</button>
+    </div>
+
+    <div id="loading-state" class="loading" data-t="loading">A carregar…</div>
 
     <div id="error-state" class="state-hidden">
-      <h1>Não encontrámos este convite</h1>
-      <div class="sub">O link pode estar incompleto ou já não é válido. Verifica se copiaste o link inteiro, ou pede aos noivos para reenviarem.</div>
+      <h1 data-t="errorTitle">Não encontrámos este convite</h1>
+      <div class="sub" data-t="errorSub">O link pode estar incompleto ou já não é válido. Verifica se copiaste o link inteiro, ou pede aos noivos para reenviarem.</div>
     </div>
 
     <div id="form-state" class="state-hidden">
       <div class="eyebrow" id="wedding-dateline"></div>
       <h1 id="wedding-names"></h1>
       <div class="sub" id="wedding-venue"></div>
-      <div class="guest-name" id="guest-name"></div>
+      <a class="maps-link state-hidden" id="maps-link" href="#" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21Z"/><circle cx="12" cy="9.5" r="2.3"/></svg>
+        <span data-t="howToGetThere">Como chegar</span>
+      </a>
+      <div class="guest-name" id="guest-name" style="margin-top:14px;"></div>
+      <div class="sub state-hidden" id="rsvp-deadline-note" style="margin-top:-16px; margin-bottom:22px;"></div>
 
-      <div class="question">Vais poder estar presente?</div>
-      <div class="seg" id="attend-seg">
-        <button type="button" data-attend="yes">Sim, vou! 🎉</button>
-        <button type="button" data-attend="no">Não vou poder</button>
+      <div class="table-card state-hidden" id="table-card">
+        <div class="tc-title" id="table-card-title"></div>
+        <div class="tc-sub" id="table-card-sub"></div>
       </div>
 
-      <div class="extra-fields" id="extra-fields">
-        <div class="field">
-          <label>Escolha de refeição</label>
-          <select id="meal-select">
-            <option value="">Escolhe uma opção</option>
-            <option value="carne">Carne</option>
-            <option value="peixe">Peixe</option>
-            <option value="carne-peixe">Carne &amp; Peixe</option>
-            <option value="vegetariano">Vegetariano</option>
-          </select>
-        </div>
-        <div class="field">
-          <label>Restrições alimentares ou alergias (opcional)</label>
-          <textarea id="dietary-text" placeholder="Ex: alergia a marisco, sem glúten…"></textarea>
-        </div>
-
-        <div class="children-block">
-          <label>Vais trazer crianças?</label>
-          <div id="children-list"></div>
-          <button type="button" class="add-child-btn" id="add-child-btn">+ Adicionar criança</button>
-        </div>
+      <div class="program-block state-hidden" id="program-block">
+        <div class="program-title" data-t="programTitle">Programa do dia</div>
+        <div id="program-list"></div>
       </div>
 
-      <button class="btn-send" id="send-btn" disabled>Enviar resposta</button>
+      <div id="single-flow">
+        <div class="question" data-t="attendQuestion">Vais poder estar presente?</div>
+        <div class="seg seg-3" id="attend-seg">
+          <button type="button" class="attend-btn" data-attend="yes" data-t="attendYes">Sim, vou! 🎉</button>
+          <button type="button" class="attend-btn" data-attend="maybe" data-t="attendMaybe">Ainda não sei</button>
+          <button type="button" class="attend-btn" data-attend="no" data-t="attendNo">Não vou poder</button>
+        </div>
+
+        <div class="extra-fields" id="extra-fields">
+          <div class="field">
+            <label data-t="mealLabel">Escolha de refeição</label>
+            <select id="meal-select">
+              <option value="" data-t="mealChoose">Escolhe uma opção</option>
+              <option value="carne" data-t="mealMeat">Carne</option>
+              <option value="peixe" data-t="mealFish">Peixe</option>
+              <option value="carne-peixe" data-t="mealBoth">Carne &amp; Peixe</option>
+              <option value="vegetariano" data-t="mealVeggie">Vegetariano</option>
+            </select>
+          </div>
+          <div class="field">
+            <label data-t="dietaryLabel">Restrições alimentares ou alergias (opcional)</label>
+            <textarea id="dietary-text" data-t-placeholder="dietaryPlaceholder" placeholder="Ex: alergia a marisco, sem glúten…"></textarea>
+          </div>
+
+          <div class="children-block">
+            <label data-t="childrenLabel">Vais trazer crianças?</label>
+            <div id="children-list"></div>
+            <button type="button" class="add-child-btn" id="add-child-btn" data-t="addChildBtn">+ Adicionar criança</button>
+          </div>
+
+          <div class="toggle-row">
+            <div class="toggle-label"><span data-t="transporteLabel">Preciso de transporte</span><small data-t="transporteSub">Ida/volta organizada pelos noivos</small></div>
+            <button type="button" class="toggle-switch" id="toggle-transporte"><span class="knob"></span></button>
+          </div>
+          <div class="toggle-row">
+            <div class="toggle-label"><span data-t="alojamentoLabel">Preciso de alojamento</span><small data-t="alojamentoSub">Ajuda a encontrar onde ficar</small></div>
+            <button type="button" class="toggle-switch" id="toggle-alojamento"><span class="knob"></span></button>
+          </div>
+        </div>
+
+        <div class="msg state-hidden" id="maybe-note" data-t="maybeNote">Sem problema — quando souberes, volta a este link para nos dizeres. 🤍</div>
+      </div>
+
+      <div id="family-flow" class="state-hidden">
+        <div class="family-label" data-t="familyLabel">Quem vem convosco?</div>
+        <div class="family-sub" data-t="familySub">Responde por cada pessoa da família — podes preencher tudo de uma vez.</div>
+        <div id="family-members"></div>
+      </div>
+
+      <button class="btn-send" id="send-btn" disabled data-t="sendBtn">Enviar resposta</button>
       <div class="msg" id="form-msg"></div>
+
+      <div class="faq-block state-hidden" id="faq-block">
+        <div class="faq-title" data-t="faqTitle">Perguntas frequentes</div>
+        <div id="faq-list"></div>
+      </div>
     </div>
 
     <div id="done-state" class="state-hidden">
@@ -106,11 +206,32 @@ h1{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:30px; col
       <div class="sub" id="done-sub"></div>
     </div>
 
+    <div class="memories-block state-hidden" id="memories-block">
+      <div class="memories-title" data-t="memoriesTitle">Weddy Memories</div>
+      <div class="memories-sub" data-t="memoriesSub">Tens fotos deste casamento? Partilha-as com os noivos — só eles conseguem ver a galeria.</div>
+      <label class="memories-upload-btn" for="memory-file-input">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="14" rx="2.5"/><path d="M8 6l1.6-2.5h4.8L16 6"/><circle cx="12" cy="13" r="3.4"/></svg>
+        <span data-t="memoriesUploadBtn">Adicionar fotografia</span>
+      </label>
+      <input type="file" id="memory-file-input" accept="image/*" multiple style="display:none;">
+      <div class="msg" id="memories-status"></div>
+      <div class="memories-preview-grid" id="memories-preview"></div>
+    </div>
+
+    <div class="privacy-block">
+      <button type="button" class="privacy-toggle" id="privacy-toggle" data-t="privacyToggle">Como tratamos os teus dados</button>
+      <div class="privacy-text" id="privacy-text" data-t="privacyText">
+        Os dados que dás aqui (nome, resposta, refeição, restrições alimentares, transporte/alojamento) são vistos apenas pelos noivos e usados só para organizar este casamento — nunca são partilhados com mais ninguém. Este link não te mostra a lista de outros convidados nem informações do orçamento. Podes atualizar ou apagar a tua resposta a qualquer momento, neste mesmo link.
+      </div>
+      <button type="button" class="delete-response-link state-hidden" id="delete-response-btn" data-t="deleteResponseLink">Apagar a minha resposta</button>
+    </div>
+
     <div class="footer-logo">weddy</div>
   </div>
 
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
 <script>
 (function(){
   const firebaseConfig = {
@@ -123,19 +244,209 @@ h1{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:30px; col
   };
   firebase.initializeApp(firebaseConfig);
   const db = firebase.firestore();
+  const storage = firebase.storage();
+
+  /* ============================================================
+     TRADUÇÃO (PT/EN) — tudo o que é texto fixo da interface vive
+     aqui. O texto que o CASAL escreveu (local, dress code, notas,
+     restrições alimentares que o próprio convidado digitar) nunca é
+     traduzido automaticamente — fica sempre na língua em que foi
+     escrito, porque não há nenhuma IA real a fazer essa tradução.
+  ============================================================ */
+  const TRANSLATIONS = {
+    pt: {
+      loading: 'A carregar…',
+      errorTitle: 'Não encontrámos este convite',
+      errorSub: 'O link pode estar incompleto ou já não é válido. Verifica se copiaste o link inteiro, ou pede aos noivos para reenviarem.',
+      howToGetThere: 'Como chegar',
+      programTitle: 'Programa do dia',
+      attendQuestion: 'Vais poder estar presente?',
+      attendYes: 'Sim, vou! 🎉',
+      attendMaybe: 'Ainda não sei',
+      attendNo: 'Não vou poder',
+      familyLabel: 'Quem vem convosco?',
+      familySub: 'Responde por cada pessoa da família — podes preencher tudo de uma vez.',
+      mealLabel: 'Escolha de refeição',
+      mealChoose: 'Escolhe uma opção',
+      mealMeat: 'Carne',
+      mealFish: 'Peixe',
+      mealBoth: 'Carne & Peixe',
+      mealVeggie: 'Vegetariano',
+      dietaryLabel: 'Restrições alimentares ou alergias (opcional)',
+      dietaryPlaceholder: 'Ex: alergia a marisco, sem glúten…',
+      childrenLabel: 'Vais trazer crianças?',
+      addChildBtn: '+ Adicionar criança',
+      childNamePlaceholder: 'Nome da criança',
+      childAgePlaceholder: 'Idade',
+      childYes: 'Vai',
+      childNo: 'Não vai',
+      transporteLabel: 'Preciso de transporte',
+      transporteSub: 'Ida/volta organizada pelos noivos',
+      alojamentoLabel: 'Preciso de alojamento',
+      alojamentoSub: 'Ajuda a encontrar onde ficar',
+      maybeNote: 'Sem problema — quando souberes, volta a este link para nos dizeres. 🤍',
+      sendBtn: 'Enviar resposta',
+      updateBtn: 'Atualizar resposta',
+      sending: 'A enviar…',
+      chooseMealError: 'Escolhe uma refeição antes de enviar.',
+      sendError: 'Não foi possível enviar. Verifica a internet e tenta novamente.',
+      faqTitle: 'Perguntas frequentes',
+      faqWhere: 'Onde é?',
+      faqDress: 'Qual é o dress code?',
+      faqMore: 'Mais informações',
+      doneTitleYes: 'Obrigado pela resposta! 🎉',
+      doneSubYes: 'Já registámos que vais estar presente. Até lá!',
+      doneTitleNo: 'Obrigado por nos avisares.',
+      doneSubNo: 'Ficamos tristes por não poderes vir, mas obrigado por responderes.',
+      doneTitleMaybe: 'Combinado!',
+      doneSubMaybe: 'Fica descansado(a) — quando souberes, volta a este mesmo link para confirmares.',
+      deadlinePassed: d => `O prazo para responder era ${d} — mas a tua resposta ainda vale, responde na mesma! 🙂`,
+      deadlineNote: d => `Por favor responde até ${d}.`,
+      tableTitle: (table, seat) => `A tua mesa: Mesa ${table}${seat? ', lugar '+seat : ''}`,
+      tableWith: names => `Com: ${names}`,
+      tableAlone: 'Ainda sem mais ninguém atribuído a esta mesa.',
+      memoriesTitle: 'Weddy Memories',
+      memoriesSub: 'Tens fotos deste casamento? Partilha-as com os noivos — só eles conseguem ver a galeria.',
+      memoriesUploadBtn: 'Adicionar fotografia',
+      memoriesNotImage: name => `"${name}" não é uma imagem.`,
+      memoriesTooLarge: name => `"${name}" é grande demais (máx. 8MB).`,
+      memoriesSending: name => `A enviar ${name}…`,
+      memoriesThanks: 'Obrigado por partilhar! 💛',
+      memoriesError: 'Não foi possível enviar esta foto. Verifica a internet e tenta novamente.',
+      privacyToggle: 'Como tratamos os teus dados',
+      privacyText: 'Os dados que dás aqui (nome, resposta, refeição, restrições alimentares, transporte/alojamento) são vistos apenas pelos noivos e usados só para organizar este casamento — nunca são partilhados com mais ninguém. Este link não te mostra a lista de outros convidados nem informações do orçamento. Podes atualizar ou apagar a tua resposta a qualquer momento, neste mesmo link.',
+      deleteResponseLink: 'Apagar a minha resposta',
+      deleteConfirm: 'Tens a certeza que queres apagar a tua resposta (presença, refeição, restrições, transporte e alojamento)? Isto não apaga o teu nome nem o link do convite — só a tua resposta.',
+      deleteSuccessMsg: 'A tua resposta foi apagada. Podes responder de novo quando quiseres.',
+      deleteError: 'Não foi possível apagar a resposta. Verifica a internet e tenta novamente.',
+      months: ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'],
+      dateFormat: (day, month, year) => `${day} de ${month} de ${year}`,
+    },
+    en: {
+      loading: 'Loading…',
+      errorTitle: "We couldn't find this invitation",
+      errorSub: 'The link may be incomplete or no longer valid. Check that you copied the whole link, or ask the couple to resend it.',
+      howToGetThere: 'Get directions',
+      programTitle: "Day's schedule",
+      attendQuestion: 'Will you be able to attend?',
+      attendYes: "Yes, I'll be there! 🎉",
+      attendMaybe: "I'm not sure yet",
+      attendNo: "I can't make it",
+      familyLabel: 'Who\'s coming with you?',
+      familySub: 'Answer for each family member — you can fill it all in at once.',
+      mealLabel: 'Meal choice',
+      mealChoose: 'Choose an option',
+      mealMeat: 'Meat',
+      mealFish: 'Fish',
+      mealBoth: 'Meat & Fish',
+      mealVeggie: 'Vegetarian',
+      dietaryLabel: 'Dietary restrictions or allergies (optional)',
+      dietaryPlaceholder: 'E.g.: shellfish allergy, gluten-free…',
+      childrenLabel: 'Will you be bringing children?',
+      addChildBtn: '+ Add child',
+      childNamePlaceholder: "Child's name",
+      childAgePlaceholder: 'Age',
+      childYes: 'Coming',
+      childNo: 'Not coming',
+      transporteLabel: 'I need transport',
+      transporteSub: 'Round trip organized by the couple',
+      alojamentoLabel: 'I need accommodation',
+      alojamentoSub: 'Help finding somewhere to stay',
+      maybeNote: "No problem — once you know, come back to this link to let us know. 🤍",
+      sendBtn: 'Send response',
+      updateBtn: 'Update response',
+      sending: 'Sending…',
+      chooseMealError: 'Choose a meal before sending.',
+      sendError: 'Could not send. Check your connection and try again.',
+      faqTitle: 'Frequently asked questions',
+      faqWhere: 'Where is it?',
+      faqDress: "What's the dress code?",
+      faqMore: 'More information',
+      doneTitleYes: 'Thanks for your response! 🎉',
+      doneSubYes: "We've noted you'll be attending. See you there!",
+      doneTitleNo: 'Thanks for letting us know.',
+      doneSubNo: "We're sad you can't make it, but thanks for responding.",
+      doneTitleMaybe: 'Got it!',
+      doneSubMaybe: 'No rush — once you know, come back to this same link to confirm.',
+      deadlinePassed: d => `The deadline to respond was ${d} — but your response still counts, go ahead and answer! 🙂`,
+      deadlineNote: d => `Please respond by ${d}.`,
+      tableTitle: (table, seat) => `Your table: Table ${table}${seat? ', seat '+seat : ''}`,
+      tableWith: names => `With: ${names}`,
+      tableAlone: "No one else assigned to this table yet.",
+      memoriesTitle: 'Weddy Memories',
+      memoriesSub: 'Got photos from this wedding? Share them with the couple — only they can see the gallery.',
+      memoriesUploadBtn: 'Add photo',
+      memoriesNotImage: name => `"${name}" is not an image.`,
+      memoriesTooLarge: name => `"${name}" is too large (max 8MB).`,
+      memoriesSending: name => `Uploading ${name}…`,
+      memoriesThanks: 'Thanks for sharing! 💛',
+      memoriesError: 'Could not upload this photo. Check your connection and try again.',
+      privacyToggle: 'How we handle your data',
+      privacyText: "The data you give here (name, response, meal, dietary restrictions, transport/accommodation) is only seen by the couple and used solely to organize this wedding — it's never shared with anyone else. This link never shows you the other guests' list or budget information. You can update or delete your response at any time, on this same link.",
+      deleteResponseLink: 'Delete my response',
+      deleteConfirm: "Are you sure you want to delete your response (attendance, meal, restrictions, transport and accommodation)? This does not delete your name or the invitation link — only your response.",
+      deleteSuccessMsg: 'Your response has been deleted. You can respond again whenever you like.',
+      deleteError: 'Could not delete your response. Check your connection and try again.',
+      months: ['January','February','March','April','May','June','July','August','September','October','November','December'],
+      dateFormat: (day, month, year) => `${month} ${day}, ${year}`,
+    }
+  };
+  let currentLang = 'pt';
+  try{
+    const saved = localStorage.getItem('weddy_rsvp_lang');
+    if(saved && TRANSLATIONS[saved]) currentLang = saved;
+  }catch(e){}
+  function t(key){
+    const dict = TRANSLATIONS[currentLang] || TRANSLATIONS.pt;
+    return (key in dict) ? dict[key] : TRANSLATIONS.pt[key];
+  }
+  // Aplica as traduções a todo o texto fixo da página (marcado com
+  // data-t/data-t-placeholder no HTML) — chamada sempre que a língua muda,
+  // e uma vez no arranque, antes de sequer sabermos se o convite existe.
+  function applyStaticTranslations(){
+    document.documentElement.lang = currentLang==='en' ? 'en' : 'pt-PT';
+    document.querySelectorAll('[data-t]').forEach(el=>{
+      const val = t(el.dataset.t);
+      if(typeof val === 'string') el.textContent = val;
+    });
+    document.querySelectorAll('[data-t-placeholder]').forEach(el=>{
+      const val = t(el.dataset.tPlaceholder);
+      if(typeof val === 'string') el.placeholder = val;
+    });
+    document.querySelectorAll('#lang-switch button').forEach(b=>{
+      b.classList.toggle('active', b.dataset.lang===currentLang);
+    });
+    // O botão de enviar muda de "Enviar" para "Atualizar" consoante já
+    // exista ou não uma resposta guardada — mantém isso ao trocar de língua.
+    const sendBtn = document.getElementById('send-btn');
+    if(sendBtn && !sendBtn.disabled){
+      sendBtn.textContent = t(selectedAttend ? 'updateBtn' : 'sendBtn');
+    }
+  }
+  document.querySelectorAll('#lang-switch button').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      currentLang = btn.dataset.lang;
+      try{ localStorage.setItem('weddy_rsvp_lang', currentLang); }catch(e){}
+      applyStaticTranslations();
+      renderChildren();
+      if(guestData) renderForm();
+    });
+  });
+  applyStaticTranslations();
+
+  function formatDatePT(dateStr){
+    if(!dateStr) return '';
+    const d = new Date(dateStr+'T00:00:00');
+    if(isNaN(d)) return '';
+    return t('dateFormat')(d.getDate(), t('months')[d.getMonth()], d.getFullYear());
+  }
 
   function show(id){
     ['loading-state','error-state','form-state','done-state'].forEach(s=>{
       document.getElementById(s).classList.toggle('state-hidden', s!==id);
     });
-  }
-
-  function formatDatePT(dateStr){
-    if(!dateStr) return '';
-    const meses = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
-    const d = new Date(dateStr+'T00:00:00');
-    if(isNaN(d)) return '';
-    return `${d.getDate()} de ${meses[d.getMonth()]} de ${d.getFullYear()}`;
+    document.querySelector('.privacy-block').classList.toggle('state-hidden', id==='loading-state' || id==='error-state');
+    document.getElementById('memories-block').classList.toggle('state-hidden', id==='loading-state' || id==='error-state');
   }
 
   const params = new URLSearchParams(location.search);
@@ -145,6 +456,11 @@ h1{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:30px; col
   // com nome, idade e se vai ou não. Guardada aqui em memória e só escrita
   // no Firestore quando a pessoa envia a resposta.
   let children = [];
+  // RSVP de família: quando guestData.isFamily===true, este link é partilhado
+  // por várias pessoas adultas (guestData.members), cada uma com a sua própria
+  // resposta guardada em guestData.responses[guestId]. familyMemberState guarda
+  // o estado em memória de cada pessoa até se enviar tudo de uma vez.
+  let familyMemberState = {};
 
   function renderChildren(){
     const list = document.getElementById('children-list');
@@ -154,11 +470,11 @@ h1{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:30px; col
     }
     list.innerHTML = children.map((c,i)=>`
       <div class="child-row" data-childrow="${i}">
-        <input class="child-name" type="text" placeholder="Nome da criança" data-childfield="name" data-idx="${i}" value="${(c.name||'').replace(/"/g,'&quot;')}">
-        <input class="child-age" type="number" min="0" max="17" placeholder="Idade" data-childfield="age" data-idx="${i}" value="${c.age===undefined||c.age===null?'':c.age}">
+        <input class="child-name" type="text" placeholder="${t('childNamePlaceholder')}" data-childfield="name" data-idx="${i}" value="${(c.name||'').replace(/"/g,'&quot;')}">
+        <input class="child-age" type="number" min="0" max="17" placeholder="${t('childAgePlaceholder')}" data-childfield="age" data-idx="${i}" value="${c.age===undefined||c.age===null?'':c.age}">
         <div class="child-seg">
-          <button type="button" data-childattend="yes" data-idx="${i}" class="${c.attending===true?'active':''}">Vai</button>
-          <button type="button" data-childattend="no" data-idx="${i}" class="${c.attending===false?'active':''}">Não vai</button>
+          <button type="button" data-childattend="yes" data-idx="${i}" class="${c.attending===true?'active':''}">${t('childYes')}</button>
+          <button type="button" data-childattend="no" data-idx="${i}" class="${c.attending===false?'active':''}">${t('childNo')}</button>
         </div>
         <button type="button" class="child-remove" data-childremove="${i}">×</button>
       </div>
@@ -203,6 +519,12 @@ h1{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:30px; col
       if(!guestSnap.exists){ show('error-state'); return; }
       guestData = guestSnap.data();
       renderForm();
+      // Regista que o convite foi aberto (só na primeira vez) — dá aos
+      // noivos um estado intermédio ("visto, a pensar") antes de uma
+      // resposta final, sem precisar de nenhuma notificação real.
+      if(!guestData.openedAt){
+        db.collection('guests').doc(guestToken).update({ openedAt: firebase.firestore.FieldValue.serverTimestamp() }).catch(()=>{});
+      }
     }).catch(()=>{ show('error-state'); });
   }
 
@@ -210,44 +532,454 @@ h1{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:30px; col
     document.getElementById('wedding-dateline').textContent = formatDatePT(guestData.weddingDate);
     document.getElementById('wedding-names').textContent = `${guestData.coupleName1 || ''} & ${guestData.coupleName2 || ''}`;
     document.getElementById('wedding-venue').textContent = guestData.venue || '';
-    document.getElementById('guest-name').textContent = guestData.name || '';
-
-    // se a pessoa já tinha respondido antes, mostra logo a resposta guardada
-    if(guestData.attending===true || guestData.attending===false){
-      selectedAttend = guestData.attending ? 'yes' : 'no';
-      document.querySelectorAll('#attend-seg button').forEach(b=>{
-        b.classList.toggle('active', b.dataset.attend===selectedAttend);
-      });
-      if(selectedAttend==='yes'){
-        document.getElementById('extra-fields').classList.add('show');
-        document.getElementById('meal-select').value = guestData.meal || '';
-        document.getElementById('dietary-text').value = guestData.dietary || '';
-        children = Array.isArray(guestData.children) ? guestData.children.map(c=>({ name:c.name||'', age:c.age===undefined?'':c.age, attending: c.attending!==false })) : [];
-        renderChildren();
-      }
-      document.getElementById('send-btn').disabled = false;
-      document.getElementById('send-btn').textContent = 'Atualizar resposta';
+    if(guestData.isFamily){
+      document.getElementById('guest-name').classList.add('state-hidden');
+    } else {
+      document.getElementById('guest-name').classList.remove('state-hidden');
+      document.getElementById('guest-name').textContent = guestData.name || '';
     }
 
+    // "Como chegar" — abre o Google Maps já a pesquisar o local, sem
+    // precisarmos de guardar coordenadas nem morada estruturada.
+    const mapsLink = document.getElementById('maps-link');
+    if(guestData.venue){
+      mapsLink.href = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(guestData.venue);
+      mapsLink.classList.remove('state-hidden');
+    }
+
+    // Programa do dia — só os momentos que os noivos marcaram para
+    // partilhar (guestProgram já vem filtrado do lado dos noivos).
+    if(Array.isArray(guestData.guestProgram) && guestData.guestProgram.length){
+      document.getElementById('program-list').innerHTML = guestData.guestProgram.map(ev => `
+        <div class="program-item">
+          <div class="program-time">${(ev.time||'').replace(/</g,'&lt;')}</div>
+          <div class="program-body">
+            <div class="program-label">${(ev.label||'').replace(/</g,'&lt;')}</div>
+            ${ev.place ? `<div class="program-place">${ev.place.replace(/</g,'&lt;')}</div>` : ''}
+          </div>
+        </div>
+      `).join('');
+      document.getElementById('program-block').classList.remove('state-hidden');
+    }
+
+    if(guestData.rsvpDeadline){
+      const note = document.getElementById('rsvp-deadline-note');
+      const passou = guestData.rsvpDeadline < new Date().toISOString().slice(0,10);
+      note.textContent = passou
+        ? t('deadlinePassed')(formatDatePT(guestData.rsvpDeadline))
+        : t('deadlineNote')(formatDatePT(guestData.rsvpDeadline));
+      note.classList.remove('state-hidden');
+    }
+
+    // Mesa atribuída (só aparece quando os noivos já sincronizaram os
+    // lugares, e só mostra a informação DESTE convidado — nunca o mapa
+    // completo das mesas, que fica de fora do documento do convidado).
+    if(!guestData.isFamily && guestData.attending===true && guestData.assignedTable){
+      const tc = document.getElementById('table-card');
+      document.getElementById('table-card-title').textContent = t('tableTitle')(guestData.assignedTable, guestData.assignedSeat);
+      const mates = Array.isArray(guestData.tablemates) ? guestData.tablemates.filter(m=>m && m!==guestData.name) : [];
+      document.getElementById('table-card-sub').textContent = mates.length ? t('tableWith')(mates.join(', ')) : t('tableAlone');
+      tc.classList.remove('state-hidden');
+    }
+
+    // Perguntas frequentes — só mostra as que os noivos preencheram. As
+    // RESPOSTAS ficam sempre na língua em que o casal as escreveu (não há
+    // tradução automática real); só a PERGUNTA (o título) é traduzida.
+    const faqItems = [];
+    if(guestData.venue) faqItems.push({ q:t('faqWhere'), a:guestData.venue });
+    if(guestData.guestDressCode) faqItems.push({ q:t('faqDress'), a:guestData.guestDressCode });
+    if(guestData.guestInfoNotes) faqItems.push({ q:t('faqMore'), a:guestData.guestInfoNotes });
+    if(faqItems.length){
+      document.getElementById('faq-list').innerHTML = faqItems.map((f,i)=>`
+        <div class="faq-item" data-faqidx="${i}">
+          <button type="button" class="faq-q">${f.q.replace(/</g,'&lt;')}<svg class="chevfaq" width="10" height="10" viewBox="0 0 14 14" fill="none"><path d="M2.5 5l4.5 5 4.5-5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+          <div class="faq-a">${f.a.replace(/</g,'&lt;').replace(/\n/g,'<br>')}</div>
+        </div>
+      `).join('');
+      document.querySelectorAll('.faq-q').forEach(btn=>{
+        btn.addEventListener('click', ()=>{ btn.closest('.faq-item').classList.toggle('open'); });
+      });
+      document.getElementById('faq-block').classList.remove('state-hidden');
+    }
+
+    if(guestData.isFamily){
+      document.getElementById('single-flow').classList.add('state-hidden');
+      renderFamilyForm();
+    } else {
+      document.getElementById('family-flow').classList.add('state-hidden');
+      document.getElementById('single-flow').classList.remove('state-hidden');
+      document.getElementById('toggle-transporte').classList.toggle('on', !!guestData.transporte);
+      document.getElementById('toggle-alojamento').classList.toggle('on', !!guestData.alojamento);
+
+      // se a pessoa já tinha respondido antes, mostra logo a resposta guardada
+      const savedStatus = guestData.attending===true ? 'yes' : guestData.attending===false ? 'no' : (guestData.rsvpStatus==='maybe' ? 'maybe' : null);
+      if(savedStatus){
+        selectedAttend = savedStatus;
+        document.querySelectorAll('#attend-seg button').forEach(b=>{
+          b.classList.toggle('active', b.dataset.attend===selectedAttend);
+        });
+        document.getElementById('extra-fields').classList.toggle('show', selectedAttend==='yes');
+        document.getElementById('maybe-note').classList.toggle('state-hidden', selectedAttend!=='maybe');
+        if(selectedAttend==='yes'){
+          document.getElementById('meal-select').value = guestData.meal || '';
+          document.getElementById('dietary-text').value = guestData.dietary || '';
+          children = Array.isArray(guestData.children) ? guestData.children.map(c=>({ name:c.name||'', age:c.age===undefined?'':c.age, attending: c.attending!==false })) : [];
+          renderChildren();
+        }
+        document.getElementById('send-btn').disabled = false;
+        document.getElementById('send-btn').textContent = t('updateBtn');
+      }
+    }
+
+    updateDeleteLinkVisibility();
     show('form-state');
   }
+
+  // ============================================================
+  // RSVP DE FAMÍLIA — vários adultos a partilhar o mesmo link.
+  // Cada pessoa tem a sua própria resposta (presença, refeição,
+  // restrições, crianças, transporte, alojamento), tudo guardado
+  // dentro do mesmo documento guests/{token}, no campo "responses".
+  // ============================================================
+  function renderFamilyForm(){
+    const members = Array.isArray(guestData.members) ? guestData.members : [];
+    const responses = guestData.responses || {};
+    members.forEach(m=>{
+      const r = responses[m.guestId] || {};
+      familyMemberState[m.guestId] = {
+        attend: r.attending===true ? 'yes' : r.attending===false ? 'no' : (r.rsvpStatus==='maybe' ? 'maybe' : null),
+        meal: r.meal || '',
+        dietary: r.dietary || '',
+        transporte: !!r.transporte,
+        alojamento: !!r.alojamento,
+        children: Array.isArray(r.children) ? r.children.map(c=>({ name:c.name||'', age:c.age===undefined?'':c.age, attending: c.attending!==false })) : []
+      };
+    });
+    document.getElementById('family-flow').classList.remove('state-hidden');
+    renderFamilyMembers();
+    const anyResponded = members.some(m=>familyMemberState[m.guestId].attend);
+    document.getElementById('send-btn').disabled = !(members.length && members.every(m=>familyMemberState[m.guestId].attend));
+    document.getElementById('send-btn').textContent = anyResponded ? t('updateBtn') : t('sendBtn');
+  }
+
+  function renderMemberChildrenHTML(mid){
+    const kids = familyMemberState[mid].children;
+    if(!kids.length) return '';
+    return kids.map((c,i)=>`
+      <div class="child-row">
+        <input class="child-name" type="text" placeholder="${t('childNamePlaceholder')}" data-mchildfield="name" data-mid="${mid}" data-idx="${i}" value="${(c.name||'').replace(/"/g,'&quot;')}">
+        <input class="child-age" type="number" min="0" max="17" placeholder="${t('childAgePlaceholder')}" data-mchildfield="age" data-mid="${mid}" data-idx="${i}" value="${c.age===undefined||c.age===null?'':c.age}">
+        <div class="child-seg">
+          <button type="button" data-mchildattend="yes" data-mid="${mid}" data-idx="${i}" class="${c.attending===true?'active':''}">${t('childYes')}</button>
+          <button type="button" data-mchildattend="no" data-mid="${mid}" data-idx="${i}" class="${c.attending===false?'active':''}">${t('childNo')}</button>
+        </div>
+        <button type="button" class="child-remove" data-mchildremove="${i}" data-mid="${mid}">×</button>
+      </div>
+    `).join('');
+  }
+
+  function renderFamilyMembers(){
+    const members = Array.isArray(guestData.members) ? guestData.members : [];
+    const wrap = document.getElementById('family-members');
+    wrap.innerHTML = members.map(m=>{
+      const mid = m.guestId;
+      const st = familyMemberState[mid];
+      return `
+      <div class="member-card" data-memberid="${mid}">
+        <div class="member-name">${(m.name||'').replace(/</g,'&lt;')}</div>
+        <div class="seg seg-3">
+          <button type="button" class="attend-btn ${st.attend==='yes'?'active':''}" data-mattend="yes" data-mid="${mid}">${t('attendYes')}</button>
+          <button type="button" class="attend-btn ${st.attend==='maybe'?'active':''}" data-mattend="maybe" data-mid="${mid}">${t('attendMaybe')}</button>
+          <button type="button" class="attend-btn ${st.attend==='no'?'active':''}" data-mattend="no" data-mid="${mid}">${t('attendNo')}</button>
+        </div>
+        ${st.attend==='maybe' ? `<div class="member-status-note">${t('maybeNote')}</div>` : ''}
+        <div class="extra-fields ${st.attend==='yes'?'show':''}">
+          <div class="field">
+            <label>${t('mealLabel')}</label>
+            <select data-mfield="meal" data-mid="${mid}">
+              <option value="">${t('mealChoose')}</option>
+              <option value="carne" ${st.meal==='carne'?'selected':''}>${t('mealMeat')}</option>
+              <option value="peixe" ${st.meal==='peixe'?'selected':''}>${t('mealFish')}</option>
+              <option value="carne-peixe" ${st.meal==='carne-peixe'?'selected':''}>${t('mealBoth')}</option>
+              <option value="vegetariano" ${st.meal==='vegetariano'?'selected':''}>${t('mealVeggie')}</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>${t('dietaryLabel')}</label>
+            <textarea data-mfield="dietary" data-mid="${mid}" placeholder="${t('dietaryPlaceholder')}">${(st.dietary||'').replace(/</g,'&lt;')}</textarea>
+          </div>
+          <div class="children-block">
+            <label>${t('childrenLabel')}</label>
+            <div>${renderMemberChildrenHTML(mid)}</div>
+            <button type="button" class="add-child-btn" data-addmemberchild="${mid}">${t('addChildBtn')}</button>
+          </div>
+          <div class="toggle-row">
+            <div class="toggle-label"><span>${t('transporteLabel')}</span><small>${t('transporteSub')}</small></div>
+            <button type="button" class="toggle-switch ${st.transporte?'on':''}" data-mtoggle="transporte" data-mid="${mid}"><span class="knob"></span></button>
+          </div>
+          <div class="toggle-row">
+            <div class="toggle-label"><span>${t('alojamentoLabel')}</span><small>${t('alojamentoSub')}</small></div>
+            <button type="button" class="toggle-switch ${st.alojamento?'on':''}" data-mtoggle="alojamento" data-mid="${mid}"><span class="knob"></span></button>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+    bindFamilyMemberHandlers();
+  }
+
+  function bindFamilyMemberHandlers(){
+    document.querySelectorAll('[data-mattend]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        familyMemberState[btn.dataset.mid].attend = btn.dataset.mattend;
+        renderFamilyMembers();
+        updateFamilySendState();
+      });
+    });
+    document.querySelectorAll('[data-mfield]').forEach(el=>{
+      el.addEventListener(el.tagName==='SELECT' ? 'change' : 'input', ()=>{
+        familyMemberState[el.dataset.mid][el.dataset.mfield] = el.value;
+      });
+    });
+    document.querySelectorAll('[data-mtoggle]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const field = btn.dataset.mtoggle;
+        familyMemberState[btn.dataset.mid][field] = !familyMemberState[btn.dataset.mid][field];
+        renderFamilyMembers();
+      });
+    });
+    document.querySelectorAll('[data-addmemberchild]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        familyMemberState[btn.dataset.addmemberchild].children.push({ name:'', age:'', attending:true });
+        renderFamilyMembers();
+      });
+    });
+    document.querySelectorAll('[data-mchildfield]').forEach(el=>{
+      el.addEventListener('input', ()=>{
+        const idx = Number(el.dataset.idx);
+        const field = el.dataset.mchildfield;
+        familyMemberState[el.dataset.mid].children[idx][field] = field==='age' ? (el.value==='' ? '' : Number(el.value)) : el.value;
+      });
+    });
+    document.querySelectorAll('[data-mchildattend]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const idx = Number(btn.dataset.idx);
+        familyMemberState[btn.dataset.mid].children[idx].attending = btn.dataset.mchildattend==='yes';
+        renderFamilyMembers();
+      });
+    });
+    document.querySelectorAll('[data-mchildremove]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const idx = Number(btn.dataset.mchildremove);
+        familyMemberState[btn.dataset.mid].children.splice(idx,1);
+        renderFamilyMembers();
+      });
+    });
+  }
+
+  function updateFamilySendState(){
+    const members = Array.isArray(guestData.members) ? guestData.members : [];
+    document.getElementById('send-btn').disabled = !(members.length && members.every(m=>familyMemberState[m.guestId].attend));
+  }
+
+  function submitFamilyResponse(){
+    const msgEl = document.getElementById('form-msg');
+    const btn = document.getElementById('send-btn');
+    const members = Array.isArray(guestData.members) ? guestData.members : [];
+    if(!members.length || !members.every(m=>familyMemberState[m.guestId].attend)) return;
+    for(const m of members){
+      const st = familyMemberState[m.guestId];
+      if(st.attend==='yes' && !st.meal){
+        msgEl.textContent = t('chooseMealError');
+        msgEl.className = 'msg error';
+        return;
+      }
+    }
+    btn.disabled = true;
+    msgEl.textContent = t('sending');
+    msgEl.className = 'msg';
+    const responses = {};
+    members.forEach(m=>{
+      const st = familyMemberState[m.guestId];
+      const attending = st.attend==='yes' ? true : st.attend==='no' ? false : null;
+      responses[m.guestId] = {
+        attending,
+        rsvpStatus: st.attend,
+        meal: attending ? st.meal : '',
+        dietary: attending ? (st.dietary||'').trim() : '',
+        transporte: attending ? !!st.transporte : false,
+        alojamento: attending ? !!st.alojamento : false,
+        children: attending ? st.children.filter(c=>(c.name||'').trim()).map(c=>({ name:c.name.trim(), age:c.age===''||c.age===undefined?null:Number(c.age), attending:c.attending!==false })) : []
+      };
+    });
+    db.collection('guests').doc(guestToken).update({
+      responses: responses,
+      respondedAt: firebase.firestore.FieldValue.serverTimestamp()
+    }).then(()=>{
+      guestData.responses = responses;
+      updateDeleteLinkVisibility();
+      const anyYes = members.some(m=>responses[m.guestId].attending===true);
+      const anyMaybe = members.some(m=>responses[m.guestId].rsvpStatus==='maybe');
+      document.getElementById('done-title').textContent = anyYes ? t('doneTitleYes') : (anyMaybe ? t('doneTitleMaybe') : t('doneTitleNo'));
+      document.getElementById('done-sub').textContent = anyYes ? t('doneSubYes') : (anyMaybe ? t('doneSubMaybe') : t('doneSubNo'));
+      show('done-state');
+    }).catch(()=>{
+      msgEl.textContent = t('sendError');
+      msgEl.className = 'msg error';
+    }).finally(()=>{
+      btn.disabled = false;
+    });
+  }
+
+  // O botão "Apagar a minha resposta" só aparece quando já há alguma
+  // resposta guardada — não faz sentido oferecer para apagar o que ainda
+  // não existe. Isto cumpre o direito de apagamento do RGPD sem precisar
+  // de alterar as regras do Firestore: os campos que aqui se limpam já
+  // fazem parte da lista de campos que o próprio convidado pode escrever.
+  function updateDeleteLinkVisibility(){
+    let hasResponse;
+    if(guestData && guestData.isFamily){
+      const responses = guestData.responses || {};
+      hasResponse = Object.values(responses).some(r=>r && (r.attending===true || r.attending===false || r.rsvpStatus==='maybe'));
+    } else {
+      hasResponse = !!(guestData && (guestData.attending===true || guestData.attending===false || guestData.rsvpStatus==='maybe'));
+    }
+    document.getElementById('delete-response-btn').classList.toggle('state-hidden', !hasResponse);
+  }
+
+  document.getElementById('privacy-toggle').addEventListener('click', ()=>{
+    document.getElementById('privacy-text').classList.toggle('open');
+  });
+
+  // Weddy Memories — cada foto vai para o Storage num caminho próprio deste
+  // convite (weddingId/token/ficheiro) e cria SÓ um registo de criação em
+  // "memories" (o convidado nunca consegue ler nem listar fotos, nem as
+  // suas nem as de outros — só o casal, em Definições → Weddy Memories).
+  document.getElementById('memory-file-input').addEventListener('change', async e=>{
+    const files = Array.from(e.target.files || []);
+    if(!files.length) return;
+    const statusEl = document.getElementById('memories-status');
+    const previewEl = document.getElementById('memories-preview');
+    for(const file of files){
+      if(!file.type.startsWith('image/')){
+        statusEl.textContent = t('memoriesNotImage')(file.name);
+        statusEl.className = 'msg error';
+        continue;
+      }
+      if(file.size > 8*1024*1024){
+        statusEl.textContent = t('memoriesTooLarge')(file.name);
+        statusEl.className = 'msg error';
+        continue;
+      }
+      statusEl.textContent = t('memoriesSending')(file.name);
+      statusEl.className = 'msg';
+      const path = `memories/${guestData.weddingId}/${guestToken}/${Date.now()}_${file.name}`;
+      try{
+        const ref = storage.ref(path);
+        await ref.put(file);
+        const url = await ref.getDownloadURL();
+        await db.collection('memories').add({
+          weddingId: guestData.weddingId,
+          token: guestToken,
+          guestName: guestData.name || '',
+          storagePath: path,
+          url: url,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        const img = document.createElement('img');
+        img.src = url;
+        img.className = 'memories-thumb';
+        previewEl.appendChild(img);
+        statusEl.textContent = t('memoriesThanks');
+        statusEl.className = 'msg success';
+      }catch(err){
+        statusEl.textContent = t('memoriesError');
+        statusEl.className = 'msg error';
+      }
+    }
+    e.target.value = '';
+  });
+
+  document.getElementById('delete-response-btn').addEventListener('click', ()=>{
+    if(!confirm(t('deleteConfirm'))){
+      return;
+    }
+    const btn = document.getElementById('delete-response-btn');
+    btn.disabled = true;
+    if(guestData.isFamily){
+      db.collection('guests').doc(guestToken).update({ responses: {}, respondedAt: null }).then(()=>{
+        guestData.responses = {};
+        familyMemberState = {};
+        renderFamilyForm();
+        const msgEl = document.getElementById('form-msg');
+        msgEl.textContent = t('deleteSuccessMsg');
+        msgEl.className = 'msg success';
+        updateDeleteLinkVisibility();
+        show('form-state');
+      }).catch(()=>{
+        alert(t('deleteError'));
+      }).finally(()=>{
+        btn.disabled = false;
+      });
+      return;
+    }
+    db.collection('guests').doc(guestToken).update({
+      attending: null,
+      rsvpStatus: null,
+      meal: '',
+      dietary: '',
+      transporte: false,
+      alojamento: false,
+      children: []
+    }).then(()=>{
+      Object.assign(guestData, { attending:null, rsvpStatus:null, meal:'', dietary:'', transporte:false, alojamento:false, children:[] });
+      selectedAttend = null;
+      children = [];
+      renderChildren();
+      document.querySelectorAll('#attend-seg button').forEach(b=>b.classList.remove('active'));
+      document.getElementById('extra-fields').classList.remove('show');
+      document.getElementById('maybe-note').classList.add('state-hidden');
+      document.getElementById('meal-select').value = '';
+      document.getElementById('dietary-text').value = '';
+      document.getElementById('toggle-transporte').classList.remove('on');
+      document.getElementById('toggle-alojamento').classList.remove('on');
+      document.getElementById('send-btn').disabled = true;
+      document.getElementById('send-btn').textContent = t('sendBtn');
+      const msgEl = document.getElementById('form-msg');
+      msgEl.textContent = t('deleteSuccessMsg');
+      msgEl.className = 'msg success';
+      updateDeleteLinkVisibility();
+      show('form-state');
+    }).catch(()=>{
+      alert(t('deleteError'));
+    }).finally(()=>{
+      btn.disabled = false;
+    });
+  });
+
+  ['toggle-transporte','toggle-alojamento'].forEach(id=>{
+    document.getElementById(id).addEventListener('click', e=>{ e.currentTarget.classList.toggle('on'); });
+  });
 
   document.querySelectorAll('#attend-seg button').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       selectedAttend = btn.dataset.attend;
       document.querySelectorAll('#attend-seg button').forEach(b=>b.classList.toggle('active', b===btn));
       document.getElementById('extra-fields').classList.toggle('show', selectedAttend==='yes');
+      document.getElementById('maybe-note').classList.toggle('state-hidden', selectedAttend!=='maybe');
       document.getElementById('send-btn').disabled = false;
     });
   });
 
   document.getElementById('send-btn').addEventListener('click', ()=>{
+    if(guestData && guestData.isFamily){ submitFamilyResponse(); return; }
     const msgEl = document.getElementById('form-msg');
     const btn = document.getElementById('send-btn');
     if(!selectedAttend){ return; }
-    const attending = selectedAttend === 'yes';
+    const attending = selectedAttend === 'yes' ? true : selectedAttend === 'no' ? false : null;
     const meal = attending ? document.getElementById('meal-select').value : '';
     const dietary = attending ? document.getElementById('dietary-text').value.trim() : '';
+    const transporte = attending ? document.getElementById('toggle-transporte').classList.contains('on') : false;
+    const alojamento = attending ? document.getElementById('toggle-alojamento').classList.contains('on') : false;
     // Só guarda crianças com nome preenchido — uma linha vazia deixada a
     // meio não deve ser enviada como se fosse uma criança real.
     const childrenToSend = attending ? children
@@ -255,27 +987,35 @@ h1{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:30px; col
       .map(c => ({ name: c.name.trim(), age: c.age===''||c.age===undefined ? null : Number(c.age), attending: c.attending!==false }))
       : [];
     if(attending && !meal){
-      msgEl.textContent = 'Escolhe uma refeição antes de enviar.';
+      msgEl.textContent = t('chooseMealError');
       msgEl.className = 'msg error';
       return;
     }
     btn.disabled = true;
-    msgEl.textContent = 'A enviar…';
+    msgEl.textContent = t('sending');
     msgEl.className = 'msg';
     db.collection('guests').doc(guestToken).update({
       attending: attending,
+      rsvpStatus: selectedAttend,
       meal: meal,
       dietary: dietary,
+      transporte: transporte,
+      alojamento: alojamento,
       children: childrenToSend,
       respondedAt: firebase.firestore.FieldValue.serverTimestamp()
     }).then(()=>{
-      document.getElementById('done-title').textContent = attending ? 'Obrigado pela resposta! 🎉' : 'Obrigado por nos avisares.';
-      document.getElementById('done-sub').textContent = attending
-        ? 'Já registámos que vais estar presente. Até lá!'
-        : 'Ficamos tristes por não poderes vir, mas obrigado por responderes.';
+      Object.assign(guestData, { attending, rsvpStatus:selectedAttend, meal, dietary, transporte, alojamento, children:childrenToSend });
+      updateDeleteLinkVisibility();
+      if(selectedAttend==='maybe'){
+        document.getElementById('done-title').textContent = t('doneTitleMaybe');
+        document.getElementById('done-sub').textContent = t('doneSubMaybe');
+      } else {
+        document.getElementById('done-title').textContent = attending ? t('doneTitleYes') : t('doneTitleNo');
+        document.getElementById('done-sub').textContent = attending ? t('doneSubYes') : t('doneSubNo');
+      }
       show('done-state');
     }).catch(()=>{
-      msgEl.textContent = 'Não foi possível enviar. Verifica a internet e tenta novamente.';
+      msgEl.textContent = t('sendError');
       msgEl.className = 'msg error';
       btn.disabled = false;
     });
