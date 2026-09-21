@@ -2493,6 +2493,7 @@ const APP_I18N = {
     btnDeleteSupplier:'Eliminar fornecedor',
     errStoragePhoto:'Não foi possível guardar a foto — o telemóvel pode estar sem espaço de armazenamento.',
     errStorageContract:'Não foi possível guardar o contrato — o telemóvel pode estar sem espaço de armazenamento.',
+    errContractUnsupportedType:'Tipo de ficheiro não suportado. Usa um PDF ou uma imagem.',
     defaultNewSupplierName:'Novo fornecedor',
     labelSupplierOptional:'Fornecedor (opcional)',
     noSupplierOption:'Sem fornecedor',
@@ -2693,6 +2694,12 @@ const APP_I18N = {
     btnRemoveAccess:'Remover acesso',
     onlyAccessNote:'É o único com acesso — convida alguém em "Convidar" se quiseres partilhar.',
     onlyCreatorCanRemoveNote:'Só quem criou o casamento pode remover o próprio acesso.',
+    exportDataLabel:'Os teus dados',
+    exportDataTitle:'Exportar os meus dados',
+    exportDataNote:'Descarrega uma cópia de tudo o que a Weddy guarda sobre este casamento — convidados, orçamento, gastos, mesas, respostas de RSVP — num ficheiro que podes guardar ou levar para outro sítio.',
+    btnExportData:'Exportar os meus dados',
+    exportDataPreparing:'A preparar…',
+    exportDataError:'Não foi possível preparar a exportação. Tenta novamente.',
     dangerZoneLabel:'Zona de perigo',
     deleteMyAccountTitle:'Eliminar a minha conta',
     deleteAccountNoteShared:'A tua conta deixa de ter acesso. Os dados do casamento continuam a existir para quem mais tiver acesso.',
@@ -3065,6 +3072,7 @@ const APP_I18N = {
     btnDeleteSupplier:'Delete supplier',
     errStoragePhoto:'Could not save the photo — your phone may be out of storage space.',
     errStorageContract:'Could not save the contract — your phone may be out of storage space.',
+    errContractUnsupportedType:'Unsupported file type. Use a PDF or an image.',
     defaultNewSupplierName:'New supplier',
     labelSupplierOptional:'Supplier (optional)',
     noSupplierOption:'No supplier',
@@ -3296,6 +3304,12 @@ const APP_I18N = {
     btnRemoveAccess:'Remove access',
     onlyAccessNote:'You\'re the only one with access — invite someone in "Invite" if you\'d like to share it.',
     onlyCreatorCanRemoveNote:'Only whoever created the wedding can remove their own access.',
+    exportDataLabel:'Your data',
+    exportDataTitle:'Export my data',
+    exportDataNote:'Download a copy of everything Weddy stores about this wedding — guests, budget, expenses, tables, RSVP responses — as a file you can keep or take elsewhere.',
+    btnExportData:'Export my data',
+    exportDataPreparing:'Preparing…',
+    exportDataError:'Could not prepare the export. Please try again.',
     dangerZoneLabel:'Danger zone',
     deleteMyAccountTitle:'Delete my account',
     deleteAccountNoteShared:'Your account loses access. The wedding data continues to exist for anyone else who still has access.',
@@ -3726,7 +3740,7 @@ function viewInicio(){
             <div class="timeline-time">${ev.time||'--:--'}</div>
             <div class="timeline-dot"></div>
             <div class="timeline-stem"></div>
-            <div class="timeline-label">${ev.label}${ev.place?`<span>${ev.place}</span>`:''}</div>
+            <div class="timeline-label">${escapeHTML(ev.label||'')}${ev.place?`<span>${escapeHTML(ev.place)}</span>`:''}</div>
           </div>`).join('')}
       </div>
     </div>` : `
@@ -4086,9 +4100,23 @@ function bindGuestGroupHandlers(scope){
       const [side,cat,idx] = e.currentTarget.dataset.remove.split('|');
       const arr = getGuestNames(side,cat);
       if(!arr) return;
+      // Fix 3 da auditoria RGPD/Segurança (Set 2026): antes, isto só tirava
+      // o convidado do array local — o documento guests/{token} continuava
+      // no Firestore, e o link de RSVP antigo continuava a funcionar. Agora
+      // apaga (ou encolhe, em modo família) o documento correspondente
+      // também, tal como já acontecia no botão explícito de revogar link.
+      // Corre em segundo plano para a lista continuar a responder de
+      // imediato; um erro aqui não deve bloquear a remoção local, mas fica
+      // registado para se poder investigar/repetir manualmente.
+      const removedEntry = arr[Number(idx)];
       arr.splice(Number(idx),1);
       reindexConfirmedAfterRemoval(side+'|'+cat+'|', Number(idx), arr.length);
       softUpdateConvidados();
+      if(removedEntry && typeof removedEntry==='object' && removedEntry.rsvpToken){
+        deleteGuestRSVPDoc(removedEntry).catch(err=>{
+          console.error('Weddy: falha a apagar o convite RSVP associado ao convidado removido.', err.code, err.message);
+        });
+      }
     });
   });
   scope.querySelectorAll('[data-editguest]').forEach(inp=>{
@@ -5400,13 +5428,16 @@ function bindFornecedorDetalheHandlers(){
     try{
       const doc = await uploadSupplierContract(s.id, file);
       if(!doc){
-        // Fallback: sem Firestore/Storage disponível (ou tipo de ficheiro
-        // inesperado), mantém o comportamento antigo para não perder o
-        // contrato do utilizador.
-        let dataUrl;
-        if(file.type && file.type.startsWith('image/')) dataUrl = await resizeImageFile(file, 1400, 0.82);
-        else dataUrl = await new Promise((resolve,reject)=>{ const r = new FileReader(); r.onload=()=>resolve(r.result); r.onerror=reject; r.readAsDataURL(file); });
-        setSupplierContract(s.id, { name:file.name, dataUrl });
+        // Fix 6 da auditoria RGPD/Segurança (Set 2026): antes, aqui,
+        // guardava-se o contrato em localStorage — fora do Firestore/
+        // Storage, sem controlo de acesso nem cifra, ligado ao dispositivo
+        // (risco em computador partilhado). uploadSupplierContract só
+        // devolve null quando o tipo de ficheiro não é PDF nem imagem (o
+        // seletor de ficheiros já filtra para isso, por isso deve ser raro
+        // na prática) — nesse caso, avisa e não guarda nada em vez de usar
+        // o fallback inseguro.
+        alert(ta('errContractUnsupportedType') || 'Tipo de ficheiro não suportado. Usa um PDF ou uma imagem.');
+        return;
       }
       pushRemote(true);
       _origRender();
@@ -5604,11 +5635,23 @@ function agesCompatible(a,b){
   if(na===null || nb===null) return true;
   return na===nb;
 }
+// Fix 5 da auditoria RGPD/Segurança (Set 2026): estes ids funcionam como a
+// única "password" de acesso ao RSVP de um convidado (a regra do Firestore
+// é "allow get: if true" — quem tem o token, entra). Antes eram gerados
+// com Date.now()+Math.random(), que não é um gerador criptográfico — usa-se
+// agora crypto.getRandomValues(), a API própria do browser para valores
+// imprevisíveis, com bastante mais entropia do que o necessário para
+// tornar impraticável adivinhar ou repetir um token por força bruta.
+function secureRandomHex(byteLength){
+  const bytes = new Uint8Array(byteLength);
+  (window.crypto || window.msCrypto).getRandomValues(bytes);
+  return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+}
 function generateRSVPToken(){
-  return 'r'+Date.now().toString(36)+Math.random().toString(36).slice(2,10);
+  return 'r' + secureRandomHex(16); // 128 bits de entropia
 }
 function generateRSVPMemberId(){
-  return 'm'+Date.now().toString(36)+Math.random().toString(36).slice(2,8);
+  return 'm' + secureRandomHex(10); // 80 bits — só precisa de ser único dentro do mesmo convite de família
 }
 // RSVP de família: várias pessoas adultas do mesmo agregado partilham o
 // MESMO link/token (guests/{token}), mas cada uma tem a sua própria
@@ -5878,13 +5921,16 @@ function ensureFamilyRSVPLink(items){
 // mantém o link ativo), isto remove o convite inteiro. Para um convite de
 // família, remove só este membro do grupo (o link continua ativo para os
 // restantes) — só apaga o documento inteiro se for o último membro.
-function revokeRSVPLink(side, catId, idx, name){
-  const arr = getGuestNames(side, catId);
-  const entry = arr && arr[idx];
-  if(!entry || !entry.rsvpToken){ return; }
-  if(!confirm(ta('confirmRemoveRSVPInvite')(name))){
-    return;
-  }
+// Fix 3 da auditoria RGPD/Segurança (Set 2026): a lógica de apagar (ou, em
+// modo família, encolher) o documento guests/{token} no Firestore estava
+// só aqui dentro, só acessível a partir do botão explícito "revogar link".
+// Extraída para esta função para poder ser reaproveitada também quando um
+// convidado é simplesmente removido da lista (ver [data-remove] abaixo) —
+// caso contrário o documento guests/{token} ficava órfão no Firestore,
+// continuando acessível a quem tivesse o link antigo, mesmo depois do
+// casal "remover" esse convidado da app.
+function deleteGuestRSVPDoc(entry){
+  if(!entry || !entry.rsvpToken) return Promise.resolve();
   const token = entry.rsvpToken;
   const doc = rsvpResponses[token];
   if(doc && doc.isFamily && entry.rsvpMemberId){
@@ -5892,22 +5938,25 @@ function revokeRSVPLink(side, catId, idx, name){
     if(remainingMembers.length>0){
       const remainingResponses = { ...(doc.responses||{}) };
       delete remainingResponses[entry.rsvpMemberId];
-      GUESTS().doc(token).update({ members: remainingMembers, ['responses.'+entry.rsvpMemberId]: firebase.firestore.FieldValue.delete() }).then(()=>{
-        entry.rsvpToken = null;
-        entry.rsvpMemberId = null;
+      return GUESTS().doc(token).update({ members: remainingMembers, ['responses.'+entry.rsvpMemberId]: firebase.firestore.FieldValue.delete() }).then(()=>{
         if(rsvpResponses[token]){ rsvpResponses[token] = { ...doc, members: remainingMembers, responses: remainingResponses }; }
-        render();
-      }).catch(err=>{
-        console.error('Weddy RSVP revoke error:', err.code, err.message);
-        alert(ta('alertRemoveInviteError'));
       });
-      return;
     }
   }
-  GUESTS().doc(token).delete().then(()=>{
+  return GUESTS().doc(token).delete().then(()=>{
+    delete rsvpResponses[token];
+  });
+}
+function revokeRSVPLink(side, catId, idx, name){
+  const arr = getGuestNames(side, catId);
+  const entry = arr && arr[idx];
+  if(!entry || !entry.rsvpToken){ return; }
+  if(!confirm(ta('confirmRemoveRSVPInvite')(name))){
+    return;
+  }
+  deleteGuestRSVPDoc(entry).then(()=>{
     entry.rsvpToken = null;
     entry.rsvpMemberId = null;
-    delete rsvpResponses[token];
     render();
   }).catch(err=>{
     console.error('Weddy RSVP revoke error:', err.code, err.message);
@@ -7345,6 +7394,17 @@ function viewDefSeguranca(){
   <div class="list-group" style="margin-bottom:6px;">${owners}</div>
   ${defSaveBtn('def-save-seguranca','def-msg-seguranca')}
 
+  <div class="section-label">${ta('exportDataLabel')}</div>
+  <div class="list-group" style="margin-bottom:16px;">
+    <div class="list-row" style="flex-direction:column; align-items:stretch; gap:8px;">
+      <div>
+        <div class="title">${ta('exportDataTitle')}</div>
+        <div class="visit-detail">${ta('exportDataNote')}</div>
+      </div>
+      <button class="visit-action-btn" style="width:100%;" id="export-my-data-btn">${ICONS.download||''} ${ta('btnExportData')}</button>
+    </div>
+  </div>
+
   <div class="section-label" style="color:var(--rust-dark);">${ta('dangerZoneLabel')}</div>
   <div class="list-group" style="margin-bottom:16px;">
     <div class="list-row" style="flex-direction:column; align-items:stretch; gap:8px;">
@@ -8207,6 +8267,8 @@ function bindHandlers(){
   if(defSaveSeguranca) defSaveSeguranca.addEventListener('click', ()=>saveSettingsNow('def-msg-seguranca'));
   const openDeleteAccountBtn = document.getElementById('open-delete-account-btn');
   if(openDeleteAccountBtn) openDeleteAccountBtn.addEventListener('click', openDeleteAccountSheet);
+  const exportMyDataBtn = document.getElementById('export-my-data-btn');
+  if(exportMyDataBtn) exportMyDataBtn.addEventListener('click', ()=>exportMyDataAsJson(exportMyDataBtn));
   const exportExcelBtn = document.getElementById('export-excel-btn');
   if(exportExcelBtn) exportExcelBtn.addEventListener('click', exportToExcel);
   const exportPdfBtn = document.getElementById('export-pdf-btn');
@@ -9025,14 +9087,43 @@ function ensureMesa3DHeader(){
 // para que o rsvp.html (que nunca lê o documento do casamento) consiga
 // mostrar "a tua mesa" ao convidado sem expor a lista toda. Só nomes vão
 // para "tablemates" — nunca ids, tokens nem outros dados do convidado.
+// Fix 6 da auditoria RGPD/Segurança (Set 2026): isto enviava o link de
+// RSVP (que inclui o token de acesso do convidado) como parâmetro de URL
+// para a api.qrserver.com, um serviço de terceiros não documentado como
+// subprocessador. Passa a gerar o QR code inteiramente no browser, com a
+// biblioteca "qrcode-generator" (carregada uma vez, sob pedido, de um CDN
+// — mas o LINK em si nunca sai do dispositivo, só o código da biblioteca é
+// pedido à rede).
+let _qrCodeLibPromise = null;
+function loadQrCodeLib(){
+  if(window.qrcode) return Promise.resolve();
+  if(_qrCodeLibPromise) return _qrCodeLibPromise;
+  _qrCodeLibPromise = new Promise((resolve, reject)=>{
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js';
+    s.onload = ()=>resolve();
+    s.onerror = ()=>reject(new Error('Falha a carregar a biblioteca de QR code.'));
+    document.head.appendChild(s);
+  });
+  return _qrCodeLibPromise;
+}
+function buildRSVPQrDataUrl(link){
+  const qr = window.qrcode(0, 'M'); // 0 = deteta automaticamente o tamanho necessário
+  qr.addData(link);
+  qr.make();
+  return qr.createDataURL(6, 8); // 6px por módulo, margem de 8 módulos
+}
 // Modal simples e autónomo (não depende do sistema de "sheets") para
 // mostrar o QR code do link de RSVP de um convidado, pronto a imprimir.
-// Usa a API pública api.qrserver.com só para desenhar a imagem do QR a
-// partir do link — nenhum dado é enviado para lado nenhum além do link
-// público que o convidado já recebia por texto.
-function openRSVPQRModal(link, name){
+async function openRSVPQRModal(link, name){
   closeRSVPQRModal();
-  const qrImg = 'https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=' + encodeURIComponent(link);
+  let qrImg = '';
+  try{
+    await loadQrCodeLib();
+    qrImg = buildRSVPQrDataUrl(link);
+  }catch(err){
+    console.error('Weddy: falha a gerar o QR code do RSVP.', err && err.message);
+  }
   const wrap = document.createElement('div');
   wrap.id = 'rsvp-qr-modal';
   wrap.className = 'rsvp-qr-modal';
@@ -9040,7 +9131,7 @@ function openRSVPQRModal(link, name){
     <div class="rsvp-qr-card">
       <button class="rsvp-qr-close" id="rsvp-qr-close">${ICONS.close||'&times;'}</button>
       <div class="rsvp-qr-name">${escapeHTML(name||'')}</div>
-      <img src="${qrImg}" alt="QR code do convite" width="220" height="220"/>
+      ${qrImg ? `<img src="${qrImg}" alt="QR code do convite" width="220" height="220"/>` : `<div class="rsvp-qr-link" style="margin:12px 0;">Não foi possível gerar o QR code agora — usa o link abaixo.</div>`}
       <div class="rsvp-qr-link">${escapeHTML(link)}</div>
       <button class="rsvp-copy-btn" id="rsvp-qr-print">${ICONS.download||''} Imprimir</button>
     </div>
@@ -9057,7 +9148,7 @@ function openRSVPQRModal(link, name){
       p{font-size:13px; color:#555; word-break:break-all;}
     </style></head><body>
       <h2>${escapeHTML(name||'')}</h2>
-      <img src="${qrImg}" width="260" height="260"/>
+      ${qrImg ? `<img src="${qrImg}" width="260" height="260"/>` : ''}
       <p>${escapeHTML(link)}</p>
     </body></html>`);
     w.document.close();
@@ -9757,6 +9848,55 @@ function closeTodoCatSheet(){
   editingTodoCatId = null;
 }
 
+// Fix 7 da auditoria RGPD/Segurança (Set 2026) — direito à portabilidade
+// dos dados (Art. 20 RGPD). Monta um ficheiro JSON com tudo o que a app
+// guarda sobre este casamento: o documento principal (orçamento,
+// convidados, mesas, gastos, fornecedores, etc. — tudo o que já está em
+// "state"), as definições do casamento, e os documentos "guests"/
+// "memories" do Firestore (que não vivem dentro de "state"). Corre
+// inteiramente com os dados que o próprio casal já tem permissão para
+// ler (mesmas Firestore Rules de sempre) — não é um caminho novo de
+// acesso a dados, só uma forma de os levar consigo.
+async function exportMyDataAsJson(btn){
+  if(!FIREBASE_READY || !auth || !auth.currentUser || !currentWeddingId){
+    alert(ta('exportDataError'));
+    return;
+  }
+  const original = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = ta('exportDataPreparing');
+  try{
+    const [guestsSnap, memoriesSnap] = await Promise.all([
+      GUESTS().where('weddingId', '==', currentWeddingId).get(),
+      MEMORIES().where('weddingId', '==', currentWeddingId).get(),
+    ]);
+    const guests = guestsSnap.docs.map(d=>({ id: d.id, ...d.data() }));
+    const memories = memoriesSnap.docs.map(d=>({ id: d.id, ...d.data() }));
+    const exportObj = {
+      exportedAt: new Date().toISOString(),
+      weddingId: currentWeddingId,
+      settings: weddingSettings,
+      data: state,
+      rsvps: guests,
+      memories: memories,
+    };
+    const blob = new Blob([JSON.stringify(exportObj, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `weddy-dados-${currentWeddingId}-${new Date().toISOString().slice(0,10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url), 5000);
+  }catch(err){
+    console.error('Weddy: falha a exportar os dados.', err && err.message);
+    alert(ta('exportDataError'));
+  }finally{
+    btn.disabled = false;
+    btn.textContent = original;
+  }
+}
 function openDeleteAccountSheet(){
   const isSoleOwner = currentWeddingOwners.length<=1;
   document.getElementById('delete-account-explain').innerHTML = isSoleOwner
@@ -9790,17 +9930,21 @@ document.getElementById('delete-account-confirm').addEventListener('click', ()=>
   const credential = firebase.auth.EmailAuthProvider.credential(email, pass);
 
   user.reauthenticateWithCredential(credential).then(()=>{
-    const isSoleOwner = currentWeddingOwners.length<=1;
-    let dataStep;
-    if(isSoleOwner){
-      dataStep = CURRENT_DOC().delete();
-    } else {
-      const uidToRemove = currentUidByEmail[sanitizeEmailKey(email.toLowerCase())] || user.uid;
-      const updates = { ownerEmails: firebase.firestore.FieldValue.arrayRemove(email.toLowerCase()) };
-      updates.ownerUids = firebase.firestore.FieldValue.arrayRemove(uidToRemove);
-      dataStep = CURRENT_DOC().update(updates);
+    // Fix 2 da auditoria RGPD/Segurança (Set 2026): o apagamento já não é
+    // feito diretamente daqui. A Firestore Rule bloqueia de propósito o
+    // delete direto de "weddings" (allow delete: if false), porque apagar
+    // só este documento deixava para trás convidados, memórias, ficheiros
+    // no Storage e o contador de uso de IA — dados órfãos, sem dono, e sem
+    // forma de os apagar depois. Agora tudo passa pela Cloud Function
+    // deleteWeddingAccount, que faz a cascata completa (ou só remove este
+    // dono, se o casamento tiver mais do que um) com o Admin SDK, e só
+    // apaga a conta de autenticação depois de confirmar que os dados foram
+    // tratados. Precisa do deploy do Fix 2 — ver SEGURANCA-RGPD-README.md.
+    if(!cloudFunctions){
+      return Promise.reject(new Error('Função de eliminação de conta não disponível (Cloud Functions não configuradas).'));
     }
-    return dataStep.then(()=>user.delete());
+    const call = cloudFunctions.httpsCallable('deleteWeddingAccount');
+    return call({});
   }).then(()=>{
     closeDeleteAccountSheet();
     if(unsubscribeSnapshot) unsubscribeSnapshot();
