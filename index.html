@@ -6307,8 +6307,23 @@ function deleteGuestRSVPDoc(entry){
     if(remainingMembers.length>0){
       const remainingResponses = { ...(doc.responses||{}) };
       delete remainingResponses[entry.rsvpMemberId];
-      return GUESTS().doc(token).update({ members: remainingMembers, ['responses.'+entry.rsvpMemberId]: firebase.firestore.FieldValue.delete() }).then(()=>{
-        if(rsvpResponses[token]){ rsvpResponses[token] = { ...doc, members: remainingMembers, responses: remainingResponses }; }
+      const updates = { members: remainingMembers, ['responses.'+entry.rsvpMemberId]: firebase.firestore.FieldValue.delete() };
+      // Fase 8.2 (correção pedida pela Rita): um membro removido tem de
+      // desaparecer também de memberTables (guestId PERMANENTE, não o
+      // rsvpMemberId — é a chave que syncSeatingToGuestDocs usa), na MESMA
+      // escrita que já remove members[]/responses — nunca numa operação à
+      // parte. Sem isto, memberTables ficava com entradas órfãs de gente
+      // que já nem está no convite, o que mais tarde (AI Seating,
+      // Concierge, exports) não dá para distinguir de um membro real ainda
+      // sem mesa atribuída (esse caso usa null, ver syncSeatingToGuestDocs
+      // — nunca apaga a propriedade, só um membro removido é que apaga).
+      const remainingMemberTables = { ...(doc.memberTables||{}) };
+      if(entry.guestId && (entry.guestId in remainingMemberTables)){
+        delete remainingMemberTables[entry.guestId];
+        updates['memberTables.'+entry.guestId] = firebase.firestore.FieldValue.delete();
+      }
+      return GUESTS().doc(token).update(updates).then(()=>{
+        if(rsvpResponses[token]){ rsvpResponses[token] = { ...doc, members: remainingMembers, responses: remainingResponses, memberTables: remainingMemberTables }; }
       });
     }
   }
@@ -6348,8 +6363,21 @@ function deleteGuestRSVPDocsBatch(entries){
           delete remainingResponses[mid];
           updates['responses.'+mid] = firebase.firestore.FieldValue.delete();
         });
+        // Fase 8.2: mesma limpeza de memberTables que deleteGuestRSVPDoc(),
+        // aqui para o caso de vários membros removidos de uma vez — chave é
+        // sempre o guestId PERMANENTE de cada entry removida, nunca o
+        // rsvpMemberId. Um membro que fica sem mesa continua a valer null
+        // (ver syncSeatingToGuestDocs); só um membro REMOVIDO é que perde a
+        // propriedade inteira.
+        const remainingMemberTables = { ...(doc.memberTables||{}) };
+        groupEntries.forEach(e=>{
+          if(e.guestId && (e.guestId in remainingMemberTables)){
+            delete remainingMemberTables[e.guestId];
+            updates['memberTables.'+e.guestId] = firebase.firestore.FieldValue.delete();
+          }
+        });
         ops.push(GUESTS().doc(token).update(updates).then(()=>{
-          if(rsvpResponses[token]){ rsvpResponses[token] = { ...doc, members: remainingMembers, responses: remainingResponses }; }
+          if(rsvpResponses[token]){ rsvpResponses[token] = { ...doc, members: remainingMembers, responses: remainingResponses, memberTables: remainingMemberTables }; }
         }).catch(()=>{}));
         return;
       }
