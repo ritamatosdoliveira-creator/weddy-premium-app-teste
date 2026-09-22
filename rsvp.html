@@ -61,6 +61,11 @@ h1{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:30px; col
 .table-card{ text-align:left; margin-bottom:20px; padding:16px; border-radius:16px; background:rgba(122,150,105,0.09); border:1px solid rgba(122,150,105,0.25); }
 .table-card .tc-title{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:19px; color:var(--sage-dark); margin-bottom:4px; }
 .table-card .tc-sub{ font-size:12.5px; color:var(--ink-soft); }
+/* Fase 8.2.4 — estados "sem mesa ainda" / "não confirmado": mesmo cartão,
+   mas discreto (cinza, sem o verde de "já tens mesa") — nunca escondido
+   por completo, para nunca deixar a pessoa sem saber em que ponto está. */
+.table-card.is-pending{ background:rgba(48,44,41,0.035); border-color:var(--line); }
+.table-card.is-pending .tc-title{ font-family:inherit; font-weight:600; font-size:14.5px; color:var(--ink); }
 .faq-block{ text-align:left; margin-top:8px; }
 .faq-block > .faq-title{ font-size:12px; color:var(--ink-soft); margin-bottom:10px; font-weight:600; }
 .faq-item{ border-top:1px solid var(--line); }
@@ -439,7 +444,16 @@ h1{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:30px; col
       conciergeReplyTableFamilyUnavailable: 'Este link é partilhado por toda a família, por isso não consigo saber por aqui de quem estás a falar — mas assim que os noivos organizarem os lugares, a mesa de cada pessoa aparece no seu próprio cartão, mais acima nesta página.',
       conciergeReplyRSVPFamilyUnavailable: 'Este link é partilhado por toda a família — cada pessoa vê a sua própria resposta no seu cartão, mais acima nesta página.',
       conciergeReplyTableNotAssigned: 'Ainda não tens uma mesa atribuída — assim que os noivos organizarem os lugares, digo-te aqui.',
+      conciergeReplyTableNeedsRSVP: 'Ainda não confirmaste a tua presença — confirma primeiro no formulário acima, e assim que os noivos organizarem os lugares, digo-te aqui a tua mesa.',
       conciergeReplyTableAssigned: (table, seat, mates) => `Vais estar na mesa ${table}${seat?`, lugar ${seat}`:''}.${mates && mates.length ? ' Também aí: '+mates.join(', ')+'.' : ''}`,
+      // Fase 8.2.4 — estados do cartão de mesa na própria página (não no
+      // Concierge): "não confirmado" (ainda nem disseste que vais) é
+      // sempre distinto de "sem mesa ainda" (já confirmaste, os noivos é
+      // que ainda não organizaram os lugares) — nunca a mesma frase.
+      tableStateNotConfirmedTitle: 'Presença por confirmar',
+      tableStateNotConfirmedSub: 'A tua presença ainda não foi confirmada.',
+      tableStateNoTableTitle: 'Mesa por atribuir',
+      tableStateNoTableSub: 'A tua mesa ainda não foi atribuída.',
       conciergeReplyRSVPYes: meal => `A tua resposta está confirmada como "vou". ${meal ? `Refeição escolhida: ${meal}.` : 'Ainda não escolheste a refeição no formulário acima.'}`,
       conciergeReplyRSVPNo: 'A tua resposta está registada como "não vou conseguir estar presente".',
       conciergeReplyRSVPMaybe: 'A tua resposta está registada como "ainda não sei".',
@@ -561,7 +575,12 @@ h1{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:30px; col
       conciergeReplyTableFamilyUnavailable: "This link is shared by the whole family, so I can't tell from here who you are — but once the couple sorts out the seating, each person's table shows up on their own card, further up this page.",
       conciergeReplyRSVPFamilyUnavailable: 'This link is shared by the whole family — each person sees their own reply on their own card, further up this page.',
       conciergeReplyTableNotAssigned: "You don't have a table assigned yet — I'll let you know here once the couple sorts out the seating.",
+      conciergeReplyTableNeedsRSVP: "You haven't confirmed your attendance yet — confirm in the form above first, and once the couple sorts out the seating, I'll tell you your table here.",
       conciergeReplyTableAssigned: (table, seat, mates) => `You'll be at table ${table}${seat?`, seat ${seat}`:''}.${mates && mates.length ? ' Also there: '+mates.join(', ')+'.' : ''}`,
+      tableStateNotConfirmedTitle: 'Attendance not confirmed yet',
+      tableStateNotConfirmedSub: "Your attendance hasn't been confirmed yet.",
+      tableStateNoTableTitle: 'Table not assigned yet',
+      tableStateNoTableSub: "Your table hasn't been assigned yet.",
       conciergeReplyRSVPYes: meal => `Your reply is confirmed as "attending". ${meal ? `Meal chosen: ${meal}.` : "You haven't picked a meal in the form above yet."}`,
       conciergeReplyRSVPNo: 'Your reply is recorded as "not able to attend".',
       conciergeReplyRSVPMaybe: 'Your reply is recorded as "not sure yet".',
@@ -796,14 +815,31 @@ h1{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:30px; col
       note.classList.remove('state-hidden');
     }
 
-    // Mesa atribuída (só aparece quando os noivos já sincronizaram os
-    // lugares, e só mostra a informação DESTE convidado — nunca o mapa
-    // completo das mesas, que fica de fora do documento do convidado).
-    if(!guestData.isFamily && guestData.attending===true && guestData.assignedTable){
+    // Fase 8.2.4 — estados explícitos do cartão de mesa (nunca deixar em
+    // branco sem dizer porquê, e nunca confundir "ainda não confirmaste"
+    // com "confirmaste mas ainda não têm mesa"): só não mostramos nada de
+    // todo quando a pessoa já disse que não vai (aí falar de mesas não
+    // faz sentido nenhum). O cartão em si nunca mostra o mapa completo
+    // das mesas, só a informação DESTE convidado.
+    if(!guestData.isFamily && guestData.attending!==false){
       const tc = document.getElementById('table-card');
-      document.getElementById('table-card-title').textContent = t('tableTitle')(guestData.assignedTable, guestData.assignedSeat);
-      const mates = Array.isArray(guestData.tablemates) ? guestData.tablemates.filter(m=>m && m!==guestData.name) : [];
-      document.getElementById('table-card-sub').textContent = mates.length ? t('tableWith')(mates.join(', ')) : t('tableAlone');
+      const titleEl = document.getElementById('table-card-title');
+      const subEl = document.getElementById('table-card-sub');
+      if(guestData.attending===true && guestData.assignedTable){
+        tc.classList.remove('is-pending');
+        titleEl.textContent = t('tableTitle')(guestData.assignedTable, guestData.assignedSeat);
+        const mates = Array.isArray(guestData.tablemates) ? guestData.tablemates.filter(m=>m && m!==guestData.name) : [];
+        subEl.textContent = mates.length ? t('tableWith')(mates.join(', ')) : t('tableAlone');
+      } else if(guestData.attending===true){
+        tc.classList.add('is-pending');
+        titleEl.textContent = t('tableStateNoTableTitle');
+        subEl.textContent = t('tableStateNoTableSub');
+      } else {
+        // null/undefined (por responder) ou rsvpStatus==='maybe'.
+        tc.classList.add('is-pending');
+        titleEl.textContent = t('tableStateNotConfirmedTitle');
+        subEl.textContent = t('tableStateNotConfirmedSub');
+      }
       tc.classList.remove('state-hidden');
     }
 
@@ -918,11 +954,30 @@ h1{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:30px; col
       // confirmado e sincronizado, nunca antes.
       const memberTables = guestData.memberTables || {};
       const tableInfo = m.permanentGuestId ? memberTables[m.permanentGuestId] : null;
-      const tableCardHTML = (st.attend==='yes' && tableInfo) ? `
+      // Fase 8.2.4 — mesmos três estados do cartão individual, um por
+      // membro: com mesa, confirmado mas sem mesa ainda, ou por confirmar.
+      // Só quem já disse "não vou" (st.attend==='no') não mostra nada —
+      // falar de mesa não faz sentido para quem não vem.
+      let tableCardHTML = '';
+      if(st.attend==='yes' && tableInfo){
+        tableCardHTML = `
         <div class="table-card" style="margin:10px 0 0;">
           <div class="tc-title">${t('tableTitle')(tableInfo.table, tableInfo.seat).replace(/</g,'&lt;')}</div>
           <div class="tc-sub">${((tableInfo.tablemates||[]).length ? t('tableWith')(tableInfo.tablemates.join(', ')) : t('tableAlone')).replace(/</g,'&lt;')}</div>
-        </div>` : '';
+        </div>`;
+      } else if(st.attend==='yes'){
+        tableCardHTML = `
+        <div class="table-card is-pending" style="margin:10px 0 0;">
+          <div class="tc-title">${t('tableStateNoTableTitle').replace(/</g,'&lt;')}</div>
+          <div class="tc-sub">${t('tableStateNoTableSub').replace(/</g,'&lt;')}</div>
+        </div>`;
+      } else if(st.attend!=='no'){
+        tableCardHTML = `
+        <div class="table-card is-pending" style="margin:10px 0 0;">
+          <div class="tc-title">${t('tableStateNotConfirmedTitle').replace(/</g,'&lt;')}</div>
+          <div class="tc-sub">${t('tableStateNotConfirmedSub').replace(/</g,'&lt;')}</div>
+        </div>`;
+      }
       return `
       <div class="member-card" data-memberid="${mid}">
         <div class="member-name">${(m.name||'').replace(/</g,'&lt;')}</div>
@@ -1420,7 +1475,12 @@ h1{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:30px; col
     },
     getGuestTable(context){
       const g = context.guestData;
-      if(!g.assignedTable) return { assigned:false };
+      // Fase 8.2.2: "ainda não confirmaste presença" é uma resposta
+      // diferente de "já confirmaste mas ainda não têm mesa" — antes
+      // disto o Concierge dizia sempre a mesma frase genérica para os
+      // dois casos, o que não corresponde à razão real de não haver mesa.
+      if(g.attending!==true) return { assigned:false, needsRSVP:true };
+      if(!g.assignedTable) return { assigned:false, needsRSVP:false };
       const mates = Array.isArray(g.tablemates) ? g.tablemates.filter(m=>m && m!==g.name) : [];
       return { assigned:true, table:g.assignedTable, seat:g.assignedSeat, tablemates:mates };
     },
@@ -1514,7 +1574,7 @@ h1{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:30px; col
       }
       case I.GET_TABLE: {
         const info = WeddyActions.getGuestTable(context);
-        if(!info.assigned) return { text: t('conciergeReplyTableNotAssigned') };
+        if(!info.assigned) return { text: t(info.needsRSVP ? 'conciergeReplyTableNeedsRSVP' : 'conciergeReplyTableNotAssigned') };
         return { text: t('conciergeReplyTableAssigned')(info.table, info.seat, info.tablemates) };
       }
       case I.GET_RSVP: {
