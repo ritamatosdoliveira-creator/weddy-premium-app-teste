@@ -9985,9 +9985,26 @@ function syncSeatingToGuestDocs(btn){
     if(!byToken.has(g.entry.rsvpToken)) byToken.set(g.entry.rsvpToken, []);
     byToken.get(g.entry.rsvpToken).push(g);
   });
+  // Fix (Set 2026): a forma do payload (memberTables vs. assignedTable
+  // "achatado") NUNCA deve depender de "quantos guestIds partilham este
+  // token NESTE MOMENTO" (members.length>1) — um convite de família que
+  // encolhe para 1 único membro por sobrevivência (os outros foram
+  // removidos, ver deleteGuest) continua a ser um documento com
+  // isFamily:true e memberTables no Firestore, mesmo só com 1 pessoa lá
+  // dentro. Decidir pelo tamanho fazia com que, nesse caso, esta função
+  // escrevesse assignedTable/assignedSeat na RAIZ do documento (formato
+  // individual) em vez de atualizar memberTables — o rsvp.html só lê
+  // memberTables quando isFamily===true (ver renderFamilyMembers), por
+  // isso o membro sobrevivente ficava a ver a mesa ANTIGA (ou nenhuma),
+  // com o memberTables congelado desde a última vez que o link teve 2+
+  // pessoas, apesar da mesa nova ter sido escrita (no sítio errado). O
+  // sinal correto é se este convite foi alguma vez criado como família —
+  // rsvpMemberId só existe nas entries de quem passou por
+  // ensureFamilyRSVPLink, e sobrevive à remoção dos outros membros.
   const writes = Array.from(byToken.entries()).map(([token, members])=>{
     let payload;
-    if(members.length > 1){
+    const isFamilyToken = members.some(g=>g.entry.rsvpMemberId);
+    if(isFamilyToken){
       const memberTables = {};
       members.forEach(g=>{
         const info = assignmentByGuestId[g.guestId];
