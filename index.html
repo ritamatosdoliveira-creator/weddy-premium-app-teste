@@ -7627,7 +7627,8 @@ function viewDefGoogleCalendar(){
           </div>
           ${ICONS.chev}
         </div>`).join('') : `<div class="empty-note" style="padding:16px;">${ta('googleCalendarNoCalendars')}</div>`}
-    </div>`;
+    </div>
+    ${cals.length ? '' : `<div style="padding:0 16px;"><button class="login-btn" id="gcal-connect-btn" style="max-width:none;" ${googleCalendarBusy?'disabled':''}>${googleCalendarBusy? ta('googleCalendarConnecting') : ta('googleCalendarReconnect')}</button></div>`}`;
   }
 
   // Estado 2: desligado.
