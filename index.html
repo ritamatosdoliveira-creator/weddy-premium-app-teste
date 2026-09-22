@@ -2032,6 +2032,7 @@ let aiSeatingPicking = null; // {type,priority} enquanto se escolhe quem
 let aiSeatingPickIds = []; // guestIds escolhidos no picker atual
 let aiSeatingPickQuery = '';
 let aiSeatingNewPriority = 'STRONG'; // prioridade escolhida para a PRÓXIMA preferência a criar
+let aiSeatingCommitting = false; // true enquanto commitSeatingProposal() está a validar/gravar/sincronizar
 
 /* ============================================================
    HELPERS
@@ -4670,6 +4671,113 @@ function aiSeatingGuestName(guestId){
   const found = findGuestByGuestId(guestId);
   return found ? (found.entry.name||'') : guestId;
 }
+// Em que mesa (t{id}) ficou este guestId, segundo os assignments de UMA
+// proposta específica (nunca o state.seating.assignments real — usado só
+// para desenhar o check ✓/⚠ de cada preferência no ecrã de proposta).
+function aiSeatingTableIdInAssignments(assignments, guestId){
+  for(const key in assignments){
+    if(assignments[key]===guestId){
+      const m = key.match(/^t(\d+)-s\d+$/);
+      return m ? Number(m[1]) : null;
+    }
+  }
+  return null;
+}
+// Hash simples e determinístico (DJB2-like) só para comparar "a mesma
+// string" — nunca para segurança/criptografia.
+function aiSeatingSimpleHash(str){
+  let h = 0;
+  for(let i=0;i<str.length;i++){ h = (Math.imul(31,h) + str.charCodeAt(i))|0; }
+  return (h>>>0).toString(36);
+}
+// "Fotografia" de tudo o que uma proposta depende (quem pode ser sentado,
+// que mesas/lugares existem, que preferências foram pedidas) — gravada
+// dentro da própria proposta quando é gerada, e recalculada outra vez
+// mesmo antes do commit. Se algum dos três hashes mudou entretanto (ex:
+// o casal confirmou/removeu um convidado ou editou uma mesa enquanto via
+// a proposta), a proposta está obsoleta e commitSeatingProposal() recusa
+// gravar — evita escrever por cima de um estado que já não é o que gerou
+// aquela distribuição (bug de race/stale state).
+function aiSeatingSnapshotHash(){
+  const guestSig = aiSeatingConfirmedGuests().map(g=>g.guestId).sort().join(',');
+  const tableSig = [...state.seating.tables].sort((a,b)=>a.id-b.id).map(t=>t.id+':'+t.seats).join(',');
+  const constraintSig = aiSeatingConstraints.map(c=>c.type+'|'+c.priority+'|'+[...c.guestIds].sort().join(',')).sort().join(';');
+  return {
+    guestIdsHash: aiSeatingSimpleHash(guestSig),
+    tableIdsHash: aiSeatingSimpleHash(tableSig),
+    constraintsHash: aiSeatingSimpleHash(constraintSig)
+  };
+}
+function aiSeatingProposalIsStale(proposal){
+  if(!proposal) return true;
+  const current = aiSeatingSnapshotHash();
+  return proposal.guestIdsHash!==current.guestIdsHash
+      || proposal.tableIdsHash!==current.tableIdsHash
+      || proposal.constraintsHash!==current.constraintsHash;
+}
+// Convidados confirmados > lugares disponíveis: o Constraint Engine nem
+// vale a pena chamar-se, a proposta nunca vai caber — bloqueia ANTES de
+// gerar, em vez de deixar a Cloud Function falhar lá atrás.
+function aiSeatingOverCapacity(){
+  return aiSeatingConfirmedGuests().length > totalSeatsCount();
+}
+// Único ponto de entrada para pedir uma proposta ao Constraint Engine —
+// usado tanto por "Gerar proposta" (ecrã de preferências) como por
+// "Gerar outra" (ecrã de proposta, com as mesmas preferências). Nunca
+// toca em state.seating.assignments — só em aiSeatingProposal, que é
+// sempre descartável até ao commit explícito.
+function runAISeatingGeneration(){
+  if(aiSeatingOverCapacity()){
+    aiSeatingErrorMsg = `Tens ${aiSeatingConfirmedGuests().length} convidados confirmados mas só ${totalSeatsCount()} lugares disponíveis — ajusta as mesas em "Mesas" antes de gerar uma proposta.`;
+    aiSeatingScreen = 'prefs';
+    render();
+    return;
+  }
+  aiSeatingErrorMsg = null;
+  aiSeatingScreen = 'loading';
+  render();
+  const payload = aiSeatingConstraints.map(c=>({ type:c.type, priority:c.priority, guestIds:c.guestIds }));
+  AIService.generateSeatingProposal(payload, aiSeatingFreeText).then(res=>{
+    if(res && res.ok){
+      aiSeatingProposal = { ...res.proposal, generatedAt: Date.now(), ...aiSeatingSnapshotHash() };
+      aiSeatingScreen = 'proposal';
+    } else {
+      aiSeatingErrorMsg = (res && res.message) || 'Não foi possível gerar a proposta.';
+      aiSeatingScreen = 'prefs';
+    }
+    render();
+  });
+}
+// Único ponto que pode alterar state.seating.assignments a partir de uma
+// proposta da Weddy AI — "Gerar"/"Regenerar" nunca lhe tocam (só escrevem
+// em aiSeatingProposal). Valida a proposta contra o estado ATUAL (nunca
+// contra o estado de quando foi gerada) antes de gravar, para nunca
+// aceitar uma proposta que ficou obsoleta enquanto estava em ecrã.
+function commitSeatingProposal(proposal){
+  if(!proposal || aiSeatingCommitting) return;
+  if(aiSeatingProposalIsStale(proposal)){
+    aiSeatingProposal = null;
+    aiSeatingScreen = 'prefs';
+    aiSeatingErrorMsg = 'Esta proposta já não corresponde à configuração atual das mesas/convidados. Gera uma nova proposta.';
+    render();
+    return;
+  }
+  aiSeatingCommitting = true;
+  render();
+  state.seating.assignments = { ...proposal.assignments };
+  render();
+  pushRemote(true);
+  Promise.resolve(syncSeatingToGuestDocs()).catch(()=>{
+    alert('A distribuição foi guardada, mas houve um problema a atualizar os convites RSVP dos convidados. Sincroniza outra vez em "Lugares".');
+  }).finally(()=>{
+    aiSeatingCommitting = false;
+    aiSeatingScreen = null;
+    aiSeatingProposal = null;
+    aiSeatingConstraints = [];
+    aiSeatingFreeText = '';
+    render();
+  });
+}
 
 function viewAISeatingScreen(){
   if(aiSeatingScreen==='loading') return viewAISeatingLoading();
@@ -4695,6 +4803,8 @@ const AI_SEATING_PRIORITY_LABEL = { HARD:'🔴 Obrigatório', STRONG:'🟠 Impor
 function viewAISeatingPrefs(){
   const confirmedGuests = aiSeatingConfirmedGuests();
   const totalSeats = totalSeatsCount();
+  const tableCount = state.seating.tables.length;
+  const overCapacity = aiSeatingOverCapacity();
   const constraintsHTML = aiSeatingConstraints.map((c,i)=>`
     <div class="list-row" style="padding:10px 14px;">
       <div class="def-row-mid" style="flex:1;">
@@ -4740,7 +4850,12 @@ function viewAISeatingPrefs(){
     <button class="nav-action" data-aiseatback>${ICONS.chevleft||ICONS.chev}</button>
     <div><h1>Organizar com Weddy AI</h1></div>
   </div>
-  <div class="empty-note" style="margin:0 16px 14px;">Diz à Weddy quem deve ficar junto, separado ou perto — o resto (encaixar tudo dentro da capacidade das mesas) fica por conta dela. Tens ${confirmedGuests.length} convidados confirmados e ${totalSeats} lugares.</div>
+  <div class="empty-note" style="margin:0 16px 10px;">A Weddy AI vai organizar os teus convidados tendo em conta as mesas, os lugares e as preferências que definires abaixo.</div>
+  <div class="visit-detail" style="margin:0 16px 14px; padding:12px 14px; background:var(--card); border:1px solid var(--line); border-radius:12px; line-height:1.9;">
+    · convidados confirmados: <strong>${confirmedGuests.length}</strong><br>
+    · mesas: <strong>${tableCount}</strong><br>
+    · lugares disponíveis: <strong style="${overCapacity?'color:var(--danger,#b3413a);':''}">${totalSeats}</strong>
+  </div>
 
   <div class="section-label">Preferências</div>
   ${aiSeatingConstraints.length ? `<div class="list-group" style="margin:0 16px 4px;">${constraintsHTML}</div>` : `<div class="empty-note" style="margin:0 16px 4px;">Ainda não adicionaste nenhuma preferência — podes gerar a proposta na mesma, a Weddy só vai preencher as mesas por ordem, respeitando a capacidade.</div>`}
@@ -4749,10 +4864,11 @@ function viewAISeatingPrefs(){
   <div class="section-label" style="margin-top:18px;">Ou escreve por palavras (opcional)</div>
   <textarea id="ai-seat-freetext" rows="3" placeholder='Ex: "Quero os meus pais perto dos padrinhos e não quero o tio António perto do João."' style="all:unset; box-sizing:border-box; width:calc(100% - 32px); margin:0 16px; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:10px 12px; font-family:inherit; font-size:13px; resize:vertical;">${escapeHTML(aiSeatingFreeText)}</textarea>
 
+  ${overCapacity ? `<div class="empty-note" style="margin:14px 16px 0; color:var(--danger,#b3413a);">⚠️ Tens ${confirmedGuests.length} convidados confirmados mas só ${totalSeats} lugares disponíveis. Ajusta as mesas em "Mesas" antes de gerar uma proposta.</div>` : ''}
   <div style="padding:18px 16px 8px;">
-    <button id="ai-seat-generate-btn" class="login-btn" style="max-width:none;">${ICONS.sparkle||'✨'} Gerar proposta</button>
+    <button id="ai-seat-generate-btn" class="login-btn" style="max-width:none;" ${overCapacity?'disabled':''}>${ICONS.sparkle||'✨'} Gerar proposta</button>
   </div>
-  ${aiSeatingErrorMsg ? `<div class="empty-note" style="margin:0 16px 16px; color:var(--danger,#b3413a);">⚠️ ${escapeHTML(aiSeatingErrorMsg)}</div>` : ''}
+  ${(aiSeatingErrorMsg && !overCapacity) ? `<div class="empty-note" style="margin:0 16px 16px; color:var(--danger,#b3413a);">⚠️ ${escapeHTML(aiSeatingErrorMsg)}</div>` : ''}
   `;
 }
 
@@ -4769,10 +4885,6 @@ function viewAISeatingProposal(){
     return `<div class="table-group"><div class="table-head"><div class="ttitle">${ta('tableLabel')(t.id)}<span class="phase-desc">${seatRows.length}/${t.seats}</span></div></div><div class="visit-detail" style="padding:0 14px 12px;">${seatRows.map(escapeHTML).join(', ')}</div></div>`;
   }).join('');
 
-  const warningsHTML = (p.warnings||[]).length ? `
-    <div class="section-label" style="margin-top:16px;">⚠️ ${p.warnings.length} preferência(s) não totalmente respeitada(s)</div>
-    <div class="empty-note" style="margin:0 16px;">${p.warnings.map(escapeHTML).join('<br>')}</div>
-  ` : '';
   const violationsHTML = (p.violations||[]).length ? `
     <div class="section-label" style="margin-top:16px; color:var(--danger,#b3413a);">Preferências obrigatórias não respeitadas</div>
     <div class="empty-note" style="margin:0 16px;">${p.violations.map(escapeHTML).join('<br>')}</div>
@@ -4781,9 +4893,33 @@ function viewAISeatingProposal(){
     <div class="empty-note" style="margin:8px 16px;">Não encontrei "${p.unresolvedFreeText.map(escapeHTML).join('", "')}" na lista de convidados confirmados — essa parte do texto foi ignorada.</div>
   ` : '';
 
+  // Checklist ✓/⚠ por preferência pedida, calculado aqui no cliente a
+  // partir de p.assignments (mesma lógica TOGETHER/APART/NEAR do
+  // Constraint Engine) — mostra os NOMES reais de cada preferência, em
+  // vez de só a frase genérica que a Cloud Function devolve.
+  const constraintChecks = aiSeatingConstraints.map(c=>{
+    const tids = c.guestIds.map(gid=>aiSeatingTableIdInAssignments(p.assignments, gid));
+    const allPlaced = tids.every(t=>t!=null);
+    let ok;
+    if(c.type==='APART') ok = allPlaced && new Set(tids).size===tids.length;
+    else ok = allPlaced && new Set(tids).size===1; // TOGETHER e NEAR (v1: "perto" ~ "mesma mesa")
+    const verb = c.type==='TOGETHER' ? 'juntos' : c.type==='APART' ? 'separados' : 'perto';
+    return { ok, label: `${c.names.map(escapeHTML).join(' + ')} ${verb}` };
+  });
+  const failedCount = constraintChecks.filter(c=>!c.ok).length;
+  const constraintChecklistHTML = constraintChecks.length ? `
+    <div class="section-label" style="margin-top:16px;">Preferências</div>
+    <div class="visit-detail" style="margin:0 16px; padding:12px 14px; background:var(--card); border:1px solid var(--line); border-radius:12px; line-height:1.9;">
+      ${constraintChecks.map(c=>`${c.ok?'✓':'⚠️'} ${c.label}`).join('<br>')}
+    </div>
+    ${failedCount ? `<div class="empty-note" style="margin:6px 16px 0; color:var(--danger,#b3413a);">⚠️ ${failedCount} preferência(s) não foi(ram) possível respeitar.</div>` : ''}
+  ` : '';
+
+  const stale = aiSeatingProposalIsStale(p);
+
   return `
   <div class="navbar navbar-row">
-    <button class="nav-action" data-aiseatback>${ICONS.chevleft||ICONS.chev}</button>
+    <button class="nav-action" data-aiseatback ${aiSeatingCommitting?'disabled':''}>${ICONS.chevleft||ICONS.chev}</button>
     <div><h1>✨ Proposta da Weddy</h1></div>
   </div>
   <div class="ring-stat-card" style="margin-top:2px;">
@@ -4796,13 +4932,15 @@ function viewAISeatingProposal(){
   <div class="empty-note" style="margin:0 16px 14px;">${escapeHTML(p.explanation||'')}</div>
   ${unresolvedHTML}
   ${violationsHTML}
-  ${warningsHTML}
+  ${constraintChecklistHTML}
   <div class="section-label" style="margin-top:16px;">Mesas</div>
   ${tablesHTML}
+  ${stale ? `<div class="empty-note" style="margin:16px 16px 0; color:var(--danger,#b3413a);">⚠️ Esta proposta já não corresponde à configuração atual das mesas/convidados (algo mudou entretanto). Gera uma nova proposta antes de aceitar.</div>` : ''}
   <div style="display:flex; flex-direction:column; gap:8px; padding:18px 16px 10px;">
-    <button id="ai-seat-accept-btn" class="login-btn" style="max-width:none;">Aceitar proposta</button>
-    <button id="ai-seat-edit-btn" class="visit-action-btn">Aceitar e editar manualmente</button>
-    <button id="ai-seat-regenerate-btn" class="visit-action-btn">Gerar outra (com as mesmas preferências)</button>
+    <button id="ai-seat-accept-btn" class="login-btn" style="max-width:none;" ${(aiSeatingCommitting||stale)?'disabled':''}>${aiSeatingCommitting?'A confirmar…':'Aceitar proposta'}</button>
+    <button id="ai-seat-edit-btn" class="visit-action-btn" ${(aiSeatingCommitting||stale)?'disabled':''}>Aceitar e editar manualmente</button>
+    <button id="ai-seat-regenerate-btn" class="visit-action-btn" ${aiSeatingCommitting?'disabled':''}>Gerar outra (com as mesmas preferências)</button>
+    <button id="ai-seat-cancel-btn" class="visit-action-btn" ${aiSeatingCommitting?'disabled':''} data-aiseatback>Cancelar</button>
   </div>
   `;
 }
@@ -9190,54 +9328,21 @@ function bindAISeatingHandlers(){
   const freeTextEl = document.getElementById('ai-seat-freetext');
   if(freeTextEl) freeTextEl.addEventListener('input', e=>{ aiSeatingFreeText = e.target.value; });
 
+  // Fase 8.1 (UI/Confirmation Flow): "Gerar"/"Regenerar" partilham a mesma
+  // runAISeatingGeneration() — nunca tocam em state.seating.assignments,
+  // só em aiSeatingProposal. "Aceitar"/"Aceitar e editar manualmente"
+  // partilham commitSeatingProposal(), o ÚNICO sítio que pode gravar uma
+  // proposta em state.seating.assignments (valida antes contra o estado
+  // atual — ver aiSeatingProposalIsStale). "Cancelar" reaproveita o mesmo
+  // handler do chevron de voltar ([data-aiseatback], já ligado acima).
   const generateBtn = document.getElementById('ai-seat-generate-btn');
-  if(generateBtn) generateBtn.addEventListener('click', ()=>{
-    aiSeatingErrorMsg = null;
-    aiSeatingScreen = 'loading';
-    render();
-    const payload = aiSeatingConstraints.map(c=>({ type:c.type, priority:c.priority, guestIds:c.guestIds }));
-    AIService.generateSeatingProposal(payload, aiSeatingFreeText).then(res=>{
-      if(res && res.ok){
-        aiSeatingProposal = res.proposal;
-        aiSeatingScreen = 'proposal';
-      } else {
-        aiSeatingErrorMsg = (res && res.message) || 'Não foi possível gerar a proposta.';
-        aiSeatingScreen = 'prefs';
-      }
-      render();
-    });
-  });
-
-  function applyProposalAndClose(){
-    if(!aiSeatingProposal) return;
-    state.seating.assignments = { ...aiSeatingProposal.assignments };
-    aiSeatingScreen = null;
-    aiSeatingProposal = null;
-    aiSeatingConstraints = [];
-    aiSeatingFreeText = '';
-    render();
-    pushRemote(true);
-  }
+  if(generateBtn) generateBtn.addEventListener('click', runAISeatingGeneration);
   const acceptBtn = document.getElementById('ai-seat-accept-btn');
-  if(acceptBtn) acceptBtn.addEventListener('click', applyProposalAndClose);
+  if(acceptBtn) acceptBtn.addEventListener('click', ()=>commitSeatingProposal(aiSeatingProposal));
   const editBtn = document.getElementById('ai-seat-edit-btn');
-  if(editBtn) editBtn.addEventListener('click', applyProposalAndClose);
+  if(editBtn) editBtn.addEventListener('click', ()=>commitSeatingProposal(aiSeatingProposal));
   const regenBtn = document.getElementById('ai-seat-regenerate-btn');
-  if(regenBtn) regenBtn.addEventListener('click', ()=>{
-    aiSeatingScreen = 'loading';
-    render();
-    const payload = aiSeatingConstraints.map(c=>({ type:c.type, priority:c.priority, guestIds:c.guestIds }));
-    AIService.generateSeatingProposal(payload, aiSeatingFreeText).then(res=>{
-      if(res && res.ok){
-        aiSeatingProposal = res.proposal;
-        aiSeatingScreen = 'proposal';
-      } else {
-        aiSeatingErrorMsg = (res && res.message) || 'Não foi possível gerar a proposta.';
-        aiSeatingScreen = 'prefs';
-      }
-      render();
-    });
-  });
+  if(regenBtn) regenBtn.addEventListener('click', runAISeatingGeneration);
 }
 
 function softUpdateBudget(){
@@ -9899,7 +10004,7 @@ function syncSeatingToGuestDocs(btn){
     }
     return GUESTS().doc(token).update(payload).catch(()=>{});
   });
-  Promise.all(writes).finally(()=>{
+  return Promise.all(writes).finally(()=>{
     if(btn){ btn.textContent = ta('btnSyncedCheck'); setTimeout(()=>{ btn.textContent = original; btn.disabled = false; }, 1400); }
   });
 }
