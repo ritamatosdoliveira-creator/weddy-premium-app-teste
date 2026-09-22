@@ -1502,6 +1502,33 @@ function googleCalendarErrorMessage(err){
   return 'Não foi possível sincronizar o Google Calendar. Os teus dados na Weddy não foram alterados.';
 }
 
+// Fase 9.2 — sincronização automática silenciosa. Pedido explícito: "se
+// eu crio um prazo, gostava de o ver logo no calendário" — sem ter de ir
+// clicar sempre em "Sincronizar agora". Chamado a seguir a QUALQUER
+// gravação bem sucedida no Firestore (ver pushRemote), com um pequeno
+// tempo de calma próprio (para não disparar uma chamada à Cloud Function
+// a cada gravação em sequência, ex.: várias teclas seguidas). É de
+// propósito silencioso: nunca mostra erro ao utilizador (ex.: se cair no
+// limite de 30s entre sincronizações do lado do servidor, ou se não
+// houver internet) — para isso continua a existir o botão manual
+// "Sincronizar agora", que esse sim mostra o resultado.
+let googleCalendarAutoSyncTimer = null;
+function scheduleGoogleCalendarAutoSync(){
+  if(!hasActiveSubscription()) return;
+  if(!googleCalendarIntegration || !googleCalendarIntegration.connected || !googleCalendarIntegration.calendarId) return;
+  if(googleCalendarAutoSyncTimer) clearTimeout(googleCalendarAutoSyncTimer);
+  googleCalendarAutoSyncTimer = setTimeout(()=>{
+    googleCalendarAutoSyncTimer = null;
+    CalendarService.sync().then(res=>{
+      // Sucesso ou falha (ex.: SYNC_TOO_SOON), atualiza sempre o estado
+      // local em silêncio — assim, quando a pessoa abrir Definições >
+      // Google Calendar, já vê a hora certa da última sincronização, sem
+      // ter de lá voltar a clicar em nada.
+      loadGoogleCalendarIntegration();
+    });
+  }, 3000);
+}
+
 if(typeof pdfjsLib !== 'undefined'){
   pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 }
@@ -11853,6 +11880,10 @@ function pushRemote(confirmToast){
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     }, { merge:true }).then(()=>{
       if(confirmToast) showSaveToast(false);
+      // Fase 9.2 — depois de QUALQUER gravação bem sucedida, agenda uma
+      // sincronização silenciosa do Google Calendar (só faz alguma coisa
+      // se a integração já estiver ligada — ver scheduleGoogleCalendarAutoSync).
+      scheduleGoogleCalendarAutoSync();
     }).catch(()=>{
       showSaveToast(true);
     });
