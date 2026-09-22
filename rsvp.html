@@ -37,11 +37,11 @@ h1{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:30px; col
 .msg.success{ color:var(--sage-dark); }
 .children-block{ text-align:left; margin-bottom:20px; }
 .children-block > label{ display:block; font-size:12px; color:var(--ink-soft); margin-bottom:10px; font-weight:600; }
-.child-row{ display:flex; gap:8px; align-items:flex-start; margin-bottom:10px; }
-.child-row .child-name{ flex:1.4; }
-.child-row .child-age{ flex:0.7; }
+.child-row{ display:flex; flex-wrap:wrap; gap:8px; align-items:flex-start; margin-bottom:10px; }
+.child-row .child-name{ flex:1 1 100%; }
+.child-row .child-age{ flex:0 1 76px; }
 .child-row input{ width:100%; border:1.6px solid var(--line); background:#fff; border-radius:12px; padding:10px 11px; font-size:13.5px; color:var(--ink); font-family:inherit; outline:none; }
-.child-seg{ display:flex; gap:5px; flex:1; }
+.child-seg{ display:flex; gap:5px; flex:1 1 auto; min-width:120px; }
 .child-seg button{ all:unset; box-sizing:border-box; flex:1; text-align:center; padding:10px 0; border-radius:10px; border:1.6px solid var(--line); font-size:12px; font-weight:600; color:var(--ink); cursor:pointer; }
 .child-seg button.active{ background:var(--sage); border-color:var(--sage); color:#fff; }
 .child-remove{ all:unset; box-sizing:border-box; width:34px; height:34px; flex-shrink:0; display:flex; align-items:center; justify-content:center; border-radius:10px; background:rgba(154,79,61,0.1); color:var(--rust-dark); cursor:pointer; font-size:16px; margin-top:1px; }
