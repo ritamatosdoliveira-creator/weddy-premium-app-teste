@@ -1351,6 +1351,23 @@ if(FIREBASE_READY){
   storage = firebase.storage();
   cloudFunctions = (typeof firebase.functions==='function') ? firebase.app().functions(WEDDY_FUNCTIONS_REGION) : null;
 }
+
+// Fase 9.1 — Google Calendar. O browser volta aqui depois do OAuth (a
+// função googleCalendarOAuthCallback faz um redirect normal, nunca com
+// tokens no URL — só este sinalizador). Lemos e limpamos o URL já aqui,
+// mesmo antes de saber se há sessão, para nunca deixar isto na barra de
+// endereços nem repetir a mensagem se a pessoa atualizar a página depois.
+let pendingGoogleCalendarReturn = null;
+(function(){
+  const params = new URLSearchParams(window.location.search);
+  const status = params.get('googleCalendar');
+  if(status){
+    pendingGoogleCalendarReturn = status; // 'success' | 'cancelled' | 'error'
+    params.delete('googleCalendar');
+    const clean = window.location.pathname + (params.toString()? '?'+params.toString():'') + window.location.hash;
+    window.history.replaceState({}, '', clean);
+  }
+})();
 // ============================================================
 // AI SERVICE (Fase 3B.1) — única porta de entrada para qualquer chamada a
 // um modelo de IA real em toda a app. Não sabe qual fornecedor está por
@@ -1402,6 +1419,89 @@ const AIService = {
     }
   }
 };
+
+// ============================================================
+// CALENDAR SERVICE (Fase 9.1) — única porta de entrada para a integração
+// Google Calendar. Nunca fala diretamente com a Google Calendar API nem
+// guarda tokens aqui — só chama as Cloud Functions (que fazem tudo isso
+// do lado do servidor, ver functions-deliverable/index.js). Se um dia
+// suportarmos outro calendário (Apple/Outlook), é só este objeto que
+// ganha um "provider" — o resto da app continua a chamar CalendarService,
+// nunca a Cloud Function diretamente.
+// ============================================================
+const CalendarService = {
+  async startOAuth(){
+    if(!cloudFunctions) return { ok:false, message:'Sem ligação à Weddy neste momento.' };
+    try{
+      const call = cloudFunctions.httpsCallable('googleCalendarStartOAuth');
+      const res = await call({});
+      const url = res && res.data && res.data.authorizationUrl;
+      return url ? { ok:true, authorizationUrl:url } : { ok:false, message:'A Weddy não devolveu um link de autorização.' };
+    }catch(err){
+      console.error('Weddy CalendarService.startOAuth error:', err.code, err.message);
+      return { ok:false, code: err && err.code, message: googleCalendarErrorMessage(err) };
+    }
+  },
+  async listCalendars(){
+    if(!cloudFunctions) return { ok:false, message:'Sem ligação à Weddy neste momento.' };
+    try{
+      const call = cloudFunctions.httpsCallable('googleCalendarListCalendars');
+      const res = await call({});
+      return { ok:true, calendars:(res && res.data && res.data.calendars) || [] };
+    }catch(err){
+      console.error('Weddy CalendarService.listCalendars error:', err.code, err.message);
+      return { ok:false, code: err && err.code, message: googleCalendarErrorMessage(err) };
+    }
+  },
+  async connectCalendar(calendarId){
+    if(!cloudFunctions) return { ok:false, message:'Sem ligação à Weddy neste momento.' };
+    try{
+      const call = cloudFunctions.httpsCallable('googleCalendarConnectCalendar');
+      await call({ calendarId });
+      return { ok:true };
+    }catch(err){
+      console.error('Weddy CalendarService.connectCalendar error:', err.code, err.message);
+      return { ok:false, code: err && err.code, message: googleCalendarErrorMessage(err) };
+    }
+  },
+  async sync(){
+    if(!cloudFunctions) return { ok:false, message:'Sem ligação à Weddy neste momento.' };
+    try{
+      const call = cloudFunctions.httpsCallable('googleCalendarSync');
+      await call({});
+      return { ok:true };
+    }catch(err){
+      console.error('Weddy CalendarService.sync error:', err.code, err.message);
+      return { ok:false, code: err && err.code, message: googleCalendarErrorMessage(err) };
+    }
+  },
+  async disconnect(){
+    if(!cloudFunctions) return { ok:false, message:'Sem ligação à Weddy neste momento.' };
+    try{
+      const call = cloudFunctions.httpsCallable('googleCalendarDisconnect');
+      await call({});
+      return { ok:true };
+    }catch(err){
+      console.error('Weddy CalendarService.disconnect error:', err.code, err.message);
+      return { ok:false, code: err && err.code, message: googleCalendarErrorMessage(err) };
+    }
+  }
+};
+// Mensagens de erro amigáveis (spec §34) — nunca mostra err.message cru
+// (pode vir em inglês/técnico do lado do Google).
+function googleCalendarErrorMessage(err){
+  const code = err && err.code;
+  const msg = (err && err.message) || '';
+  if(code==='resource-exhausted' && msg==='SYNC_TOO_SOON') return 'Acabaste de sincronizar — espera um bocadinho antes de tentar outra vez.';
+  if(code==='already-exists' && msg==='SYNC_ALREADY_RUNNING') return 'Já há uma sincronização em curso — aguarda que termine.';
+  if(code==='failed-precondition' && msg==='REAUTH_REQUIRED') return 'A ligação ao Google Calendar expirou. Volta a ligar a tua conta Google.';
+  if(code==='failed-precondition' && msg==='NOT_CONNECTED') return 'Ainda não ligaste o Google Calendar.';
+  if(code==='permission-denied') return 'A Weddy não tem permissão para editar este calendário. Escolhe outro calendário.';
+  if(code==='resource-exhausted') return 'O Google Calendar está temporariamente a limitar pedidos. Tenta novamente dentro de alguns minutos.';
+  if(code==='unauthenticated') return 'A tua sessão expirou — entra novamente.';
+  return 'Não foi possível sincronizar o Google Calendar. Os teus dados na Weddy não foram alterados.';
+}
+
 if(typeof pdfjsLib !== 'undefined'){
   pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 }
@@ -2237,6 +2337,17 @@ function formatDateShortPT(dateStr){
   const d = new Date(dateStr+'T00:00:00');
   return `${d.getDate()} ${meses[d.getMonth()]}`;
 }
+// Fase 9.1 — usado só para mostrar "Última sincronização" do Google
+// Calendar. Aceita um Date já convertido (o chamador trata do
+// Firestore Timestamp -> Date antes de chamar isto).
+function formatDateTimePT(date){
+  if(!date || !(date instanceof Date) || isNaN(date.getTime())) return '';
+  const dd = String(date.getDate()).padStart(2,'0');
+  const mm = String(date.getMonth()+1).padStart(2,'0');
+  const hh = String(date.getHours()).padStart(2,'0');
+  const min = String(date.getMinutes()).padStart(2,'0');
+  return `${dd}/${mm} às ${hh}:${min}`;
+}
 function dueUrgency(dateStr){
   if(!dateStr) return '';
   const days = daysUntil(dateStr);
@@ -2388,6 +2499,29 @@ const APP_I18N = {
     btnResolve:'Resolver',
     memoriesTitle:'Weddy Memories', memoriesDesc:'Fotos que os convidados partilharam contigo',
     documentsTitle:'Documentos do casamento', documentsDesc:'Carrega contratos em PDF e pesquisa neles pelo Assistente',
+    googleCalendarTitle:'Google Calendar', googleCalendarDesc:'Leva o cronograma do teu casamento para o teu calendário',
+    googleCalendarConnectedDesc:'Ligado — o teu cronograma está a ser sincronizado',
+    googleCalendarIntroText:'Leva o cronograma do teu casamento diretamente para o teu calendário. Cria e atualiza os eventos automaticamente — tu continuas a editar tudo aqui na Weddy.',
+    googleCalendarConnect:'Ligar Google Calendar', googleCalendarConnecting:'A ligar…',
+    googleCalendarConnectedTitle:'Google Calendar ligado',
+    googleCalendarCalendarLabel:'Calendário', googleCalendarLastSyncLabel:'Última sincronização',
+    googleCalendarNeverSynced:'Ainda não sincronizado',
+    googleCalendarSyncNow:'Sincronizar agora', googleCalendarSyncing:'A sincronizar…',
+    googleCalendarChangeCalendar:'Alterar calendário',
+    googleCalendarDisconnect:'Desligar Google Calendar',
+    googleCalendarDisconnectConfirm:'Queres desligar o Google Calendar? Os eventos já criados no teu Google Calendar não serão apagados.',
+    googleCalendarDisconnectSuccess:'Google Calendar desligado. Os eventos que já lá estavam continuam no teu Google Calendar.',
+    googleCalendarSyncSuccess:'Sincronizado com sucesso.',
+    googleCalendarConnectSuccess:'Calendário escolhido — a sincronizar pela primeira vez.',
+    googleCalendarPickCalendarText:'Escolhe o calendário onde a Weddy deve criar e atualizar os eventos do teu casamento.',
+    googleCalendarNoCalendars:'Não encontrámos nenhum calendário onde tenhas permissão para editar. Cria um calendário na tua conta Google e tenta novamente.',
+    googleCalendarReauthText:'A ligação ao Google Calendar expirou. Volta a ligar a tua conta Google para continuar a sincronizar.',
+    googleCalendarReconnect:'Voltar a ligar',
+    googleCalendarOAuthSuccess:'Google Calendar ligado com sucesso — escolhe agora o calendário.',
+    googleCalendarOAuthCancelled:'A ligação ao Google Calendar foi cancelada.',
+    googleCalendarOAuthError:'Não foi possível ligar o Google Calendar. Tenta novamente.',
+    googleCalendarSyncErrorPrefix:'A última sincronização falhou',
+    googleCalendarGenericSyncError:'A última sincronização falhou. Os teus dados na Weddy não foram alterados.',
     subscriptionNeeded:'Subscrição necessária',
     weddingInfoTitle:'Nomes, data e local', weddingInfoUnset:'Ainda por definir',
     designTitle:'Design e foto de capa', designDesc:'Personaliza a imagem do teu casamento',
@@ -2998,6 +3132,29 @@ const APP_I18N = {
     btnResolve:'Fix this',
     memoriesTitle:'Weddy Memories', memoriesDesc:'Photos your guests have shared with you',
     documentsTitle:'Wedding documents', documentsDesc:'Upload PDF contracts and search them through the Assistant',
+    googleCalendarTitle:'Google Calendar', googleCalendarDesc:'Bring your wedding schedule into your calendar',
+    googleCalendarConnectedDesc:'Connected — your schedule is being synced',
+    googleCalendarIntroText:"Bring your wedding schedule straight into your calendar. It creates and updates events automatically — you keep editing everything here in Weddy.",
+    googleCalendarConnect:'Connect Google Calendar', googleCalendarConnecting:'Connecting…',
+    googleCalendarConnectedTitle:'Google Calendar connected',
+    googleCalendarCalendarLabel:'Calendar', googleCalendarLastSyncLabel:'Last synced',
+    googleCalendarNeverSynced:'Not synced yet',
+    googleCalendarSyncNow:'Sync now', googleCalendarSyncing:'Syncing…',
+    googleCalendarChangeCalendar:'Change calendar',
+    googleCalendarDisconnect:'Disconnect Google Calendar',
+    googleCalendarDisconnectConfirm:'Disconnect Google Calendar? Events already created in your Google Calendar will not be deleted.',
+    googleCalendarDisconnectSuccess:'Google Calendar disconnected. Events already there stay in your Google Calendar.',
+    googleCalendarSyncSuccess:'Synced successfully.',
+    googleCalendarConnectSuccess:'Calendar chosen — syncing for the first time.',
+    googleCalendarPickCalendarText:'Choose the calendar where Weddy should create and update your wedding events.',
+    googleCalendarNoCalendars:"We couldn't find a calendar you have edit access to. Create a calendar in your Google account and try again.",
+    googleCalendarReauthText:'Your Google Calendar connection expired. Reconnect your Google account to keep syncing.',
+    googleCalendarReconnect:'Reconnect',
+    googleCalendarOAuthSuccess:'Google Calendar connected — now choose a calendar.',
+    googleCalendarOAuthCancelled:'The Google Calendar connection was cancelled.',
+    googleCalendarOAuthError:'Could not connect Google Calendar. Please try again.',
+    googleCalendarSyncErrorPrefix:'The last sync failed',
+    googleCalendarGenericSyncError:'The last sync failed. Your data in Weddy was not changed.',
     subscriptionNeeded:'Subscription required',
     weddingInfoTitle:'Names, date and venue', weddingInfoUnset:'Not set yet',
     designTitle:'Design and cover photo', designDesc:'Customize your wedding\'s look',
@@ -6013,6 +6170,21 @@ let rsvpResponses = {};
 let rsvpResponsesLoaded = false;
 let rsvpLoadingResponses = false;
 let weddingMemories = [];
+
+/* ============================================================
+   FASE 9.1 — GOOGLE CALENDAR
+   googleCalendarIntegration espelha o documento
+   weddings/{weddingId}/integrations/googleCalendar (nunca escrito
+   diretamente pelo cliente — só lido; ver firestore.rules). Nunca
+   contém o refresh token, esse fica em privateIntegrations, que o
+   cliente nem consegue ler.
+============================================================ */
+let googleCalendarIntegration = null; // null = ainda não carregado
+let googleCalendarLoading = false;
+let googleCalendarCalendars = null; // lista devolvida por googleCalendarListCalendars, quando a pedir para escolher calendário
+let googleCalendarCalendarsLoading = false;
+let googleCalendarBusy = false; // true durante connect/sync/disconnect — desativa os botões para não haver duplo-clique
+let googleCalendarActionMsg = null; // { type:'error'|'success', text } — mensagem da última ação, mostrada uma vez
 let memoriesLoaded = false;
 let memoriesLoading = false;
 // Carrega as fotos que os convidados partilharam (Weddy Memories). Só
@@ -6601,6 +6773,25 @@ function loadRSVPResponses(){
   }).catch(err=>{
     console.error('Weddy RSVP load error:', err.code, err.message);
     rsvpLoadingResponses = false;
+    render();
+  });
+}
+// Fase 9.1 — carrega o estado da ligação Google Calendar. É uma leitura
+// direta ao Firestore (permitida pelas regras só ao dono, nunca uma
+// escrita) — não passa por Cloud Function porque não há nada sensível
+// neste documento (o refresh token está à parte, em privateIntegrations,
+// que nem o próprio dono consegue ler).
+function loadGoogleCalendarIntegration(){
+  if(!FIREBASE_READY || !currentWeddingId) return Promise.resolve();
+  googleCalendarLoading = true;
+  return CURRENT_DOC().collection('integrations').doc('googleCalendar').get().then(snap=>{
+    googleCalendarIntegration = snap.exists ? snap.data() : { connected:false };
+    googleCalendarLoading = false;
+    render();
+  }).catch(err=>{
+    console.error('Weddy GoogleCalendar load error:', err.code, err.message);
+    googleCalendarIntegration = { connected:false };
+    googleCalendarLoading = false;
     render();
   });
 }
@@ -7362,6 +7553,107 @@ function viewDefPremiumLocked(title){
   `;
 }
 
+// Fase 9.1 — Google Calendar. Weddy = fonte de verdade, Google Calendar =
+// projeção externa (nunca lemos o Google Calendar para dentro da Weddy
+// nesta fase — ver comentário no topo do bloco Fase 9.1 nas Cloud
+// Functions). Estados possíveis, do mais simples ao mais completo:
+//   1) ainda a carregar (googleCalendarLoading)
+//   2) desligado — botão "Ligar Google Calendar"
+//   3) ligado, mas sem calendário escolhido ainda — lista de calendários
+//   4) ligado com calendário escolhido — estado + Sincronizar/Alterar/Desligar
+function viewDefGoogleCalendar(){
+  if(!hasActiveSubscription()) return viewDefPremiumLocked(ta('googleCalendarTitle'));
+  if(!googleCalendarIntegration && !googleCalendarLoading) loadGoogleCalendarIntegration();
+
+  const msgHtml = googleCalendarActionMsg
+    ? `<div class="login-msg ${googleCalendarActionMsg.type==='error'?'error':'success'}" style="margin:0 16px 14px;">${escapeHTML(googleCalendarActionMsg.text)}</div>`
+    : '';
+
+  if(googleCalendarLoading && !googleCalendarIntegration){
+    return `${defSubHeader(ta('googleCalendarTitle'))}<div class="loading">${ta('loadingLabel')||'A carregar…'}</div>`;
+  }
+
+  const gc = googleCalendarIntegration || { connected:false };
+  const needsReauth = gc.status === 'REAUTH_REQUIRED';
+  const hasCalendar = gc.connected && gc.calendarId;
+
+  // Estado 4: ligado com calendário escolhido.
+  if(gc.connected && hasCalendar && !needsReauth){
+    const lastSyncDate = gc.lastSyncAt && typeof gc.lastSyncAt.toDate === 'function' ? gc.lastSyncAt.toDate() : null;
+    const lastSync = lastSyncDate ? formatDateTimePT(lastSyncDate) : ta('googleCalendarNeverSynced');
+    return `
+    ${defSubHeader(ta('googleCalendarTitle'))}
+    ${msgHtml}
+    <div class="premium-upsell" style="text-align:left;">
+      <div class="def-row-title" style="margin-bottom:6px;">${ICONS.checkCircle||'✓'} ${ta('googleCalendarConnectedTitle')}</div>
+      <div class="def-row-desc" style="margin-bottom:2px;"><strong>${ta('googleCalendarCalendarLabel')}:</strong> ${escapeHTML(gc.calendarName||'')}</div>
+      <div class="def-row-desc" style="margin-bottom:16px;"><strong>${ta('googleCalendarLastSyncLabel')}:</strong> ${escapeHTML(lastSync)}</div>
+      ${gc.lastSyncStatus==='error' ? `<div class="login-msg error" style="margin-bottom:12px;">${escapeHTML(gc.lastSyncError ? ta('googleCalendarSyncErrorPrefix')+': '+gc.lastSyncError : ta('googleCalendarGenericSyncError'))}</div>` : ''}
+      <button class="login-btn" id="gcal-sync-btn" style="margin-top:0;" ${googleCalendarBusy?'disabled':''}>${googleCalendarBusy? ta('googleCalendarSyncing') : ta('googleCalendarSyncNow')}</button>
+      <button class="login-btn" id="gcal-change-btn" style="margin-top:10px; background:transparent; color:var(--rust-dark,#9A4F3D); border:1.6px solid var(--line,#e5e1dc);" ${googleCalendarBusy?'disabled':''}>${ta('googleCalendarChangeCalendar')}</button>
+      <button class="delete-response-link" id="gcal-disconnect-btn" style="margin-top:16px;" ${googleCalendarBusy?'disabled':''}>${ta('googleCalendarDisconnect')}</button>
+    </div>`;
+  }
+
+  // Estado 3: ligado ao Google, mas ainda falta escolher/voltar a
+  // escolher o calendário — ou a ligação precisa de ser refeita
+  // (REAUTH_REQUIRED, ex.: o token foi revogado do lado do Google).
+  if(gc.connected && (!hasCalendar || needsReauth)){
+    if(needsReauth){
+      return `
+      ${defSubHeader(ta('googleCalendarTitle'))}
+      ${msgHtml}
+      <div class="premium-upsell">
+        <div class="premium-upsell-icon">${ICONS.calendar}</div>
+        <div class="premium-upsell-text">${ta('googleCalendarReauthText')}</div>
+        <button class="login-btn" id="gcal-connect-btn" style="max-width:none;" ${googleCalendarBusy?'disabled':''}>${googleCalendarBusy? ta('googleCalendarConnecting') : ta('googleCalendarReconnect')}</button>
+      </div>`;
+    }
+    if(!googleCalendarCalendars && !googleCalendarCalendarsLoading) loadGoogleCalendarCalendars();
+    if(googleCalendarCalendarsLoading){
+      return `${defSubHeader(ta('googleCalendarTitle'))}${msgHtml}<div class="loading">${ta('loadingLabel')||'A carregar…'}</div>`;
+    }
+    const cals = googleCalendarCalendars || [];
+    return `
+    ${defSubHeader(ta('googleCalendarTitle'))}
+    ${msgHtml}
+    <div class="def-row-desc" style="margin:0 16px 14px;">${ta('googleCalendarPickCalendarText')}</div>
+    <div class="list-group">
+      ${cals.length ? cals.map(c=>`
+        <div class="list-row tappable" data-gcalpick="${escapeHTML(c.id)}" style="cursor:pointer;">
+          <div class="def-row-mid">
+            <div class="def-row-title">${escapeHTML(c.summary)}</div>
+            <div class="def-row-desc">${escapeHTML(c.timeZone||'')}</div>
+          </div>
+          ${ICONS.chev}
+        </div>`).join('') : `<div class="empty-note" style="padding:16px;">${ta('googleCalendarNoCalendars')}</div>`}
+    </div>`;
+  }
+
+  // Estado 2: desligado.
+  return `
+  ${defSubHeader(ta('googleCalendarTitle'))}
+  ${msgHtml}
+  <div class="premium-upsell">
+    <div class="premium-upsell-icon">${ICONS.calendar}</div>
+    <div class="premium-upsell-text">${ta('googleCalendarIntroText')}</div>
+    <button class="login-btn" id="gcal-connect-btn" style="max-width:none;" ${googleCalendarBusy?'disabled':''}>${googleCalendarBusy? ta('googleCalendarConnecting') : ta('googleCalendarConnect')}</button>
+  </div>`;
+}
+function loadGoogleCalendarCalendars(){
+  googleCalendarCalendarsLoading = true;
+  CalendarService.listCalendars().then(res=>{
+    googleCalendarCalendarsLoading = false;
+    if(res.ok){
+      googleCalendarCalendars = res.calendars;
+    } else {
+      googleCalendarCalendars = [];
+      googleCalendarActionMsg = { type:'error', text: res.message };
+    }
+    render();
+  });
+}
+
 // Resume, em português simples, o que a última sincronização de respostas
 // mudou — para não ser preciso confiar às cegas que os números e as mesas
 // ficaram mesmo atualizados.
@@ -7788,6 +8080,7 @@ function viewDefinicoes(){
   if(definicoesSection==='health') return viewDefWeddingHealth();
   if(definicoesSection==='memories') return viewDefMemories();
   if(definicoesSection==='documentos') return viewDefDocumentos();
+  if(definicoesSection==='googlecalendar') return viewDefGoogleCalendar();
   return viewDefMenu();
 }
 
@@ -7823,6 +8116,7 @@ function viewDefMenu(){
     ${defMenuRow('health', ICONS.warn||ICONS.checklist, 2, ta('healthTitle'), subscribed ? ta('healthDesc') : ta('subscriptionNeeded'), subscribed ? getWeddingHealthChecks().length : 0)}
     ${defMenuRow('memories', ICONS.camera, 3, ta('memoriesTitle'), subscribed ? ta('memoriesDesc') : ta('subscriptionNeeded'))}
     ${defMenuRow('documentos', ICONS.docnote||ICONS.checklist, 4, ta('documentsTitle'), subscribed ? ta('documentsDesc') : ta('subscriptionNeeded'))}
+    ${defMenuRow('googlecalendar', ICONS.calendar, 0, ta('googleCalendarTitle'), subscribed ? (googleCalendarIntegration && googleCalendarIntegration.connected ? ta('googleCalendarConnectedDesc') : ta('googleCalendarDesc')) : ta('subscriptionNeeded'))}
   </div>
 
   <div class="section-label-caps">${ta('sectionWedding')}</div>
@@ -9242,6 +9536,106 @@ function bindHandlers(){
     el.addEventListener('click', e=>{ openSeatSheet(e.currentTarget.dataset.openseat); });
   });
   bindAISeatingHandlers();
+  bindGoogleCalendarHandlers();
+}
+
+// Fase 9.1 — Google Calendar. Handlers dos botões do ecrã Definições →
+// Weddy Premium → Google Calendar. Como bindHandlers() corre depois de
+// TODO render (não só quando este ecrã está aberto), os querySelectorAll
+// abaixo simplesmente não encontram nada e não fazem nada quando a
+// pessoa está noutro sítio da app — o mesmo padrão usado no resto do
+// ficheiro (ver bindAISeatingHandlers logo acima).
+function bindGoogleCalendarHandlers(){
+  const connectBtn = document.getElementById('gcal-connect-btn');
+  if(connectBtn) connectBtn.addEventListener('click', ()=>{
+    if(googleCalendarBusy) return;
+    googleCalendarBusy = true;
+    googleCalendarActionMsg = null;
+    render();
+    CalendarService.startOAuth().then(res=>{
+      if(res.ok){
+        // Sai da app a sério — o Google não pode ser aberto num iframe/SDK,
+        // tem de ser uma navegação de topo (spec §32/33).
+        window.location.href = res.authorizationUrl;
+      } else {
+        googleCalendarBusy = false;
+        googleCalendarActionMsg = { type:'error', text: res.message };
+        render();
+      }
+    });
+  });
+
+  // Nota: o botão de reconectar no estado REAUTH_REQUIRED reutiliza o
+  // mesmo id "gcal-connect-btn" (só muda o texto) — por isso o listener
+  // acima já trata dos dois casos.
+
+  document.querySelectorAll('[data-gcalpick]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      if(googleCalendarBusy) return;
+      const calendarId = el.dataset.gcalpick;
+      googleCalendarBusy = true;
+      googleCalendarActionMsg = null;
+      render();
+      CalendarService.connectCalendar(calendarId).then(res=>{
+        googleCalendarBusy = false;
+        googleCalendarCalendars = null; // força recarregar se voltar a este ecrã
+        if(res.ok){
+          googleCalendarActionMsg = { type:'success', text: ta('googleCalendarConnectSuccess') };
+          loadGoogleCalendarIntegration();
+        } else {
+          googleCalendarActionMsg = { type:'error', text: res.message };
+          render();
+        }
+      });
+    });
+  });
+
+  const syncBtn = document.getElementById('gcal-sync-btn');
+  if(syncBtn) syncBtn.addEventListener('click', ()=>{
+    if(googleCalendarBusy) return;
+    googleCalendarBusy = true;
+    googleCalendarActionMsg = null;
+    render();
+    CalendarService.sync().then(res=>{
+      googleCalendarBusy = false;
+      if(res.ok){
+        googleCalendarActionMsg = { type:'success', text: ta('googleCalendarSyncSuccess') };
+        loadGoogleCalendarIntegration();
+      } else {
+        googleCalendarActionMsg = { type:'error', text: res.message };
+        render();
+      }
+    });
+  });
+
+  const changeBtn = document.getElementById('gcal-change-btn');
+  if(changeBtn) changeBtn.addEventListener('click', ()=>{
+    googleCalendarCalendars = null;
+    googleCalendarIntegration = { ...googleCalendarIntegration, calendarId: null }; // só localmente, força mostrar a lista já — não escreve nada
+    render();
+  });
+
+  const disconnectBtn = document.getElementById('gcal-disconnect-btn');
+  if(disconnectBtn) disconnectBtn.addEventListener('click', ()=>{
+    if(googleCalendarBusy) return;
+    // Spec §40: aviso claro de que desligar NÃO apaga os eventos já
+    // criados no Google Calendar.
+    if(!confirm(ta('googleCalendarDisconnectConfirm'))) return;
+    googleCalendarBusy = true;
+    googleCalendarActionMsg = null;
+    render();
+    CalendarService.disconnect().then(res=>{
+      googleCalendarBusy = false;
+      googleCalendarCalendars = null;
+      if(res.ok){
+        googleCalendarActionMsg = { type:'success', text: ta('googleCalendarDisconnectSuccess') };
+        loadGoogleCalendarIntegration();
+      } else {
+        googleCalendarActionMsg = { type:'error', text: res.message };
+        render();
+      }
+    });
+  });
 }
 
 // Fase 8.1 — AI Seating. Todos os handlers do fluxo "Organizar com Weddy
@@ -11579,6 +11973,18 @@ function findOrCreateFlow(user, isRetry){
         ownerUids: firebase.firestore.FieldValue.arrayUnion(user.uid),
         ['uidByEmail.'+sanitizeEmailKey(user.email.toLowerCase())]: user.uid
       }).catch(()=>{});
+      // Fase 9.1 — se acabámos de voltar do OAuth do Google Calendar,
+      // leva a pessoa direto de volta ao ecrã onde estava, com a
+      // mensagem certa (nunca a deixa perdida no Início sem explicação).
+      if(pendingGoogleCalendarReturn){
+        activeTab = 'definicoes';
+        definicoesSection = 'googlecalendar';
+        if(pendingGoogleCalendarReturn==='success') googleCalendarActionMsg = { type:'success', text: ta('googleCalendarOAuthSuccess') };
+        else if(pendingGoogleCalendarReturn==='cancelled') googleCalendarActionMsg = { type:'error', text: ta('googleCalendarOAuthCancelled') };
+        else googleCalendarActionMsg = { type:'error', text: ta('googleCalendarOAuthError') };
+        pendingGoogleCalendarReturn = null;
+        googleCalendarIntegration = null; // força recarregar do zero
+      }
     } else {
       currentWeddingId = null;
       inspirations = [];

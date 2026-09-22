@@ -1,6 +1,6 @@
 {
   "name": "weddy-functions",
-  "description": "Cloud Functions do Weddy: lembretes automáticos de RSVP por email, e o classificador de intenção por IA (Fase 3B) usado pelo Weddy Concierge e pelo Assistente Weddy quando as regex locais não reconhecem uma mensagem.",
+  "description": "Cloud Functions do Weddy: lembretes automáticos de RSVP por email, o classificador de intenção por IA (Fase 3B) usado pelo Weddy Concierge/Assistente, o motor de AI Seating (Fase 8.1), e a integração Google Calendar (Fase 9.1). A integração Google Calendar usa só o 'fetch' nativo do Node 20 — não precisa de nenhuma dependência nova (nem 'googleapis'), por isso não é preciso mexer nas dependências abaixo.",
   "engines": { "node": "20" },
   "main": "index.js",
   "dependencies": {
