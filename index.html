@@ -5766,6 +5766,7 @@ function migrateLegacySupplierPayments(){
       const already = state.expenses.some(e=>e.legacyPaymentId===p.id);
       if(already) return;
       state.expenses.unshift({
+        id: 'exp'+Date.now()+Math.random().toString(36).slice(2,6),
         date: p.date || '', desc: ta('autoPaymentDesc')(s.name),
         value: Number(p.amount)||0, paid: Number(p.amount)||0,
         category: s.category, dueDate:'', method:'',
@@ -5797,6 +5798,26 @@ function migrateLegacySupplierPayments(){
 // lido pela UI — fica só como histórico bruto de compatibilidade.
 function supplierPaidTotal(s){
   return (state.expenses||[]).filter(e=>e.supplierId===s.id).reduce((sum,e)=>sum+(Number(e.paid)||0),0);
+}
+// Fase 9.2 (Google Calendar — prazos) — a sincronização de "prazos de
+// pagamento" precisa de um identificador ESTÁVEL por despesa, para poder
+// atualizar/apagar o evento certo no Google quando a despesa muda, sem
+// nunca duplicar. As despesas sempre foram identificadas só pela posição
+// no array (ver data-exp="dueDate|${i}" em toda a UI) — isso continua a
+// funcionar na perfeição para a UI, por isso não mexemos nisso; só
+// acrescentamos um "id" por baixo, tal como já existe em state.daySchedule
+// e state.dressVisits. Idempotente: só atribui id a quem ainda não tem
+// (despesas criadas antes desta versão), nunca muda os já existentes.
+function migrateExpenseIds(){
+  if(!state || !Array.isArray(state.expenses)) return false;
+  let migrated = false;
+  state.expenses.forEach(e=>{
+    if(!e.id){
+      e.id = 'exp'+Date.now()+Math.random().toString(36).slice(2,6);
+      migrated = true;
+    }
+  });
+  return migrated;
 }
 // Lista de pagamentos para o ecrã de detalhe do fornecedor — lida só de
 // state.expenses (fonte única). migrated:true assinala um pagamento que
@@ -6098,6 +6119,7 @@ function bindFornecedorDetalheHandlers(){
     if(!amount || amount<=0){ flagRequiredField(amountEl); return; }
     const date = dateEl.value || new Date().toISOString().slice(0,10);
     state.expenses.unshift({
+      id: 'exp'+Date.now()+Math.random().toString(36).slice(2,6),
       date, desc: ta('autoPaymentDesc')(s.name), value: amount, paid: amount,
       category: s.category, dueDate:'', method:'', supplierId: s.id
     });
@@ -10059,7 +10081,7 @@ document.getElementById('sf-save').addEventListener('click', ()=>{
   if(paidEl.value.trim()===''){ flagRequiredField(paidEl); return; }
   const value = Math.max(0, Number(valueEl.value)||0);
   const paid = Math.max(0, Number(paidEl.value)||0);
-  state.expenses.unshift({date,desc,value,paid,category,dueDate,method,supplierId});
+  state.expenses.unshift({id:'exp'+Date.now()+Math.random().toString(36).slice(2,6),date,desc,value,paid,category,dueDate,method,supplierId});
   closeExpenseSheet();
   render();
   pushRemote(true);
@@ -11916,6 +11938,12 @@ function attachFirestoreSync(){
         // load — sem isto, um export/CSV ou uma leitura direta ao
         // Firestore continuaria a ver os dois livros por reconciliar.
         if(migrateLegacySupplierPayments()){
+          changed = true;
+          pushRemote(true);
+        }
+        // Fase 9.2 — idem, mas para dar id às despesas antigas (ver
+        // migrateExpenseIds acima).
+        if(migrateExpenseIds()){
           changed = true;
           pushRemote(true);
         }
