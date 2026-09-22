@@ -436,7 +436,7 @@ h1{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:30px; col
       conciergeReplyChildrenGeneric: 'Isso depende do convite de cada família — diz-me se vais trazer crianças na tua resposta acima, no campo "Vais trazer crianças?", que eu registo.',
       conciergeReplyCompanionIndividual: 'O teu convite é individual. Se quiseres levar alguém, o melhor é falar diretamente com os noivos.',
       conciergeReplyCompanionFamily: 'Este link já é partilhado por toda a família — cada pessoa responde no seu próprio cartão, mais acima nesta página.',
-      conciergeReplyTableFamilyUnavailable: 'Este link é partilhado por toda a família, por isso não consigo dizer a mesa de cada pessoa por aqui — vê a atribuição de mesas junto dos noivos.',
+      conciergeReplyTableFamilyUnavailable: 'Este link é partilhado por toda a família, por isso não consigo saber por aqui de quem estás a falar — mas assim que os noivos organizarem os lugares, a mesa de cada pessoa aparece no seu próprio cartão, mais acima nesta página.',
       conciergeReplyRSVPFamilyUnavailable: 'Este link é partilhado por toda a família — cada pessoa vê a sua própria resposta no seu cartão, mais acima nesta página.',
       conciergeReplyTableNotAssigned: 'Ainda não tens uma mesa atribuída — assim que os noivos organizarem os lugares, digo-te aqui.',
       conciergeReplyTableAssigned: (table, seat, mates) => `Vais estar na mesa ${table}${seat?`, lugar ${seat}`:''}.${mates && mates.length ? ' Também aí: '+mates.join(', ')+'.' : ''}`,
@@ -558,7 +558,7 @@ h1{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:30px; col
       conciergeReplyChildrenGeneric: 'That depends on each family\'s invitation — let me know in the "Will you be bringing children?" field above and I\'ll note it.',
       conciergeReplyCompanionIndividual: 'Your invitation is for one person. If you\'d like to bring someone, the best thing is to reach out to the couple directly.',
       conciergeReplyCompanionFamily: "This link is already shared by the whole family — each person answers on their own card, further up this page.",
-      conciergeReplyTableFamilyUnavailable: 'This link is shared by the whole family, so I can\'t tell each person\'s table here — check the seating with the couple.',
+      conciergeReplyTableFamilyUnavailable: "This link is shared by the whole family, so I can't tell from here who you are — but once the couple sorts out the seating, each person's table shows up on their own card, further up this page.",
       conciergeReplyRSVPFamilyUnavailable: 'This link is shared by the whole family — each person sees their own reply on their own card, further up this page.',
       conciergeReplyTableNotAssigned: "You don't have a table assigned yet — I'll let you know here once the couple sorts out the seating.",
       conciergeReplyTableAssigned: (table, seat, mates) => `You'll be at table ${table}${seat?`, seat ${seat}`:''}.${mates && mates.length ? ' Also there: '+mates.join(', ')+'.' : ''}`,
@@ -735,7 +735,13 @@ h1{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:30px; col
       // nome de variável local para "id do membro dentro deste RSVP")
       // funcione da mesma forma com documentos antigos ou novos.
       if(guestData.isFamily && Array.isArray(guestData.members)){
-        guestData.members = guestData.members.map(m=>({ ...m, guestId: m.rsvpMemberId || m.guestId }));
+        // Fase 8.2: guardamos o guestId PERMANENTE (o mesmo que o lado dos
+        // noivos usa em state.seating.assignments e, agora, em
+        // memberTables) à parte, antes de "guestId" ser reaproveitado como
+        // nome local para "id do membro dentro deste RSVP" (ver comentário
+        // acima) — sem isto, perdíamos a única chave que liga cada membro
+        // à sua própria mesa em guestData.memberTables.
+        guestData.members = guestData.members.map(m=>({ ...m, permanentGuestId: m.guestId || null, guestId: m.rsvpMemberId || m.guestId }));
       }
       renderForm();
       // Regista que o convite foi aberto (só na primeira vez) — dá aos
@@ -903,9 +909,24 @@ h1{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:30px; col
     wrap.innerHTML = members.map(m=>{
       const mid = m.guestId;
       const st = familyMemberState[mid];
+      // Fase 8.2: mesa individual de CADA membro da família — vem de
+      // guestData.memberTables[permanentGuestId], escrito pelo lado dos
+      // noivos em syncSeatingToGuestDocs(). Antes disto, um convite de
+      // família nunca mostrava mesa nenhuma (guestData.assignedTable é só
+      // do formato individual, e ficava sempre vazio aqui); segue o mesmo
+      // critério do cartão individual (table-card): só aparece depois de
+      // confirmado e sincronizado, nunca antes.
+      const memberTables = guestData.memberTables || {};
+      const tableInfo = m.permanentGuestId ? memberTables[m.permanentGuestId] : null;
+      const tableCardHTML = (st.attend==='yes' && tableInfo) ? `
+        <div class="table-card" style="margin:10px 0 0;">
+          <div class="tc-title">${t('tableTitle')(tableInfo.table, tableInfo.seat).replace(/</g,'&lt;')}</div>
+          <div class="tc-sub">${((tableInfo.tablemates||[]).length ? t('tableWith')(tableInfo.tablemates.join(', ')) : t('tableAlone')).replace(/</g,'&lt;')}</div>
+        </div>` : '';
       return `
       <div class="member-card" data-memberid="${mid}">
         <div class="member-name">${(m.name||'').replace(/</g,'&lt;')}</div>
+        ${tableCardHTML}
         <div class="seg seg-3">
           <button type="button" class="attend-btn ${st.attend==='yes'?'active':''}" data-mattend="yes" data-mid="${mid}">${t('attendYes')}</button>
           <button type="button" class="attend-btn ${st.attend==='maybe'?'active':''}" data-mattend="maybe" data-mid="${mid}">${t('attendMaybe')}</button>

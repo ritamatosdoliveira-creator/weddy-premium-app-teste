@@ -1378,6 +1378,28 @@ const AIService = {
       console.error('Weddy AIService.classify error:', err.code, err.message);
       return { intent:'UNKNOWN' };
     }
+  },
+  // Fase 8.1 — AI Seating. Nunca envia weddingId (a Cloud Function deriva-o
+  // sempre da sessão autenticada) nem decide sozinha onde ninguém se
+  // senta — só pede uma proposta já calculada por um motor determinístico
+  // do lado do servidor (ver generateSeatingProposal em
+  // functions-deliverable/index.js). "constraints" já vem com guestIds
+  // (resolvidos aqui, pelo seletor de convidados da própria app);
+  // "freeText" é opcional, para quem preferir escrever por palavras — é a
+  // Cloud Function que interpreta esse texto, nunca o cliente.
+  async generateSeatingProposal(constraints, freeText){
+    if(!cloudFunctions) return { ok:false, reason:'NO_BACKEND', message:'Sem ligação à Weddy AI neste momento.' };
+    try{
+      const call = cloudFunctions.httpsCallable('generateSeatingProposal');
+      const res = await call({ constraints, freeText: freeText||'' });
+      return (res && res.data) || { ok:false, reason:'EMPTY', message:'A Weddy não devolveu resposta.' };
+    }catch(err){
+      console.error('Weddy AIService.generateSeatingProposal error:', err.code, err.message);
+      const message = err && err.code==='resource-exhausted'
+        ? 'Limite diário de pedidos à Weddy AI atingido para este casamento. Tenta de novo amanhã.'
+        : 'Não foi possível gerar a proposta agora. Tenta novamente.';
+      return { ok:false, reason: err && err.code, message };
+    }
   }
 };
 if(typeof pdfjsLib !== 'undefined'){
@@ -1841,17 +1863,22 @@ function findGuestByGuestId(guestId){
   }
   return null;
 }
-// Fase 8.0 — operação central de remoção de convidado. Resolve sozinha
-// TODAS as referências desse convidado (RSVP no Firestore, confirmação,
-// lugar à mesa) e remove o registo — em vez de cada funcionalidade nova
-// ter de saber, ela própria, tudo o que precisa de limpar. Qualquer
-// caminho da app que remova/apague um convidado deve chamar esta função,
-// nunca fazer splice() diretamente no array.
-function deleteGuest(guestId){
+// Fase 8.0 — metade "local" da remoção de um convidado: tira-o do array,
+// da confirmação e do lugar à mesa, e devolve a entry que foi removida
+// (para quem chamar poder ainda tratar do RSVP no Firestore). Extraída de
+// deleteGuest() para permitir apagar VÁRIOS convidados de uma vez sem
+// disparar uma limpeza de RSVP por convidado em paralelo — ver o bug
+// corrigido no teste de aceitação da 8.0 (Set 2026): apagar uma categoria
+// inteira com 2+ convidados do MESMO link de família chamava
+// deleteGuestRSVPDoc() em simultâneo para cada um; cada chamada lia a
+// mesma cópia local desatualizada do documento e calculava "quem sobra"
+// a partir dela, por isso nenhuma das chamadas via o documento a ficar
+// sem ninguém — o documento nunca era apagado e ficava com respostas
+// perdidas (ganhava a última escrita). Ver deleteGuestRSVPDocsBatch().
+function deleteGuestLocalOnly(guestId){
   const found = findGuestByGuestId(guestId);
-  if(!found) return Promise.resolve();
+  if(!found) return null;
   const { arr, idx, entry } = found;
-  const cleanup = entry.rsvpToken ? deleteGuestRSVPDoc(entry).catch(()=>{}) : Promise.resolve();
   arr.splice(idx, 1);
   delete state.confirmed[guestId];
   if(state.seating && state.seating.assignments){
@@ -1859,7 +1886,21 @@ function deleteGuest(guestId){
       if(state.seating.assignments[seatKey]===guestId) delete state.seating.assignments[seatKey];
     });
   }
-  return cleanup;
+  return entry;
+}
+// Fase 8.0 — operação central de remoção de UM convidado. Resolve sozinha
+// TODAS as referências desse convidado (RSVP no Firestore, confirmação,
+// lugar à mesa) e remove o registo — em vez de cada funcionalidade nova
+// ter de saber, ela própria, tudo o que precisa de limpar. Qualquer
+// caminho da app que remova/apague um convidado deve chamar esta função
+// (ou, para vários convidados de uma vez, deleteGuestLocalOnly() +
+// deleteGuestRSVPDocsBatch() — ver comentário acima), nunca fazer
+// splice() diretamente no array.
+function deleteGuest(guestId){
+  const entry = deleteGuestLocalOnly(guestId);
+  if(!entry) return Promise.resolve();
+  if(!entry.rsvpToken) return Promise.resolve();
+  return deleteGuestRSVPDoc(entry).catch(()=>{});
 }
 
 function seedData(){
@@ -1975,6 +2016,22 @@ let editingSeatKey = null;
 let seatQuery = '';
 let guestFilter = '';
 let inspirations = [];
+
+// Fase 8.1 — AI Seating. Estado só local (nunca gravado no Firestore) —
+// a proposta é efémera por desenho: só existe enquanto o casal a está a
+// rever, e ou é aceite (grava-se então em state.seating.assignments, o
+// mesmo sítio de sempre) ou é descartada. "constraints" aqui é só o que
+// se está a construir no ecrã de preferências; para já não persistimos
+// preferências entre sessões (fica para uma fase futura).
+let aiSeatingScreen = null; // null | 'prefs' | 'loading' | 'proposal'
+let aiSeatingConstraints = []; // [{type,priority,guestIds:[...],names:[...]}]
+let aiSeatingFreeText = '';
+let aiSeatingProposal = null; // resultado (ok:true) da Cloud Function
+let aiSeatingErrorMsg = null; // mensagem quando ok:false (impossível)
+let aiSeatingPicking = null; // {type,priority} enquanto se escolhe quem
+let aiSeatingPickIds = []; // guestIds escolhidos no picker atual
+let aiSeatingPickQuery = '';
+let aiSeatingNewPriority = 'STRONG'; // prioridade escolhida para a PRÓXIMA preferência a criar
 
 /* ============================================================
    HELPERS
@@ -4274,13 +4331,20 @@ function bindGuestGroupHandlers(scope){
         ? ta('confirmDeleteCategoryWithGuests')(label, arr.length)
         : ta('confirmDeleteCategorySimple')(label);
       if(!confirm(msg)) return;
-      // Fase 8.0 (Set 2026): tal como no botão "✕" individual, cada
-      // convidado da categoria é removido pela operação central
-      // deleteGuest(guestId) — que já limpa RSVP, confirmação e lugar à
-      // mesa sozinha — antes de a própria categoria ser removida.
-      arr.slice().forEach(entry=>{
-        if(entry && typeof entry==='object' && entry.guestId) deleteGuest(entry.guestId).catch(()=>{});
-      });
+      // Fase 8.0 (Set 2026): limpa primeiro o estado local de CADA
+      // convidado (deleteGuestLocalOnly) e só depois trata do RSVP no
+      // Firestore de todos ao mesmo tempo, em lote
+      // (deleteGuestRSVPDocsBatch) — nunca uma chamada deleteGuest() por
+      // convidado em paralelo. Corrige o bug encontrado no teste de
+      // aceitação da 8.0: apagar uma categoria com 2+ convidados do
+      // MESMO link de família deixava esse documento órfão no Firestore
+      // (nunca era apagado, e perdia respostas), porque cada chamada
+      // concorrente calculava "quem sobra" a partir da mesma cópia local
+      // desatualizada do documento.
+      const removedEntries = arr.slice()
+        .map(entry => (entry && typeof entry==='object' && entry.guestId) ? deleteGuestLocalOnly(entry.guestId) : null)
+        .filter(Boolean);
+      deleteGuestRSVPDocsBatch(removedEntries).catch(()=>{});
       state.guests[side].custom = state.guests[side].custom.filter(c=>c.id!==cat);
       render();
     });
@@ -4477,6 +4541,15 @@ function viewGastos(){
    VIEW: Mesas
 ============================================================ */
 function viewMesas(){
+  // Fase 8.1 — AI Seating: quando o casal entrou no fluxo "Organizar com
+  // Weddy AI", a tab Mesas mostra esse ecrã em vez da lista de mesas
+  // normal (com um botão para voltar) — nunca uma sobreposição nova, só
+  // mais um "ramo" do mesmo render(), tal como Definições já faz com
+  // definicoesSection.
+  if(aiSeatingScreen){
+    if(!hasActiveSubscription()) return viewAISeatingLocked();
+    return viewAISeatingScreen();
+  }
   const tables = [...state.seating.tables].sort((a,b)=>a.id-b.id);
   const totalSeats = totalSeatsCount();
   const assignedCount = assignedSeatsCount();
@@ -4551,9 +4624,186 @@ function viewMesas(){
     </div>
   </div>
 
+  ${tables.length ? `
+  <button id="ai-seating-open-btn" class="rsvp-copy-btn" style="margin:2px 16px 14px; display:flex; align-items:center; justify-content:center; gap:8px;">
+    ${ICONS.sparkle||'✨'} Organizar com Weddy AI
+  </button>` : ''}
+
   <div class="section-label">${ta('tablesHint')}</div>
   ${tablesHTML}
   <div style="height:6px;"></div>
+  `;
+}
+
+// ============================================================
+// FASE 8.1 — AI SEATING
+// ============================================================
+// Ecrã "bloqueado" (não-Premium) — versão própria do padrão de
+// viewDefPremiumLocked/defSubHeader, mas com o botão de voltar a apontar
+// para aiSeatingScreen (não para definicoesSection, que é uma coisa
+// diferente e não tem nada a ver com esta tab).
+function viewAISeatingLocked(){
+  return `
+  <div class="navbar navbar-row">
+    <button class="nav-action" data-aiseatback>${ICONS.chevleft||ICONS.chev}</button>
+    <div><h1>Organizar com Weddy AI</h1></div>
+  </div>
+  <div class="premium-upsell">
+    <div class="premium-upsell-icon">${ICONS.sparkle||''}</div>
+    <div class="premium-upsell-title">Weddy Premium</div>
+    <div class="premium-upsell-text">${ta('premiumLockedText')('Organizar com Weddy AI')}</div>
+    <button class="login-btn" id="premium-subscribe-btn" style="max-width:none;">${ta('btnSubscribePremium')}</button>
+  </div>
+  `;
+}
+
+// Dados de entrada do solver, tal como os vê o cliente — só para a UI
+// (contagens, seletor de convidados). A Cloud Function volta a calcular
+// tudo isto sozinha do lado do servidor (nunca confia no que o cliente
+// mandar) — isto aqui é só para mostrar números corretos ANTES de pedir a
+// proposta, e para o seletor de convidados só listar quem pode mesmo ser
+// sentado.
+function aiSeatingConfirmedGuests(){
+  return allAdultGuests().filter(g=>g.guestId && state.confirmed[g.guestId]);
+}
+function aiSeatingGuestName(guestId){
+  const found = findGuestByGuestId(guestId);
+  return found ? (found.entry.name||'') : guestId;
+}
+
+function viewAISeatingScreen(){
+  if(aiSeatingScreen==='loading') return viewAISeatingLoading();
+  if(aiSeatingScreen==='proposal' && aiSeatingProposal) return viewAISeatingProposal();
+  return viewAISeatingPrefs();
+}
+
+function viewAISeatingLoading(){
+  return `
+  <div class="navbar navbar-row">
+    <div><h1>Organizar com Weddy AI</h1></div>
+  </div>
+  <div class="empty-note" style="margin:60px 16px; text-align:center;">
+    <div style="font-size:34px; margin-bottom:10px;">${ICONS.sparkle||'✨'}</div>
+    A Weddy está a preparar a proposta de mesas…
+  </div>
+  `;
+}
+
+const AI_SEATING_TYPE_LABEL = { TOGETHER:'Juntos', APART:'Separados', NEAR:'Perto' };
+const AI_SEATING_PRIORITY_LABEL = { HARD:'🔴 Obrigatório', STRONG:'🟠 Importante', SOFT:'🟡 Se possível' };
+
+function viewAISeatingPrefs(){
+  const confirmedGuests = aiSeatingConfirmedGuests();
+  const totalSeats = totalSeatsCount();
+  const constraintsHTML = aiSeatingConstraints.map((c,i)=>`
+    <div class="list-row" style="padding:10px 14px;">
+      <div class="def-row-mid" style="flex:1;">
+        <div class="def-row-title" style="font-weight:500;">${AI_SEATING_TYPE_LABEL[c.type]} <span style="font-weight:400; color:var(--ink-soft); font-size:12.5px;">${AI_SEATING_PRIORITY_LABEL[c.priority]}</span></div>
+        <div class="phase-desc">${c.names.map(escapeHTML).join(', ')}</div>
+      </div>
+      <button class="remove-x" data-aiseatrmconstraint="${i}">✕</button>
+    </div>`).join('');
+
+  const pickerHTML = aiSeatingPicking ? `
+    <div class="visit-detail" style="margin:12px 14px 0; padding:12px; background:var(--card); border:1px solid var(--line); border-radius:12px;">
+      <div style="font-weight:500; margin-bottom:8px;">${AI_SEATING_TYPE_LABEL[aiSeatingPicking.type]} — ${AI_SEATING_PRIORITY_LABEL[aiSeatingPicking.priority]}</div>
+      <input type="text" id="ai-seat-pick-query" placeholder="Procurar convidado…" value="${escapeHTML(aiSeatingPickQuery)}" style="all:unset; box-sizing:border-box; width:100%; background:var(--bg); border:1px solid var(--line); border-radius:10px; padding:9px 10px; font-size:13px; margin-bottom:8px;">
+      <div style="max-height:220px; overflow:auto;">
+        ${confirmedGuests.filter(g=>!aiSeatingPickQuery || g.name.toLowerCase().includes(aiSeatingPickQuery.toLowerCase())).map(g=>`
+          <div class="picker-row ${aiSeatingPickIds.includes(g.guestId)?'is-selected':''}" data-aiseatpick="${g.guestId}">
+            <span class="side-tag" style="background:${g.side==='noiva'?'var(--blush-dark)':'var(--dusty-dark)'};">${g.side==='noiva'?'N':'N'}</span>
+            <span class="pname">${escapeHTML(g.name)}</span>
+            ${aiSeatingPickIds.includes(g.guestId)?ICONS.check:''}
+          </div>`).join('') || '<div class="empty-note">Sem convidados confirmados.</div>'}
+      </div>
+      <div style="display:flex; gap:8px; margin-top:10px;">
+        <button class="visit-action-btn" data-aiseatpickcancel style="flex:1;">Cancelar</button>
+        <button class="login-btn" data-aiseatpickadd style="flex:1; max-width:none;" ${aiSeatingPickIds.length<2?'disabled':''}>Adicionar (${aiSeatingPickIds.length})</button>
+      </div>
+    </div>
+  ` : `
+    <div class="section-label" style="margin-top:14px;">Prioridade da próxima preferência</div>
+    <div style="display:flex; gap:8px; padding:0 14px; flex-wrap:wrap;">
+      ${Object.keys(AI_SEATING_PRIORITY_LABEL).map(pr=>`
+        <button class="visit-action-btn ${aiSeatingNewPriority===pr?'is-selected':''}" data-aiseatpriority="${pr}" style="${aiSeatingNewPriority===pr?'border-color:var(--ink); font-weight:600;':''}">${AI_SEATING_PRIORITY_LABEL[pr]}</button>
+      `).join('')}
+    </div>
+    <div style="display:flex; gap:8px; padding:10px 14px 0; flex-wrap:wrap;">
+      ${Object.keys(AI_SEATING_TYPE_LABEL).map(type=>`
+        <button class="visit-action-btn" data-aiseatstart="${type}|${aiSeatingNewPriority}">+ ${AI_SEATING_TYPE_LABEL[type]}</button>
+      `).join('')}
+    </div>
+  `;
+
+  return `
+  <div class="navbar navbar-row">
+    <button class="nav-action" data-aiseatback>${ICONS.chevleft||ICONS.chev}</button>
+    <div><h1>Organizar com Weddy AI</h1></div>
+  </div>
+  <div class="empty-note" style="margin:0 16px 14px;">Diz à Weddy quem deve ficar junto, separado ou perto — o resto (encaixar tudo dentro da capacidade das mesas) fica por conta dela. Tens ${confirmedGuests.length} convidados confirmados e ${totalSeats} lugares.</div>
+
+  <div class="section-label">Preferências</div>
+  ${aiSeatingConstraints.length ? `<div class="list-group" style="margin:0 16px 4px;">${constraintsHTML}</div>` : `<div class="empty-note" style="margin:0 16px 4px;">Ainda não adicionaste nenhuma preferência — podes gerar a proposta na mesma, a Weddy só vai preencher as mesas por ordem, respeitando a capacidade.</div>`}
+  ${pickerHTML}
+
+  <div class="section-label" style="margin-top:18px;">Ou escreve por palavras (opcional)</div>
+  <textarea id="ai-seat-freetext" rows="3" placeholder='Ex: "Quero os meus pais perto dos padrinhos e não quero o tio António perto do João."' style="all:unset; box-sizing:border-box; width:calc(100% - 32px); margin:0 16px; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:10px 12px; font-family:inherit; font-size:13px; resize:vertical;">${escapeHTML(aiSeatingFreeText)}</textarea>
+
+  <div style="padding:18px 16px 8px;">
+    <button id="ai-seat-generate-btn" class="login-btn" style="max-width:none;">${ICONS.sparkle||'✨'} Gerar proposta</button>
+  </div>
+  ${aiSeatingErrorMsg ? `<div class="empty-note" style="margin:0 16px 16px; color:var(--danger,#b3413a);">⚠️ ${escapeHTML(aiSeatingErrorMsg)}</div>` : ''}
+  `;
+}
+
+function viewAISeatingProposal(){
+  const p = aiSeatingProposal;
+  const tables = [...state.seating.tables].sort((a,b)=>a.id-b.id);
+  const tablesHTML = tables.map(t=>{
+    const seatRows = [];
+    for(let s=1; s<=t.seats; s++){
+      const gid = p.assignments['t'+t.id+'-s'+s];
+      if(gid) seatRows.push(aiSeatingGuestName(gid));
+    }
+    if(!seatRows.length) return '';
+    return `<div class="table-group"><div class="table-head"><div class="ttitle">${ta('tableLabel')(t.id)}<span class="phase-desc">${seatRows.length}/${t.seats}</span></div></div><div class="visit-detail" style="padding:0 14px 12px;">${seatRows.map(escapeHTML).join(', ')}</div></div>`;
+  }).join('');
+
+  const warningsHTML = (p.warnings||[]).length ? `
+    <div class="section-label" style="margin-top:16px;">⚠️ ${p.warnings.length} preferência(s) não totalmente respeitada(s)</div>
+    <div class="empty-note" style="margin:0 16px;">${p.warnings.map(escapeHTML).join('<br>')}</div>
+  ` : '';
+  const violationsHTML = (p.violations||[]).length ? `
+    <div class="section-label" style="margin-top:16px; color:var(--danger,#b3413a);">Preferências obrigatórias não respeitadas</div>
+    <div class="empty-note" style="margin:0 16px;">${p.violations.map(escapeHTML).join('<br>')}</div>
+  ` : '';
+  const unresolvedHTML = (p.unresolvedFreeText||[]).length ? `
+    <div class="empty-note" style="margin:8px 16px;">Não encontrei "${p.unresolvedFreeText.map(escapeHTML).join('", "')}" na lista de convidados confirmados — essa parte do texto foi ignorada.</div>
+  ` : '';
+
+  return `
+  <div class="navbar navbar-row">
+    <button class="nav-action" data-aiseatback>${ICONS.chevleft||ICONS.chev}</button>
+    <div><h1>✨ Proposta da Weddy</h1></div>
+  </div>
+  <div class="ring-stat-card" style="margin-top:2px;">
+    <div class="ring-wrap" style="width:78px;height:78px;flex-shrink:0;">
+      ${donutSVG(p.satisfiedPct/100, 'var(--blush-dark)', 78, 8)}
+      <div class="ring-center"><span class="num" style="font-size:15px;">${p.satisfiedPct}%</span></div>
+    </div>
+    <div class="ring-stat-list"><div class="ring-stat-item"><span class="l">das preferências pedidas foram respeitadas</span></div></div>
+  </div>
+  <div class="empty-note" style="margin:0 16px 14px;">${escapeHTML(p.explanation||'')}</div>
+  ${unresolvedHTML}
+  ${violationsHTML}
+  ${warningsHTML}
+  <div class="section-label" style="margin-top:16px;">Mesas</div>
+  ${tablesHTML}
+  <div style="display:flex; flex-direction:column; gap:8px; padding:18px 16px 10px;">
+    <button id="ai-seat-accept-btn" class="login-btn" style="max-width:none;">Aceitar proposta</button>
+    <button id="ai-seat-edit-btn" class="visit-action-btn">Aceitar e editar manualmente</button>
+    <button id="ai-seat-regenerate-btn" class="visit-action-btn">Gerar outra (com as mesmas preferências)</button>
+  </div>
   `;
 }
 
@@ -6018,7 +6268,13 @@ function ensureFamilyRSVPLink(items){
       m.item.entry.rsvpToken = token;
       m.item.entry.rsvpMemberId = m.memberId;
     });
-    oldEntries.forEach(oldEntry=>{ deleteGuestRSVPDoc(oldEntry).catch(()=>{}); });
+    // Fase 8.0 (Set 2026): usa o helper em lote, não uma chamada por
+    // convidado — se 2+ dos convidados fundidos já partilhavam ENTRE SI
+    // um link de família antigo (ex: juntar uma pessoa nova a uma família
+    // já existente), várias chamadas concorrentes a deleteGuestRSVPDoc()
+    // para o mesmo oldToken caiam exatamente no mesmo bug de corrida
+    // corrigido no apagar-categoria (ver deleteGuestRSVPDocsBatch).
+    deleteGuestRSVPDocsBatch(oldEntries).catch(()=>{});
     render();
     return token;
   });
@@ -6059,6 +6315,50 @@ function deleteGuestRSVPDoc(entry){
   return GUESTS().doc(token).delete().then(()=>{
     delete rsvpResponses[token];
   });
+}
+// Fase 8.0 — versão "em lote" de deleteGuestRSVPDoc(), para quando várias
+// entries são removidas de uma vez (ex: apagar uma categoria inteira).
+// Agrupa as entries por rsvpToken e faz UMA só leitura/escrita por
+// documento — mesmo que 2+ dessas entries sejam membros do MESMO link de
+// família — em vez de uma chamada concorrente por convidado (que é
+// exatamente o que causava o bug: cada chamada calculava "quem sobra" a
+// partir da mesma cópia local desatualizada, e o documento nunca chegava
+// a ficar com zero membros). Usar sempre que se apaga mais do que um
+// convidado ao mesmo tempo; para um único convidado, deleteGuestRSVPDoc()
+// continua a ser suficiente.
+function deleteGuestRSVPDocsBatch(entries){
+  const withToken = (entries||[]).filter(e=>e && e.rsvpToken);
+  if(!withToken.length) return Promise.resolve();
+  const byToken = new Map();
+  withToken.forEach(e=>{
+    if(!byToken.has(e.rsvpToken)) byToken.set(e.rsvpToken, []);
+    byToken.get(e.rsvpToken).push(e);
+  });
+  const ops = [];
+  byToken.forEach((groupEntries, token)=>{
+    const doc = rsvpResponses[token];
+    const anyMemberId = groupEntries.some(e=>e.rsvpMemberId);
+    if(doc && doc.isFamily && anyMemberId){
+      const removedIds = new Set(groupEntries.map(e=>e.rsvpMemberId).filter(Boolean));
+      const remainingMembers = (doc.members||[]).filter(m=>!removedIds.has(m.rsvpMemberId||m.guestId));
+      if(remainingMembers.length>0){
+        const remainingResponses = { ...(doc.responses||{}) };
+        const updates = { members: remainingMembers };
+        removedIds.forEach(mid=>{
+          delete remainingResponses[mid];
+          updates['responses.'+mid] = firebase.firestore.FieldValue.delete();
+        });
+        ops.push(GUESTS().doc(token).update(updates).then(()=>{
+          if(rsvpResponses[token]){ rsvpResponses[token] = { ...doc, members: remainingMembers, responses: remainingResponses }; }
+        }).catch(()=>{}));
+        return;
+      }
+    }
+    ops.push(GUESTS().doc(token).delete().then(()=>{
+      delete rsvpResponses[token];
+    }).catch(()=>{}));
+  });
+  return Promise.all(ops);
 }
 function revokeRSVPLink(side, catId, idx, name){
   const arr = getGuestNames(side, catId);
@@ -8758,6 +9058,141 @@ function bindHandlers(){
   document.querySelectorAll('[data-openseat]').forEach(el=>{
     el.addEventListener('click', e=>{ openSeatSheet(e.currentTarget.dataset.openseat); });
   });
+  bindAISeatingHandlers();
+}
+
+// Fase 8.1 — AI Seating. Todos os handlers do fluxo "Organizar com Weddy
+// AI" (entrada, construtor de preferências, proposta) — agrupados aqui,
+// chamados sempre a seguir aos outros handlers da tab Mesas, porque o
+// botão de entrada e o próprio ecrã só existem dentro de viewMesas().
+function bindAISeatingHandlers(){
+  const openBtn = document.getElementById('ai-seating-open-btn');
+  if(openBtn) openBtn.addEventListener('click', ()=>{
+    aiSeatingScreen = 'prefs';
+    aiSeatingConstraints = [];
+    aiSeatingFreeText = '';
+    aiSeatingProposal = null;
+    aiSeatingErrorMsg = null;
+    aiSeatingPicking = null;
+    aiSeatingPickIds = [];
+    aiSeatingNewPriority = 'STRONG';
+    render();
+  });
+  document.querySelectorAll('[data-aiseatback]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      aiSeatingScreen = null;
+      aiSeatingPicking = null;
+      render();
+    });
+  });
+  // (o botão #premium-subscribe-btn já tem o seu próprio handler, ligado
+  // mais acima em bindHandlers — reaproveitado tal e qual aqui, sem
+  // precisar de nada específico deste ecrã.)
+
+  document.querySelectorAll('[data-aiseatstart]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      const [type, priority] = e.currentTarget.dataset.aiseatstart.split('|');
+      aiSeatingPicking = { type, priority };
+      aiSeatingPickIds = [];
+      aiSeatingPickQuery = '';
+      render();
+    });
+  });
+  document.querySelectorAll('[data-aiseatpriority]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      aiSeatingNewPriority = e.currentTarget.dataset.aiseatpriority;
+      render();
+    });
+  });
+  document.querySelectorAll('[data-aiseatpick]').forEach(row=>{
+    row.addEventListener('click', e=>{
+      const gid = e.currentTarget.dataset.aiseatpick;
+      if(aiSeatingPickIds.includes(gid)) aiSeatingPickIds = aiSeatingPickIds.filter(id=>id!==gid);
+      else aiSeatingPickIds.push(gid);
+      render();
+    });
+  });
+  const pickQuery = document.getElementById('ai-seat-pick-query');
+  if(pickQuery) pickQuery.addEventListener('input', e=>{
+    aiSeatingPickQuery = e.target.value;
+    render();
+  });
+  const pickCancel = document.querySelector('[data-aiseatpickcancel]');
+  if(pickCancel) pickCancel.addEventListener('click', ()=>{
+    aiSeatingPicking = null;
+    aiSeatingPickIds = [];
+    render();
+  });
+  const pickAdd = document.querySelector('[data-aiseatpickadd]');
+  if(pickAdd) pickAdd.addEventListener('click', ()=>{
+    if(aiSeatingPickIds.length<2 || !aiSeatingPicking) return;
+    aiSeatingConstraints.push({
+      type: aiSeatingPicking.type,
+      priority: aiSeatingPicking.priority,
+      guestIds: [...aiSeatingPickIds],
+      names: aiSeatingPickIds.map(aiSeatingGuestName),
+    });
+    aiSeatingPicking = null;
+    aiSeatingPickIds = [];
+    render();
+  });
+  document.querySelectorAll('[data-aiseatrmconstraint]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      aiSeatingConstraints.splice(Number(e.currentTarget.dataset.aiseatrmconstraint), 1);
+      render();
+    });
+  });
+  const freeTextEl = document.getElementById('ai-seat-freetext');
+  if(freeTextEl) freeTextEl.addEventListener('input', e=>{ aiSeatingFreeText = e.target.value; });
+
+  const generateBtn = document.getElementById('ai-seat-generate-btn');
+  if(generateBtn) generateBtn.addEventListener('click', ()=>{
+    aiSeatingErrorMsg = null;
+    aiSeatingScreen = 'loading';
+    render();
+    const payload = aiSeatingConstraints.map(c=>({ type:c.type, priority:c.priority, guestIds:c.guestIds }));
+    AIService.generateSeatingProposal(payload, aiSeatingFreeText).then(res=>{
+      if(res && res.ok){
+        aiSeatingProposal = res.proposal;
+        aiSeatingScreen = 'proposal';
+      } else {
+        aiSeatingErrorMsg = (res && res.message) || 'Não foi possível gerar a proposta.';
+        aiSeatingScreen = 'prefs';
+      }
+      render();
+    });
+  });
+
+  function applyProposalAndClose(){
+    if(!aiSeatingProposal) return;
+    state.seating.assignments = { ...aiSeatingProposal.assignments };
+    aiSeatingScreen = null;
+    aiSeatingProposal = null;
+    aiSeatingConstraints = [];
+    aiSeatingFreeText = '';
+    render();
+    pushRemote(true);
+  }
+  const acceptBtn = document.getElementById('ai-seat-accept-btn');
+  if(acceptBtn) acceptBtn.addEventListener('click', applyProposalAndClose);
+  const editBtn = document.getElementById('ai-seat-edit-btn');
+  if(editBtn) editBtn.addEventListener('click', applyProposalAndClose);
+  const regenBtn = document.getElementById('ai-seat-regenerate-btn');
+  if(regenBtn) regenBtn.addEventListener('click', ()=>{
+    aiSeatingScreen = 'loading';
+    render();
+    const payload = aiSeatingConstraints.map(c=>({ type:c.type, priority:c.priority, guestIds:c.guestIds }));
+    AIService.generateSeatingProposal(payload, aiSeatingFreeText).then(res=>{
+      if(res && res.ok){
+        aiSeatingProposal = res.proposal;
+        aiSeatingScreen = 'proposal';
+      } else {
+        aiSeatingErrorMsg = (res && res.message) || 'Não foi possível gerar a proposta.';
+        aiSeatingScreen = 'prefs';
+      }
+      render();
+    });
+  });
 }
 
 function softUpdateBudget(){
@@ -9380,13 +9815,44 @@ function syncSeatingToGuestDocs(btn){
       };
     });
   });
+  // Fase 8.2: um convite de família partilha UM SÓ documento
+  // guests/{token} entre vários guestIds — escrever "assignedTable" uma
+  // vez por membro (como isto fazia antes) significa que cada update()
+  // apaga a mesa do membro anterior, e só a mesa do ÚLTIMO membro
+  // escrito sobrevive (mesmo bug de fundo do Flow 5 da 8.0, aqui na
+  // sincronização de mesas — nunca tinha sido notado porque "a minha
+  // mesa" estava bloqueada para famílias no rsvp.html). Por isso
+  // agrupamos por token e fazemos UMA escrita por token: para um convite
+  // individual (1 guestId por token) continua a ir para
+  // assignedTable/assignedSeat/tablemates como sempre; para um convite
+  // de família (2+ guestIds a partilhar o token) vai para
+  // "memberTables", um mapa guestId → {table,seat,tablemates}, para que
+  // o rsvp.html possa mostrar a mesa de CADA membro no seu próprio
+  // cartão (ver renderFamilyMembers).
   const guests = flattenAllGuestsForRSVP().filter(g=>g.entry.rsvpToken);
-  const writes = guests.map(g=>{
-    const info = assignmentByGuestId[g.guestId];
-    const payload = info
-      ? { assignedTable: info.tableId, assignedSeat: info.seat, tablemates: info.tablemates }
-      : { assignedTable: null, assignedSeat: null, tablemates: [] };
-    return GUESTS().doc(g.entry.rsvpToken).update(payload).catch(()=>{});
+  const byToken = new Map();
+  guests.forEach(g=>{
+    if(!byToken.has(g.entry.rsvpToken)) byToken.set(g.entry.rsvpToken, []);
+    byToken.get(g.entry.rsvpToken).push(g);
+  });
+  const writes = Array.from(byToken.entries()).map(([token, members])=>{
+    let payload;
+    if(members.length > 1){
+      const memberTables = {};
+      members.forEach(g=>{
+        const info = assignmentByGuestId[g.guestId];
+        memberTables[g.guestId] = info
+          ? { table: info.tableId, seat: info.seat, tablemates: info.tablemates }
+          : null;
+      });
+      payload = { memberTables };
+    } else {
+      const info = assignmentByGuestId[members[0].guestId];
+      payload = info
+        ? { assignedTable: info.tableId, assignedSeat: info.seat, tablemates: info.tablemates }
+        : { assignedTable: null, assignedSeat: null, tablemates: [] };
+    }
+    return GUESTS().doc(token).update(payload).catch(()=>{});
   });
   Promise.all(writes).finally(()=>{
     if(btn){ btn.textContent = ta('btnSyncedCheck'); setTimeout(()=>{ btn.textContent = original; btn.disabled = false; }, 1400); }
