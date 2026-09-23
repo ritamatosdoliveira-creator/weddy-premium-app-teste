@@ -2344,9 +2344,15 @@ function escapeHTML(str){
     .replace(/"/g,'&quot;')
     .replace(/'/g,'&#39;');
 }
-function fmtEUR(n){ if(isNaN(n)) n=0; return n.toLocaleString('pt-PT',{style:'currency',currency:'EUR',maximumFractionDigits:0}); }
-function fmtPct(n){ if(isNaN(n)||!isFinite(n)) n=0; return n>999 ? '999%+' : `${n}%`; }
-function fmtEUR2(n){ if(isNaN(n)) n=0; return n.toLocaleString('pt-PT',{style:'currency',currency:'EUR',maximumFractionDigits:2}); }
+// Fase 4D da auditoria (BUG-01, P2): n=Number(n) ANTES do isNaN. Antes,
+// fmtEUR(null) rebentava com TypeError — isNaN(null) é `false` (porque
+// Number(null) é 0, um número válido), por isso o guard nunca disparava
+// para este caso concreto, e n continuava `null` até chegar a
+// n.toLocaleString(...), que `null` não tem. Number(n) primeiro garante
+// que isNaN(n) a seguir vê sempre um número (ou NaN), nunca null/undefined.
+function fmtEUR(n){ n=Number(n); if(isNaN(n)) n=0; return n.toLocaleString('pt-PT',{style:'currency',currency:'EUR',maximumFractionDigits:0}); }
+function fmtPct(n){ n=Number(n); if(isNaN(n)||!isFinite(n)) n=0; return n>999 ? '999%+' : `${n}%`; }
+function fmtEUR2(n){ n=Number(n); if(isNaN(n)) n=0; return n.toLocaleString('pt-PT',{style:'currency',currency:'EUR',maximumFractionDigits:2}); }
 function flagRequiredField(el){
   if(!el) return;
   el.classList.add('field-error');
@@ -4182,11 +4188,21 @@ function assignedGuestKeysSet(){
 // mais uma função e um item neste array — o ecrã (viewDefWeddingHealth) e
 // o Copilot dos noivos nunca precisam de saber quantas regras existem nem
 // o que cada uma verifica.
+// Fase 4C da auditoria (RSVP-COUNT-01, P2): fonte única de verdade para
+// "este convidado está pendente de RSVP". Antes, o Wedding Health
+// (checkPendingRSVP) e o Copilot (WeddyActions.read.getPendingRSVPs)
+// tinham cada um a sua própria cópia desta regra, e discordavam
+// especificamente para convidados sem link de RSVP (rsvpToken) que já
+// tinham sido confirmados à mão — o Wedding Health excluía-os
+// corretamente (já não estão "pendentes"), o Copilot incluía-os sempre.
+// Confirmado ao vivo na Fase 2 (22 vs 19 convidados pendentes, para os
+// mesmos dados). Agora as duas funções chamam esta mesma regra.
+function isRsvpPending(g){
+  if(!g.entry.rsvpToken) return !isConfirmed(g.side, g.catId, g.idx);
+  return !rsvpHasResponded(memberRSVPResponse(g));
+}
 function checkPendingRSVP(){
-  const pendentes = flattenAllGuestsForRSVP().filter(g=>{
-    if(!g.entry.rsvpToken) return !isConfirmed(g.side, g.catId, g.idx);
-    return !rsvpHasResponded(memberRSVPResponse(g));
-  }).length;
+  const pendentes = flattenAllGuestsForRSVP().filter(isRsvpPending).length;
   if(pendentes<=0) return null;
   return { id:'rsvp-pending', severity: pendentes>10?'red':'yellow', text: ta('healthCheckPendingRSVP')(pendentes), goto:{ def:'rsvp' } };
 }
@@ -7085,8 +7101,18 @@ function saveAndSyncWeddingSettingsToGuests(btn, fields){
   }
   CURRENT_DOC().set({ settings: weddingSettings, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge:true }).then(()=>{
     const tokens = flattenAllGuestsForRSVP().map(g=>g.entry.rsvpToken).filter(Boolean);
-    Promise.all(tokens.map(t=>GUESTS().doc(t).update(fields).catch(()=>{}))).finally(()=>{
-      btn.textContent = ta('btnSavedCheck');
+    // Fase 4E (LOG-02): cada update() devolve o próprio token quando falha
+    // (em vez de engolir o erro em silêncio), para sabermos exatamente
+    // quantos/quais convidados NÃO ficaram com a informação atualizada.
+    Promise.all(tokens.map(t=>GUESTS().doc(t).update(fields).then(()=>null).catch(()=>t))).then(results=>{
+      const failedTokens = results.filter(Boolean);
+      logMassPropagationFailures('sync_wedding_settings_to_guests_failed', failedTokens);
+      if(failedTokens.length){
+        btn.textContent = original;
+        alert(`As definições foram guardadas, mas ${failedTokens.length} de ${tokens.length} convite(s) de convidados não foram atualizados agora (podem ficar com informação desatualizada). Tenta sincronizar de novo daqui a pouco.`);
+      } else {
+        btn.textContent = ta('btnSavedCheck');
+      }
       setTimeout(()=>{ _origRender(); }, 900);
     });
   }).catch(()=>{
@@ -7517,9 +7543,10 @@ const WeddyActions = {
       return getDuedTodoItems().filter(it => it.days>=0 && it.days<=7);
     },
     getPendingRSVPs(){
-      return flattenAllGuestsForRSVP().filter(g=>{
-        return !g.entry.rsvpToken || !rsvpHasResponded(memberRSVPResponse(g));
-      }).map(g=>g.name).filter(Boolean);
+      // Fase 4C (RSVP-COUNT-01): usa a mesma regra que o Wedding Health
+      // (isRsvpPending), em vez de uma versão própria que contava sempre
+      // como pendente quem não tinha rsvpToken, mesmo já confirmado à mão.
+      return flattenAllGuestsForRSVP().filter(isRsvpPending).map(g=>g.name).filter(Boolean);
     },
     getDietaryList(){
       return flattenAllGuestsForRSVP().filter(g=>{
@@ -7619,12 +7646,20 @@ const WeddyActions = {
     }
   },
   write: {
+    // Fase 4A da auditoria (COPILOT-01, P1): antes, esta função chamava
+    // render() (que agenda uma gravação no Firestore só 500ms depois, em
+    // segundo plano) e devolvia logo o resultado — respondeAssistente()
+    // confirmava "sucesso" ao utilizador sem esperar a escrita terminar,
+    // nem verificar se ela tinha realmente sido bem sucedida. Agora
+    // devolve uma Promise que só resolve depois de pushRemoteImmediate()
+    // confirmar que a gravação chegou ao Firestore — se falhar, a Promise
+    // rejeita e quem chamou sabe que a tarefa NÃO foi persistida.
     createTask(texto){
       const cat = state.todoCategories.find(c=>c.id==='tc3') || state.todoCategories[0];
-      if(!cat) return null;
+      if(!cat) return Promise.resolve(null);
       cat.items.push({ text: texto, done:false, due:'', time:'' });
-      render();
-      return cat;
+      _origRender(); // atualiza o ecrã já, mas sem agendar o autosave debounced (fazemos a gravação imediata a seguir)
+      return pushRemoteImmediate().then(()=> cat);
     }
   }
 };
@@ -7658,8 +7693,21 @@ async function respondeAssistente(pergunta){
 
   switch(classified.intent){
     case I.CREATE_TASK: {
-      const cat = WeddyActions.write.createTask(classified.value);
-      return cat ? `Criei a tarefa "${classified.value}" em Tarefas → ${cat.label}. Já a consegues ver e editar lá.` : null;
+      // Fase 4A da auditoria (COPILOT-01, P1): só confirmamos sucesso ao
+      // utilizador depois de a escrita no Firestore terminar com sucesso
+      // (ver WeddyActions.write.createTask / pushRemoteImmediate). Se
+      // falhar, dizemos que falhou em vez de fingir que gravámos — regra
+      // explícita desta fase: "a IA nunca pode dizer que fez algo se não
+      // tiver confirmação real da persistência".
+      try{
+        const cat = await WeddyActions.write.createTask(classified.value);
+        if(!cat) return null;
+        showSaveToast(false);
+        return `Criei a tarefa "${classified.value}" em Tarefas → ${cat.label}. Já a consegues ver e editar lá.`;
+      }catch(err){
+        showSaveToast(true);
+        return `Não consegui guardar a tarefa "${classified.value}" — houve um problema a gravar agora. Tenta outra vez daqui a pouco.`;
+      }
     }
     case I.GET_UPCOMING_TASKS: {
       const items = WeddyActions.read.getUpcomingTasks();
@@ -10976,7 +11024,13 @@ function syncGuestProgramToGuestDocs(){
   if(!FIREBASE_READY || !auth || !auth.currentUser || !currentWeddingId) return;
   const programa = buildGuestVisibleProgram();
   const tokens = flattenAllGuestsForRSVP().map(g=>g.entry.rsvpToken).filter(Boolean);
-  tokens.forEach(t=>{ GUESTS().doc(t).update({ guestProgram: programa }).catch(()=>{}); });
+  // Fase 4E (LOG-02): continua sem UI síncrona (não há botão aqui, corre
+  // sozinho), mas já não fica 100% silenciosa — se algum token falhar,
+  // fica registado no _incident_log em vez de desaparecer sem rasto.
+  const failed = [];
+  Promise.all(tokens.map(t=>GUESTS().doc(t).update({ guestProgram: programa }).catch(()=>{ failed.push(t); }))).then(()=>{
+    logMassPropagationFailures('sync_guest_program_failed', failed);
+  });
 }
 function syncSeatingToGuestDocs(btn){
   if(!FIREBASE_READY || !auth || !auth.currentUser || !currentWeddingId){
@@ -11070,10 +11124,23 @@ function syncSeatingToGuestDocs(btn){
         ? { assignedTable: info.tableId, assignedSeat: info.seat, tablemates: info.tablemates }
         : { assignedTable: null, assignedSeat: null, tablemates: [] };
     }
-    return GUESTS().doc(token).update(payload).catch(()=>{});
+    // Fase 4E (LOG-02): devolve o próprio token em vez de engolir o erro,
+    // para o botão poder distinguir "sincronizado" de "sincronizado com falhas".
+    return GUESTS().doc(token).update(payload).then(()=>null).catch(()=>token);
   });
-  return Promise.all(writes).finally(()=>{
-    if(btn){ btn.textContent = ta('btnSyncedCheck'); setTimeout(()=>{ btn.textContent = original; btn.disabled = false; }, 1400); }
+  return Promise.all(writes).then(results=>{
+    const failedTokens = results.filter(Boolean);
+    logMassPropagationFailures('sync_seating_to_guests_failed', failedTokens);
+    if(btn){
+      if(failedTokens.length){
+        btn.textContent = original;
+        btn.disabled = false;
+        alert(`A mesa foi sincronizada, mas ${failedTokens.length} de ${writes.length} convite(s) de convidados não foram atualizados agora. Tenta sincronizar de novo daqui a pouco.`);
+      } else {
+        btn.textContent = ta('btnSyncedCheck');
+        setTimeout(()=>{ btn.textContent = original; btn.disabled = false; }, 1400);
+      }
+    }
   });
 }
 
@@ -12475,7 +12542,67 @@ function flushPendingSave(){
     settings: weddingSettings,
     json: JSON.stringify(state),
     updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-  }, { merge:true }).catch(()=>{});
+  }, { merge:true }).catch((err)=>{
+    // Fase 4B da auditoria (LOG-01, P1): antes, uma falha aqui era 100%
+    // silenciosa — nem aviso ao utilizador, nem registo nenhum. Esta
+    // função é chamada sobretudo mesmo antes de recarregar a página (ver
+    // showUpdateBanner), por isso um toast que desaparece com o reload não
+    // ajuda muito aqui — mas registamos o incidente na mesma coleção
+    // `_incident_log` já usada por attachFirestoreSync() para o mesmo
+    // tipo de situação (falha/anomalia de gravação), para ser possível
+    // perceber depois, ao rever os incidentes, que uma gravação falhou
+    // aqui — em vez de desaparecer sem deixar vestígio nenhum.
+    try{
+      firebase.firestore().collection('_incident_log').add({
+        weddingId: currentWeddingId,
+        type: 'flush_pending_save_failed',
+        error: String(err && err.message || err),
+        at: firebase.firestore.FieldValue.serverTimestamp(),
+        userAgent: (typeof navigator!=='undefined' ? navigator.userAgent : '')
+      }).catch(()=>{});
+    }catch(e){}
+  });
+}
+// Fase 4A da auditoria (COPILOT-01, P1): grava imediatamente (sem o
+// debounce de 500ms do pushRemote normal) e devolve a Promise da escrita,
+// para quem precisar de confirmar que os dados chegaram mesmo ao
+// Firestore antes de dizer "sucesso" ao utilizador — usado por
+// WeddyActions.write.createTask (Assistente Weddy).
+function pushRemoteImmediate(){
+  if(!FIREBASE_READY || !auth || !auth.currentUser || !currentWeddingId){
+    return Promise.reject(new Error('not-ready'));
+  }
+  clearTimeout(saveTimer);
+  return CURRENT_DOC().set({
+    settings: weddingSettings,
+    json: JSON.stringify(state),
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+  }, { merge:true }).then(()=>{
+    scheduleGoogleCalendarAutoSync();
+  });
+}
+// Fase 4E da auditoria (LOG-02): propagação em massa para vários
+// guests/{token} (settings, programa do dia, mesas) escrevia cada
+// documento com o seu próprio .catch(()=>{}) dentro do Promise.all — se
+// 3 de 50 falhassem, os 47 restantes eram atualizados, o Promise.all
+// resolvia na mesma (o erro nunca chegava lá) e não ficava nenhum
+// registo de quais tokens falharam. Esta função dá aos chamadores uma
+// forma de saber (para poderem avisar o utilizador, no caso de haver um
+// botão de "Guardar"/"Sincronizar") E de deixar sempre um rasto no
+// _incident_log, mesmo quando não há UI síncrona para mostrar o erro
+// (ex.: sync automático do programa do dia).
+function logMassPropagationFailures(type, failedTokens){
+  if(!failedTokens || !failedTokens.length) return;
+  try{
+    firebase.firestore().collection('_incident_log').add({
+      weddingId: currentWeddingId,
+      type,
+      failedCount: failedTokens.length,
+      failedTokens: failedTokens.slice(0, 50), // limite defensivo, nunca um array sem fim
+      at: firebase.firestore.FieldValue.serverTimestamp(),
+      userAgent: (typeof navigator!=='undefined' ? navigator.userAgent : '')
+    }).catch(()=>{});
+  }catch(e){}
 }
 function pushRemote(confirmToast){
   if(!FIREBASE_READY || !auth || !auth.currentUser || !currentWeddingId) return;
