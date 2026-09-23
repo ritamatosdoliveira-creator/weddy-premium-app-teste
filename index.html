@@ -1439,6 +1439,46 @@ if(typeof emailjs !== 'undefined'){
       if(tabbar) tabbar.style.display = '';
     }, 50);
   });
+
+  // Achado ao vivo da Fase 4 (Rita): no chat do Assistente, ao tocar no
+  // campo de texto, o teclado sobe e o balão do chat (#chat-panel) sobe
+  // com ele, mas fica "muito cortado" — porque #chat-panel é posicionado
+  // com "bottom: calc(78px + ... + 62px)" e "max-height: min(72vh, 560px)"
+  // fixos, pensados para quando NÃO há teclado nenhum. Em mobile, quando o
+  // teclado ocupa uma fatia grande do ecrã, esse "bottom" fixo empurra o
+  // painel para cima de mais do que precisa, e o "max-height" continua a
+  // ser calculado sobre o ecrã inteiro (sem descontar o teclado), por isso
+  // o topo do chat fica escondido por trás do próprio teclado/barra de
+  // endereço. Corrigido com a Visual Viewport API (suportada em iOS Safari
+  // e Android Chrome, a forma padrão de saber quanto espaço REAL fica
+  // visível quando o teclado está aberto): só entra em ação quando o
+  // teclado ocupa mais de 60px (para nunca alterar o layout normal, sem
+  // teclado), e volta ao CSS original (estilos inline removidos) assim
+  // que o teclado fecha.
+  function adjustChatPanelForKeyboard(){
+    const panel = document.getElementById('chat-panel');
+    if(!panel || panel.hidden || !window.visualViewport) return;
+    const vv = window.visualViewport;
+    const keyboardInset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+    if(keyboardInset > 60){
+      panel.style.bottom = (keyboardInset + 8) + 'px';
+      panel.style.maxHeight = Math.max(160, vv.height - 24) + 'px';
+    } else {
+      panel.style.bottom = '';
+      panel.style.maxHeight = '';
+    }
+  }
+  if(window.visualViewport){
+    window.visualViewport.addEventListener('resize', adjustChatPanelForKeyboard);
+    window.visualViewport.addEventListener('scroll', adjustChatPanelForKeyboard);
+  }
+  document.addEventListener('focusin', e=>{
+    if(e.target && e.target.id==='assist-chat-input') setTimeout(adjustChatPanelForKeyboard, 60);
+  });
+  document.addEventListener('focusout', e=>{
+    if(e.target && e.target.id==='assist-chat-input') setTimeout(adjustChatPanelForKeyboard, 60);
+  });
+
   // Tocar fora de um campo (fora de qualquer input/textarea/select e fora dos botões
   // que os controlam) fecha o teclado — tira o foco do campo ativo.
   document.addEventListener('pointerdown', e=>{
@@ -1698,7 +1738,42 @@ let currentSubscription = null;
 // Weddy Premium (chatbot + RSVP) só fica disponível a quem tiver
 // subscrição ativa — este campo vem do documento do casamento
 // (data.subscription), capturado em attachFirestoreSync().
-function hasActiveSubscription(){ return !!(currentSubscription && currentSubscription.active); }
+//
+// Pedido direto da Rita (Fase 4): a subscrição só deve durar 24 meses a
+// partir do INÍCIO dela, para não ficar reutilizável indefinidamente entre
+// pessoas diferentes (comprar uma vez e "passar a conta" para sempre). Como
+// ainda não há um Cloud Scheduler a desativar subscrições automaticamente
+// ao fim desse prazo, o limite é aplicado aqui, no próprio cliente: mesmo
+// que o Firestore continue a dizer "active:true", se já passaram mais de 24
+// meses desde "startedAt", a subscrição deixa de contar como ativa. Contas
+// de teste/antigas sem "startedAt" (criadas antes desta correção) NÃO são
+// retroativamente bloqueadas — ficam válidas como sempre estiveram, para
+// não quebrar contas que já tinham acesso.
+const SUBSCRIPTION_MAX_MONTHS = 24;
+function hasActiveSubscription(){
+  if(!currentSubscription || !currentSubscription.active) return false;
+  const startedAt = currentSubscription.startedAt;
+  if(!startedAt) return true;
+  const started = new Date(startedAt);
+  if(isNaN(started.getTime())) return true;
+  const expiry = new Date(started);
+  expiry.setMonth(expiry.getMonth() + SUBSCRIPTION_MAX_MONTHS);
+  return new Date() < expiry;
+}
+// Ponto único que monta o payload de ativação — usado pelos 2 botões
+// "Subscrever" (janela do Assistente e página de upsell). "startedAt" só é
+// definido a primeira vez (nunca é reposto num cancelar+reativar), para o
+// limite de 24 meses acima ser mesmo um limite, não um relógio que qualquer
+// pessoa pode reiniciar à vontade.
+function buildSubscriptionActivatePayload(){
+  const existingStartedAt = (currentSubscription && currentSubscription.startedAt) || new Date().toISOString();
+  return {
+    active: true,
+    plan: 'premium-mensal-simulado',
+    startedAt: existingStartedAt,
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+  };
+}
 const WEDDINGS = () => db.collection('weddings');
 const CURRENT_DOC = () => db.collection('weddings').doc(currentWeddingId);
 // Coleção separada dos convites RSVP — nunca contém o casamento inteiro,
@@ -2674,7 +2749,11 @@ const APP_I18N = {
     sectionPremium:'Weddy Premium', sectionWedding:'O casamento', sectionData:'Os teus dados', sectionAccess:'Acesso e conta', sectionInfo:'Informação', sectionHelp:'Ajuda',
     subscriptionTitle:'Gerir subscrição', subscriptionDesc:'O estado do teu plano Weddy Premium',
     subscriptionActiveStatus:'Weddy Premium está ativo', subscriptionActiveText:'Tens acesso a todas as funcionalidades Premium — RSVP, Wedding Health, Memórias, Documentos e Google Calendar.',
-    subscriptionPlanLabel:'Plano', subscriptionManageNote:'(Protótipo — a gestão de faturação/cancelamento real ainda não está ligada a nenhum pagamento.)',
+    subscriptionPlanLabel:'Plano', subscriptionManageNote:'(Protótipo — a gestão de faturação real ainda não está ligada a nenhum pagamento.)',
+    subscriptionStartedLabel:'Início', subscriptionExpiresLabel:'Válida até',
+    btnCancelSubscription:'Cancelar subscrição', btnCancelingEllipsis:'A cancelar…',
+    confirmCancelSubscriptionText:'Isto cancela já a subscrição Weddy Premium — todas as funcionalidades Premium (RSVP, Wedding Health, Memórias, Documentos, Google Calendar, Assistente) ficam bloqueadas de imediato. Confirmas?',
+    alertSubscriptionCancelError:'Não foi possível cancelar a subscrição agora — verifica a ligação e tenta de novo.',
     homePremiumSectionLabel:'Weddy Premium',
     premiumHubTitle:'Ferramentas Weddy', premiumHubDesc:'Tudo o que precisas para organizar o grande dia, num só lugar.',
     premiumHubBadge:'Weddy Premium',
@@ -3338,7 +3417,11 @@ const APP_I18N = {
     sectionPremium:'Weddy Premium', sectionWedding:'The wedding', sectionData:'Your data', sectionAccess:'Access & account', sectionInfo:'Information', sectionHelp:'Help',
     subscriptionTitle:'Manage subscription', subscriptionDesc:'Your Weddy Premium plan status',
     subscriptionActiveStatus:'Weddy Premium is active', subscriptionActiveText:"You have access to every Premium feature — RSVP, Wedding Health, Memories, Documents and Google Calendar.",
-    subscriptionPlanLabel:'Plan', subscriptionManageNote:'(Prototype — real billing/cancellation management is not connected to any payment yet.)',
+    subscriptionPlanLabel:'Plan', subscriptionManageNote:'(Prototype — real billing management is not connected to any payment yet.)',
+    subscriptionStartedLabel:'Started', subscriptionExpiresLabel:'Valid until',
+    btnCancelSubscription:'Cancel subscription', btnCancelingEllipsis:'Cancelling…',
+    confirmCancelSubscriptionText:'This cancels your Weddy Premium subscription right away — every Premium feature (RSVP, Wedding Health, Memories, Documents, Google Calendar, Assistant) is locked immediately. Confirm?',
+    alertSubscriptionCancelError:'Could not cancel the subscription right now — check your connection and try again.',
     homePremiumSectionLabel:'Weddy Premium',
     premiumHubTitle:'Weddy tools', premiumHubDesc:'Everything you need to plan the big day, all in one place.',
     premiumHubBadge:'Weddy Premium',
@@ -7486,10 +7569,31 @@ function classifyCopilotIntent(pergunta){
 
   // "o contrato do fotógrafo diz alguma coisa sobre X" — só dispara se
   // conseguir identificar a QUE fornecedor o contrato pertence; senão cai
-  // na pesquisa geral de documentos (SEARCH_DOCUMENTS), mais abaixo.
+  // na verificação seguinte (pesquisa geral de documentos).
   if(/contrato/.test(p)){
     const supplierGuess = findSupplierByText(pergunta);
     if(supplierGuess) return { intent: WEDDY_COPILOT_INTENTS.SEARCH_SUPPLIER_CONTRACT };
+  }
+
+  // Achado ao vivo da Fase 4 (Rita): "a IA não sabe responder a nada sobre
+  // os documentos do casamento". Causa raiz: SEARCH_DOCUMENTS só era
+  // tentada em ÚLTIMO recurso, depois de TODAS as intenções genéricas
+  // abaixo (convidad/orçamento/data/mesa) — e qualquer pergunta real sobre
+  // um documento quase sempre contém uma dessas palavras genéricas (ex.:
+  // "o que diz o documento sobre a DATA de entrega?", "o contrato tem
+  // alguma cláusula sobre o PAGAMENTO final?"), por isso essas intenções
+  // genéricas ganhavam sempre primeiro e a pesquisa de documentos, na
+  // prática, quase nunca chegava a disparar. Corrigido com o mesmo
+  // princípio já usado acima ("mais específica ganha quando se aplica"):
+  // se a pergunta menciona explicitamente um documento/contrato/PDF E há
+  // mesmo uma correspondência real num documento carregado, isso ganha às
+  // intenções genéricas abaixo. Exige uma palavra-gatilho explícita (não
+  // corre para toda e qualquer pergunta) para não sequestrar perguntas
+  // normais de orçamento/convidados/mesas que não tenham nada a ver com
+  // documentos.
+  if(/document|contrato|pdf|carreguei|anexei|ficheiro/.test(p)){
+    const found = searchWeddingDocuments(pergunta);
+    if(found) return { intent: WEDDY_COPILOT_INTENTS.SEARCH_DOCUMENTS };
   }
 
   // "que convidados confirmados ainda não têm mesa" — antes do /mesa/
@@ -8504,10 +8608,11 @@ function bindChatPanelHandlers(){
     if(!FIREBASE_READY || !currentWeddingId){ alert(ta('alertNoConnectionRetry')); return; }
     subscribeBtn.disabled = true;
     subscribeBtn.textContent = ta('btnActivatingEllipsis');
+    const payload = buildSubscriptionActivatePayload();
     CURRENT_DOC().update({
-      subscription: { active:true, plan:'premium-mensal-simulado', updatedAt: firebase.firestore.FieldValue.serverTimestamp() }
+      subscription: payload
     }).then(()=>{
-      currentSubscription = { active:true, plan:'premium-mensal-simulado' };
+      currentSubscription = payload;
       renderChatPanelBody();
       updateChatFab();
     }).catch(err=>{
@@ -8573,6 +8678,24 @@ function viewDefinicoes(){
 function viewDefSubscricao(){
   if(!hasActiveSubscription()) return viewDefPremiumLocked(ta('subscriptionTitle'));
   const plan = (currentSubscription && currentSubscription.plan) || '';
+  // Pedido direto da Rita (Fase 4): mostrar a data de início e a data-limite
+  // dos 24 meses (SUBSCRIPTION_MAX_MONTHS), e dar uma forma de cancelar a
+  // subscrição na própria área de gerir subscrição — antes só existia um
+  // texto a dizer que "a gestão de cancelamento real ainda não está ligada
+  // a nenhum pagamento" (que continua a ser verdade para faturação real,
+  // mas o botão abaixo já cancela mesmo o acesso Premium, que é o que a
+  // pessoa quer quando pede para cancelar).
+  const startedAt = currentSubscription && currentSubscription.startedAt;
+  let datesHtml = '';
+  if(startedAt){
+    const started = new Date(startedAt);
+    if(!isNaN(started.getTime())){
+      const expiry = new Date(started);
+      expiry.setMonth(expiry.getMonth() + SUBSCRIPTION_MAX_MONTHS);
+      datesHtml = `<div class="empty-note" style="margin:0 16px 4px;">${ta('subscriptionStartedLabel')}: ${formatDatePT(started.toISOString().slice(0,10))}</div>
+  <div class="empty-note" style="margin:0 16px 12px;">${ta('subscriptionExpiresLabel')}: ${formatDatePT(expiry.toISOString().slice(0,10))}</div>`;
+    }
+  }
   return `
   ${defSubHeader(ta('subscriptionTitle'))}
   <div class="stat-card" style="margin:0 16px 12px; display:flex; align-items:center; gap:12px;">
@@ -8583,7 +8706,11 @@ function viewDefSubscricao(){
     </div>
   </div>
   <div class="empty-note" style="margin:0 16px 12px;">${ta('subscriptionActiveText')}</div>
-  <div class="empty-note" style="margin:0 16px 28px;">${ta('subscriptionManageNote')}</div>
+  ${datesHtml}
+  <div class="empty-note" style="margin:0 16px 20px;">${ta('subscriptionManageNote')}</div>
+  <div style="padding:0 16px 30px;">
+    <button class="login-btn" id="subscription-cancel-btn" style="margin-top:0; background:var(--card); color:var(--rust); border:1px solid var(--rust);">${ta('btnCancelSubscription')}</button>
+  </div>
   `;
 }
 
@@ -9056,10 +9183,11 @@ function bindHandlers(){
     if(!FIREBASE_READY || !currentWeddingId){ alert(ta('alertNoConnectionRetry')); return; }
     subscribeBtn.disabled = true;
     subscribeBtn.textContent = ta('btnActivatingEllipsis');
+    const payload = buildSubscriptionActivatePayload();
     CURRENT_DOC().update({
-      subscription: { active:true, plan:'premium-mensal-simulado', updatedAt: firebase.firestore.FieldValue.serverTimestamp() }
+      subscription: payload
     }).then(()=>{
-      currentSubscription = { active:true, plan:'premium-mensal-simulado' };
+      currentSubscription = payload;
       _origRender();
     }).catch(err=>{
       console.error('Weddy subscribe error:', err.code, err.message);
@@ -9538,8 +9666,55 @@ function bindHandlers(){
         _origRender();
         return;
       }
+      // Achado ao vivo da Fase 4 (Rita): "quando fazes back numa
+      // funcionalidade premium, retoma para a página das definições e não
+      // deveria, porque os menus estão na página inicial". Causa raiz: desde
+      // a reorganização de Set 2026 (ver comentário em viewDefinicoes), RSVP/
+      // Wedding Health/Memórias/Documentos/Google Calendar deixaram de ter
+      // linha própria no menu de Definições (viewDefMenu) — só são
+      // alcançáveis pelos azulejos da página Início (premiumFeatureGrid). O
+      // botão "voltar" genérico, feito para as secções que SÃO menu de
+      // Definições, continuava a mandar sempre de volta para esse menu —
+      // errado para estas 5, porque a pessoa nunca veio de lá. "subscricao"
+      // fica de fora desta lista de propósito: essa continua a ter linha
+      // própria em viewDefMenu (é a única secção Premium que a reorganização
+      // manteve lá), por isso voltar para o menu de Definições continua
+      // correto para ela.
+      const PREMIUM_SECTIONS_ONLY_FROM_HOME = ['rsvp', 'health', 'memories', 'documentos', 'googlecalendar'];
+      if(PREMIUM_SECTIONS_ONLY_FROM_HOME.includes(definicoesSection)){
+        definicoesSection = null;
+        activeTab = 'inicio';
+        _origRender();
+        return;
+      }
       definicoesSection = null;
       _origRender();
+    });
+  });
+  // Pedido direto da Rita (Fase 4): botão para cancelar a subscrição na
+  // própria área de gerir subscrição, voltando tudo o que é Premium a ficar
+  // bloqueado de imediato. Como ainda não há pagamentos reais ligados (ver
+  // subscriptionManageNote), isto é simétrico à ativação de teste que já
+  // existia: escreve subscription.active=false no Firestore. Mantém
+  // "startedAt" (não o apaga) — é exatamente esse campo que impede alguém
+  // de reiniciar o relógio dos 24 meses ao cancelar e reativar.
+  const cancelSubBtn = document.getElementById('subscription-cancel-btn');
+  if(cancelSubBtn) cancelSubBtn.addEventListener('click', ()=>{
+    if(!FIREBASE_READY || !currentWeddingId){ alert(ta('alertNoConnectionRetry')); return; }
+    if(!confirm(ta('confirmCancelSubscriptionText'))) return;
+    cancelSubBtn.disabled = true;
+    cancelSubBtn.textContent = ta('btnCancelingEllipsis');
+    const startedAt = (currentSubscription && currentSubscription.startedAt) || null;
+    CURRENT_DOC().update({
+      subscription: { active:false, plan:null, startedAt, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }
+    }).then(()=>{
+      currentSubscription = { active:false, plan:null, startedAt };
+      _origRender();
+    }).catch(err=>{
+      console.error('Weddy cancel subscription error:', err.code, err.message);
+      cancelSubBtn.disabled = false;
+      cancelSubBtn.textContent = ta('btnCancelSubscription');
+      alert(ta('alertSubscriptionCancelError'));
     });
   });
   // Botões "Resolver" do Wedding Health — saltam para o separador principal
