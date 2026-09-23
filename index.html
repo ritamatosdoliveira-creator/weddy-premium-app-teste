@@ -193,23 +193,43 @@ html{
 .ring-breakdown .n{ font-size:13px; font-weight:600; color:var(--ink); text-align:center; }
 .ring-breakdown .l{ font-size:8.5px; color:var(--ink-soft); text-align:center; margin-top:1px; }
 
-/* Reorganização (Set 2026): áreas Premium (RSVP, Wedding Health, Memórias,
-   Documentos, Google Calendar) passaram de linhas escondidas em Definições
-   para cartões na página principal — com cadeado+transparência por cima de
-   quem ainda não tem Premium ativo, que desaparece assim que a subscrição
-   fica ativa. */
-.premium-feature-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:0 16px 8px; }
-.premium-feature-card{ all:unset; box-sizing:border-box; position:relative; display:block; background:var(--card); border:1px solid var(--line); border-radius:16px; padding:14px; box-shadow:var(--shadow); cursor:pointer; overflow:hidden; }
-.premium-feature-card:active{ opacity:.85; }
-.premium-feature-icon{ width:34px; height:34px; border-radius:11px; display:flex; align-items:center; justify-content:center; margin-bottom:10px; }
-.premium-feature-icon svg{ width:16px; height:16px; }
-.premium-feature-title{ font-size:13px; font-weight:600; color:var(--ink); }
-.premium-feature-desc{ font-size:11px; color:var(--ink-soft); margin-top:2px; line-height:1.35; }
-.premium-feature-badge{ position:absolute; top:10px; right:10px; min-width:18px; height:18px; padding:0 5px; border-radius:9px; background:var(--rust); color:#fff; font-size:10.5px; font-weight:700; display:flex; align-items:center; justify-content:center; box-sizing:border-box; }
-.premium-feature-lock{ position:absolute; inset:0; background:rgba(250,248,245,0.78); display:flex; align-items:center; justify-content:center; }
-.premium-feature-lock svg{ width:19px; height:19px; }
-.premium-feature-lock-icon{ width:34px; height:34px; border-radius:50%; background:var(--card); box-shadow:var(--shadow); display:flex; align-items:center; justify-content:center; color:var(--rust-dark); }
-.premium-feature-lock-icon svg{ width:15px; height:15px; }
+/* Reorganização (Set 2026): áreas Premium (RSVP, Assistente, Wedding
+   Health, Memórias, Documentos, Google Calendar) passaram de linhas
+   escondidas em Definições para um único cartão "hub" na página principal
+   — mockup da Rita: cartão rosado com cabeçalho + selo "Weddy Premium",
+   grelha de azulejos com cadeado por cima de quem ainda não é Premium, e
+   uma faixa "Tornar Premium" por baixo que desaparece assim que a
+   subscrição fica ativa. */
+.premium-hub-card{ margin:0 16px 20px; padding:16px; border-radius:24px; background:linear-gradient(165deg, rgba(231,197,187,0.55) 0%, rgba(243,239,234,0.6) 100%); border:1px solid rgba(185,103,82,0.12); }
+.premium-hub-header{ all:unset; box-sizing:border-box; display:flex; align-items:center; gap:12px; width:100%; cursor:pointer; margin-bottom:14px; }
+.premium-hub-header-icon{ flex-shrink:0; width:46px; height:46px; border-radius:50%; background:rgba(255,255,255,0.65); display:flex; align-items:center; justify-content:center; color:var(--rust-dark); }
+.premium-hub-header-icon svg{ width:21px; height:21px; }
+.premium-hub-header-mid{ flex:1; min-width:0; text-align:left; }
+.premium-hub-header-title{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:19px; color:var(--ink); }
+.premium-hub-header-desc{ font-size:11.5px; color:var(--ink-soft); margin-top:2px; line-height:1.3; }
+.premium-hub-badge{ flex-shrink:0; display:flex; align-items:center; gap:5px; background:rgba(255,255,255,0.75); color:var(--rust-dark); font-size:11px; font-weight:700; padding:6px 11px; border-radius:20px; }
+.premium-hub-badge svg{ width:12px; height:12px; }
+.premium-hub-header-chev{ flex-shrink:0; color:var(--ink-soft); opacity:.6; }
+.premium-hub-grid{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:9px; }
+.premium-hub-tile{ all:unset; box-sizing:border-box; position:relative; display:block; background:rgba(255,255,255,0.55); border-radius:16px; padding:12px 10px; cursor:pointer; overflow:hidden; min-height:96px; }
+.premium-hub-tile:active{ opacity:.8; }
+.premium-hub-tile-top{ display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:16px; }
+.premium-hub-tile-icon{ width:26px; height:26px; color:var(--rust-dark); }
+.premium-hub-tile-icon svg{ width:20px; height:20px; }
+.premium-hub-tile-lock{ color:var(--ink-soft); opacity:.65; }
+.premium-hub-tile-lock svg{ width:13px; height:13px; }
+.premium-hub-tile-title{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:14.5px; color:var(--ink); }
+.premium-hub-tile-desc{ font-size:10.3px; color:var(--ink-soft); margin-top:3px; line-height:1.3; }
+.premium-hub-tile.locked .premium-hub-tile-title, .premium-hub-tile.locked .premium-hub-tile-desc{ opacity:.55; }
+.premium-hub-cta{ margin-top:12px; padding:13px 14px; border-radius:16px; background:rgba(255,255,255,0.55); display:flex; align-items:center; gap:10px; }
+.premium-hub-cta-icon{ flex-shrink:0; width:32px; height:32px; border-radius:50%; background:rgba(255,255,255,0.8); display:flex; align-items:center; justify-content:center; color:var(--rust-dark); }
+.premium-hub-cta-icon svg{ width:15px; height:15px; }
+.premium-hub-cta-text{ flex:1; min-width:0; }
+.premium-hub-cta-title{ font-size:12.5px; font-weight:700; color:var(--ink); }
+.premium-hub-cta-desc{ font-size:10.5px; color:var(--ink-soft); margin-top:1px; }
+.premium-hub-cta-btn{ all:unset; box-sizing:border-box; flex-shrink:0; display:flex; align-items:center; gap:4px; background:var(--rust); color:#fff; font-size:11.5px; font-weight:700; padding:9px 13px; border-radius:20px; cursor:pointer; }
+.premium-hub-cta-btn svg{ width:11px; height:11px; }
+.premium-hub-cta-btn:active{ opacity:.85; }
 
 /* Inspiração */
 .insp-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; padding:4px 16px 24px; }
@@ -2650,6 +2670,15 @@ const APP_I18N = {
     subscriptionActiveStatus:'Weddy Premium está ativo', subscriptionActiveText:'Tens acesso a todas as funcionalidades Premium — RSVP, Wedding Health, Memórias, Documentos e Google Calendar.',
     subscriptionPlanLabel:'Plano', subscriptionManageNote:'(Protótipo — a gestão de faturação/cancelamento real ainda não está ligada a nenhum pagamento.)',
     homePremiumSectionLabel:'Weddy Premium',
+    premiumHubTitle:'Ferramentas Weddy', premiumHubDesc:'Tudo o que precisas para organizar o grande dia, num só lugar.',
+    premiumHubBadge:'Weddy Premium',
+    premiumHubCtaTitle:'Desbloqueia todas as ferramentas', premiumHubCtaDesc:'Torna a tua organização ainda mais completa.',
+    premiumTileRSVP:'Confirma a presença e as respostas dos convidados.',
+    premiumTileChatbot:'Chatbot', premiumTileChatbotDesc:'Tira as tuas dúvidas em tempo real.',
+    premiumTileHealthDesc:'Um raio-x rápido ao estado do casamento.',
+    premiumTileMemoriesDesc:'Revive os melhores momentos do grande dia.',
+    premiumTileDocumentosDesc:'Consulta os teus contratos e documentos.',
+    premiumTileGoogleCalDesc:'Sincroniza o teu calendário do casamento.',
     rsvpTitle:'Convites RSVP', rsvpDesc:'Envia e acompanha as respostas dos convidados',
     rsvpRespostasNavTitle:'Respostas dos convidados', rsvpRespostasNavDesc:'Vê, pesquisa e agrupa quem já respondeu',
     rsvpDeadlineNavDesc:'Define até quando os convidados podem responder',
@@ -3305,6 +3334,15 @@ const APP_I18N = {
     subscriptionActiveStatus:'Weddy Premium is active', subscriptionActiveText:"You have access to every Premium feature — RSVP, Wedding Health, Memories, Documents and Google Calendar.",
     subscriptionPlanLabel:'Plan', subscriptionManageNote:'(Prototype — real billing/cancellation management is not connected to any payment yet.)',
     homePremiumSectionLabel:'Weddy Premium',
+    premiumHubTitle:'Weddy tools', premiumHubDesc:'Everything you need to plan the big day, all in one place.',
+    premiumHubBadge:'Weddy Premium',
+    premiumHubCtaTitle:'Unlock every tool', premiumHubCtaDesc:'Make your planning even more complete.',
+    premiumTileRSVP:"Confirm attendance and your guests' responses.",
+    premiumTileChatbot:'Chatbot', premiumTileChatbotDesc:'Get your questions answered in real time.',
+    premiumTileHealthDesc:'A quick check-up on your wedding.',
+    premiumTileMemoriesDesc:'Relive the best moments of the big day.',
+    premiumTileDocumentosDesc:'Check your contracts and documents.',
+    premiumTileGoogleCalDesc:'Sync your wedding calendar.',
     rsvpTitle:'RSVP invitations', rsvpDesc:"Send and track your guests' responses",
     rsvpRespostasNavTitle:'Guest responses', rsvpRespostasNavDesc:"See, search and group who's already replied",
     rsvpDeadlineNavDesc:'Set the deadline for guests to respond',
@@ -4343,7 +4381,6 @@ function viewInicio(){
     </div>
   </div>
 
-  <div class="section-label-v2">${ta('homePremiumSectionLabel')}</div>
   ${premiumFeatureGrid()}
 
   <div class="section-label-row-v2">
@@ -4354,30 +4391,56 @@ function viewInicio(){
 
   `;
 }
-// Reorganização (Set 2026): grelha de cartões Premium na página principal —
-// substitui as antigas linhas escondidas dentro de Definições. Quem ainda
-// não tem Premium ativo vê os cartões com um cadeado por cima (transparência
-// + ícone); ao ativar a subscrição, o cadeado desaparece e os cartões ficam
-// normais, tocáveis, exatamente como qualquer outro atalho da Início.
-function premiumFeatureCard(key, icon, colorIdx, title, desc, badge, locked){
+// Reorganização (Set 2026): cartão "hub" das áreas Premium na página
+// principal — cópia fiel (mesmo layout, só cores/ícones/textos da Weddy) de
+// um mockup que a Rita mandou: cabeçalho com selo "Weddy Premium", grelha
+// de azulejos (RSVP, Chatbot, Wedding Health, Memórias, Documentos, Google
+// Calendar) com cadeado por cima de quem ainda não é Premium, e uma faixa
+// "Tornar Premium" por baixo que só aparece enquanto não houver subscrição
+// ativa — desaparece e os azulejos ficam normais assim que ficar ativa.
+function premiumHubTile(key, icon, title, desc, locked){
   return `
-  <button class="premium-feature-card" data-premiumgoto="${key}">
-    <div class="premium-feature-icon" style="${chipStyle(colorIdx)}">${icon}</div>
-    <div class="premium-feature-title">${title}</div>
-    ${desc? `<div class="premium-feature-desc">${desc}</div>` : ''}
-    ${(!locked && badge) ? `<span class="premium-feature-badge">${badge}</span>` : ''}
-    ${locked ? `<div class="premium-feature-lock"><div class="premium-feature-lock-icon">${ICONS.lock}</div></div>` : ''}
+  <button class="premium-hub-tile${locked?' locked':''}" data-premiumgoto="${key}">
+    <div class="premium-hub-tile-top">
+      <div class="premium-hub-tile-icon">${icon}</div>
+      ${locked ? `<div class="premium-hub-tile-lock">${ICONS.lock}</div>` : ''}
+    </div>
+    <div class="premium-hub-tile-title">${title}</div>
+    ${desc? `<div class="premium-hub-tile-desc">${desc}</div>` : ''}
   </button>`;
 }
 function premiumFeatureGrid(){
   const subscribed = hasActiveSubscription();
   return `
-  <div class="premium-feature-grid">
-    ${premiumFeatureCard('rsvp', ICONS.mail, 6, ta('rsvpTitle'), subscribed ? ta('rsvpDesc') : '', subscribed ? getRSVPNewResponsesCount() : 0, !subscribed)}
-    ${premiumFeatureCard('health', ICONS.warn||ICONS.checklist, 2, ta('healthTitle'), subscribed ? ta('healthDesc') : '', subscribed ? getWeddingHealthChecks().length : 0, !subscribed)}
-    ${premiumFeatureCard('memories', ICONS.camera, 3, ta('memoriesTitle'), subscribed ? ta('memoriesDesc') : '', 0, !subscribed)}
-    ${premiumFeatureCard('documentos', ICONS.docnote||ICONS.checklist, 4, ta('documentsTitle'), subscribed ? ta('documentsDesc') : '', 0, !subscribed)}
-    ${premiumFeatureCard('googlecalendar', ICONS.calendar, 0, ta('googleCalendarTitle'), subscribed ? (googleCalendarIntegration && googleCalendarIntegration.connected ? ta('googleCalendarConnectedDesc') : ta('googleCalendarDesc')) : '', 0, !subscribed)}
+  <div class="premium-hub-card">
+    <button class="premium-hub-header" data-premiumgoto="subscricao">
+      <div class="premium-hub-header-icon">${ICONS.rings}</div>
+      <div class="premium-hub-header-mid">
+        <div class="premium-hub-header-title">${ta('premiumHubTitle')}</div>
+        <div class="premium-hub-header-desc">${ta('premiumHubDesc')}</div>
+      </div>
+      <div style="display:flex; flex-direction:column; align-items:flex-end; gap:8px; flex-shrink:0;">
+        <span class="premium-hub-badge">${ICONS.sparkle} ${ta('premiumHubBadge')}</span>
+        <span class="premium-hub-header-chev">${ICONS.chev}</span>
+      </div>
+    </button>
+    <div class="premium-hub-grid">
+      ${premiumHubTile('rsvp', ICONS.mail, ta('rsvpTitle'), ta('premiumTileRSVP'), !subscribed)}
+      ${premiumHubTile('chatbot', ICONS.chat, ta('premiumTileChatbot'), ta('premiumTileChatbotDesc'), !subscribed)}
+      ${premiumHubTile('health', ICONS.warn||ICONS.checklist, ta('healthTitle'), ta('premiumTileHealthDesc'), !subscribed)}
+      ${premiumHubTile('memories', ICONS.camera, ta('memoriesTitle'), ta('premiumTileMemoriesDesc'), !subscribed)}
+      ${premiumHubTile('documentos', ICONS.docnote||ICONS.checklist, ta('documentsTitle'), ta('premiumTileDocumentosDesc'), !subscribed)}
+      ${premiumHubTile('googlecalendar', ICONS.calendar, ta('googleCalendarTitle'), ta('premiumTileGoogleCalDesc'), !subscribed)}
+    </div>
+    ${subscribed ? '' : `
+    <div class="premium-hub-cta">
+      <div class="premium-hub-cta-icon">${ICONS.sparkle}</div>
+      <div class="premium-hub-cta-text">
+        <div class="premium-hub-cta-title">${ta('premiumHubCtaTitle')}</div>
+        <div class="premium-hub-cta-desc">${ta('premiumHubCtaDesc')}</div>
+      </div>
+      <button class="premium-hub-cta-btn" id="premium-subscribe-btn">${ta('btnSubscribePremium')} ${ICONS.chev}</button>
+    </div>`}
   </div>`;
 }
 
@@ -9403,6 +9466,10 @@ function bindHandlers(){
   document.querySelectorAll('[data-premiumgoto]').forEach(el=>{
     el.addEventListener('click', e=>{
       const key = e.currentTarget.dataset.premiumgoto;
+      // O Chatbot não é uma secção de Definições — vive na janela flutuante
+      // do Assistente (o mesmo botão redondo que já existe sempre visível),
+      // por isso este azulejo só abre essa janela em vez de navegar.
+      if(key==='chatbot'){ openChatPanel(); return; }
       closeAllSheets();
       activeTab = 'definicoes';
       definicoesSection = key;
