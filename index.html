@@ -2303,8 +2303,8 @@ function seedData(){
 }
 function defaultSettings(name1, name2, dateStr, venue){
   return {
-    coupleName1: name1 || 'Nome 1',
-    coupleName2: name2 || 'Nome 2',
+    coupleName1: name1 || ta('genericName1'),
+    coupleName2: name2 || ta('genericName2'),
     weddingDate: dateStr || '',
     venue: venue || '',
     accentColor: 'rust',
@@ -2591,16 +2591,16 @@ function daysUntil(dateStr){
   return diff;
 }
 function formatDatePT(dateStr){
-  if(!dateStr) return 'Data por definir';
-  const meses = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+  if(!dateStr) return ta('dateNotSet');
+  const meses = ta('monthNamesFull');
   const d = new Date(dateStr+'T00:00:00');
-  return `${d.getDate()} de ${meses[d.getMonth()]} de ${d.getFullYear()}`;
+  return appLang==='en' ? `${meses[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}` : `${d.getDate()} de ${meses[d.getMonth()]} de ${d.getFullYear()}`;
 }
 function formatDateShortPT(dateStr){
   if(!dateStr) return '';
-  const meses = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+  const meses = ta('monthNamesShort');
   const d = new Date(dateStr+'T00:00:00');
-  return `${d.getDate()} ${meses[d.getMonth()]}`;
+  return appLang==='en' ? `${meses[d.getMonth()]} ${d.getDate()}` : `${d.getDate()} ${meses[d.getMonth()]}`;
 }
 // Fase 9.1 — usado só para mostrar "Última sincronização" do Google
 // Calendar. Aceita um Date já convertido (o chamador trata do
@@ -2611,7 +2611,7 @@ function formatDateTimePT(date){
   const mm = String(date.getMonth()+1).padStart(2,'0');
   const hh = String(date.getHours()).padStart(2,'0');
   const min = String(date.getMinutes()).padStart(2,'0');
-  return `${dd}/${mm} às ${hh}:${min}`;
+  return `${dd}/${mm} ${ta('dateAtTimeSeparator')} ${hh}:${min}`;
 }
 function dueUrgency(dateStr){
   if(!dateStr) return '';
@@ -2877,6 +2877,8 @@ const APP_I18N = {
     btnRename:'Renomear',
     btnDelete:'Eliminar',
     placeholderAddItem:'Adicionar item…',
+    placeholderAge:'Idade',
+    loadingLabel:'A carregar…',
     navBudgetTitle:'Orçamento',
     budgetTotalLabel:'Orçamento total',
     budgetGuestsEstLabel:'Convidados (est.)',
@@ -3446,6 +3448,79 @@ const APP_I18N = {
     weekAgendaSeeAll:'Ver todas',
     agendaEmptyDay:'Sem tarefas neste dia',
     weekDayAbbrevs:['seg','ter','qua','qui','sex','sáb','dom'],
+    monthNamesFull:['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'],
+    monthNamesShort:['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'],
+    dateNotSet:'Data por definir',
+    dateAtTimeSeparator:'às',
+    genericName1:'Nome 1', genericName2:'Nome 2',
+    genericVenueTBD:'Local por definir',
+    cpPermDenied:'Não consigo fazer isso por aqui.',
+    cpTaskCreated:(value,label)=>`Criei a tarefa "${value}" em Tarefas → ${label}. Já a consegues ver e editar lá.`,
+    cpTaskCreateFailed:(value)=>`Não consegui guardar a tarefa "${value}" — houve um problema a gravar agora. Tenta outra vez daqui a pouco.`,
+    cpNoUpcomingTasks:'Não tens tarefas com prazo nos próximos 7 dias.',
+    cpUpcomingTasksList:(lista,extra)=>`Esta semana tens: ${lista}${extra}.`,
+    cpAndMore:(n)=>`, e mais ${n}`,
+    cpAllRSVPResponded:'Todos os convidados com link de RSVP já responderam — não falta ninguém.',
+    cpPendingRSVPList:(lista,extra)=>`Ainda falta responder: ${lista}${extra}.`,
+    cpNoLateRSVP:'Não há ninguém atrasado — ou ainda não definiste um prazo de RSVP em Definições → RSVP.',
+    cpLateRSVPList:(lista,extra)=>`Estão atrasados: ${lista}${extra}.`,
+    cpNoReminderNeeded:'Neste momento ninguém precisa de um lembrete novo.',
+    cpReminderList:(lista,extra)=>`Precisam de um lembrete: ${lista}${extra}. Podes prepará-lo em Definições → RSVP.`,
+    cpNoDietaryInfo:'Ainda não há nenhuma restrição alimentar registada nas respostas de RSVP.',
+    cpDietaryList:(lista)=>`Convidados com restrições alimentares: ${lista}.`,
+    cpAllPaid:'Não há nenhum pagamento pendente neste momento — está tudo pago. 🎉',
+    cpRemainingTotal:(x)=>`Falta pagar ${x} no total.`,
+    cpToday:'hoje',
+    cpInDays:(n)=>`em ${n} dia${n===1?'':'s'}`,
+    cpRemainingNext15:(base,lista)=>`${base} Nos próximos 15 dias: ${lista}.`,
+    cpRSVPInfoExplain:(n)=>`Em Definições → Convites RSVP consegues gerar um link individual para cada convidado — ele responde lá se vai, a refeição e restrições, sem ver a lista toda nem o orçamento. Neste momento tens ${n} convidado${n===1?'':'s'} por responder.`,
+    cpGuestCount:(total,confirmed)=>`Tens ${total} convidados na lista, dos quais ${confirmed} já confirmaram presença (contando pelo peso de cada um — crianças e staff podem contar meio ou nada, consoante o que definiste).`,
+    cpBudgetSummary:(orc,gasto,pago)=>`O orçamento definido é de ${orc}. Já tens ${gasto} em despesas registadas, das quais ${pago} já foram pagas.`,
+    cpCountdownFuture:(dias,date)=>`Faltam ${dias} dias para o grande dia (${date}).`,
+    cpCountdownPast:(date)=>`O casamento foi a ${date}. Espero que tenha corrido tudo lindamente!`,
+    cpTableCount:(n)=>`Tens ${n} mesas configuradas na secção de Mesas.`,
+    cpDocFound:(doc,snippet)=>`Encontrei isto em "${doc}":\n\n"${snippet}"`,
+    cpDemoFallback:'Ainda estou em modo de demonstração (sem ligação a um modelo de IA real), mas já consigo responder sobre convidados, orçamento, datas, mesas, pagamentos, tarefas da semana e procurar nos documentos que carregaste — pergunta-me, por exemplo, "quantos convidados já confirmaram?".',
+    cpSupplierPaymentNotFound:'Não encontrei nenhum fornecedor que corresponda a essa pergunta — tenta usar o nome dele ou a categoria (ex: "fotógrafo", "espaço").',
+    cpPaidSoFar:(name,paid)=>`${name} — já pago: ${paid}`,
+    cpOfContracted:(x)=>` de ${x} contratados`,
+    cpNextPayment:(amount,date)=>` Próximo pagamento: ${amount} em ${date}.`,
+    cpNextPaymentNoDate:(amount)=>` Tens um próximo pagamento de ${amount} sem data definida.`,
+    cpSourceContract:' (Fonte: contrato + orçamento.)',
+    cpSourceBudgetOnly:' (Fonte: orçamento — ainda sem contrato carregado.)',
+    cpAllContracted:'Todos os fornecedores já estão contratados. 🎉',
+    cpUncontractedList:(lista)=>`Ainda faltam contratar: ${lista}.`,
+    cpNoPaymentsThisMonth:'Não tens nenhum pagamento previsto para este mês.',
+    cpPaymentsThisMonthList:(lista,extra)=>`Este mês tens: ${lista}${extra}.`,
+    cpContractSupplierNotFound:'Não encontrei nenhum fornecedor que corresponda a essa pergunta — tenta usar o nome dele ou a categoria.',
+    cpContractLegacyOnly:(name)=>`O contrato de ${name} ainda só está guardado neste telemóvel (não sincronizado) — não consigo pesquisar o texto dele a partir daqui. Carrega-o novamente na ficha do fornecedor para o sincronizar.`,
+    cpContractNotUploaded:(name)=>`Ainda não tenho o contrato de ${name} carregado — podes adicioná-lo na ficha dele, em Fornecedores.`,
+    cpContractNoMatch:(name)=>`Tenho o contrato de ${name}, mas não encontrei nada sobre isso no texto dele.`,
+    cpContractFound:(name,snippet)=>`No contrato de ${name}:\n\n"${snippet}"`,
+    cpNoBudgetMismatch:'Não encontrei nenhuma discrepância — o que está registado no Budget para cada fornecedor bate certo com o valor contratado.',
+    cpBudgetMismatchList:(lista)=>`Encontrei diferenças em: ${lista}.`,
+    cpMoreWord:'a mais',
+    cpLessWord:'a menos',
+    cpAllGuestsHaveTable:'Todos os convidados confirmados já têm mesa atribuída.',
+    cpGuestsWithoutTableList:(lista,extra)=>`Ainda sem mesa: ${lista}${extra}.`,
+    cpContractedLabel:'contratado',
+    cpInBudgetLabel:'no Budget',
+    cpSuggestPendingRSVP:(n)=>`${n} convidado${n===1?'':'s'} ainda ${n===1?'não respondeu':'não responderam'} ao RSVP.`,
+    cpSuggestRSVPDeadlineToday:'O prazo para responder ao RSVP é hoje.',
+    cpSuggestRSVPDeadlineDays:(days)=>`O prazo para responder ao RSVP é daqui a ${days} dia${days===1?'':'s'}.`,
+    cpSuggestOverBudget:(x)=>`Já ultrapassaste o orçamento em ${x}.`,
+    mesa3dModeTableByTable:'Mesa a mesa',
+    mesa3dModeRoomView:'Visão da sala',
+    mesa3dSyncBtn:'Sincronizar lugares com os convidados',
+    mesa3dTablesCount:(n)=>`${n} mesas`,
+    alertSeatingSyncPartialFailure:(failed,total)=>`A mesa foi sincronizada, mas ${failed} de ${total} convite(s) de convidados não foram atualizados agora. Tenta sincronizar de novo daqui a pouco.`,
+    salaLegendFree:'Livre',
+    salaViewHint:'toca numa mesa para ver os nomes · arrasta para a mover',
+    seatFreeLabel:'Lugar livre',
+    childLabel:'Criança',
+    childAgeYears:(age)=>`${age} anos`,
+    alreadyAtLabel:(loc)=>`já em ${loc}`,
+    seatLabelFormat:(t,s)=>`Mesa ${t} · lugar ${s}`,
   },
   en: {
     tabHome:'Home', tabBudget:'Budget', tabGuests:'Guests', tabExpenses:'Expenses', tabTables:'Tables', tabSeating:'Seating',
@@ -3550,6 +3625,8 @@ const APP_I18N = {
     btnRename:'Rename',
     btnDelete:'Delete',
     placeholderAddItem:'Add item…',
+    placeholderAge:'Age',
+    loadingLabel:'Loading…',
     navBudgetTitle:'Budget',
     budgetTotalLabel:'Total budget',
     budgetGuestsEstLabel:'Guests (est.)',
@@ -4146,6 +4223,79 @@ const APP_I18N = {
     weekAgendaSeeAll:'See all',
     agendaEmptyDay:'No tasks on this day',
     weekDayAbbrevs:['mon','tue','wed','thu','fri','sat','sun'],
+    monthNamesFull:['January','February','March','April','May','June','July','August','September','October','November','December'],
+    monthNamesShort:['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'],
+    dateNotSet:'Date to be set',
+    dateAtTimeSeparator:'at',
+    genericName1:'Name 1', genericName2:'Name 2',
+    genericVenueTBD:'Venue to be set',
+    cpPermDenied:"I can't do that from here.",
+    cpTaskCreated:(value,label)=>`I created the task "${value}" in Tasks → ${label}. You can already see and edit it there.`,
+    cpTaskCreateFailed:(value)=>`I couldn't save the task "${value}" — there was a problem saving it just now. Try again in a bit.`,
+    cpNoUpcomingTasks:'You have no tasks due in the next 7 days.',
+    cpUpcomingTasksList:(lista,extra)=>`This week you have: ${lista}${extra}.`,
+    cpAndMore:(n)=>`, and ${n} more`,
+    cpAllRSVPResponded:'Everyone with an RSVP link has already responded — no one is missing.',
+    cpPendingRSVPList:(lista,extra)=>`Still waiting on: ${lista}${extra}.`,
+    cpNoLateRSVP:"No one is late — or you haven't set an RSVP deadline yet in Settings → RSVP.",
+    cpLateRSVPList:(lista,extra)=>`Running late: ${lista}${extra}.`,
+    cpNoReminderNeeded:'No one needs a new reminder right now.',
+    cpReminderList:(lista,extra)=>`These need a reminder: ${lista}${extra}. You can prepare it in Settings → RSVP.`,
+    cpNoDietaryInfo:'There are no dietary restrictions recorded in RSVP responses yet.',
+    cpDietaryList:(lista)=>`Guests with dietary restrictions: ${lista}.`,
+    cpAllPaid:'There are no pending payments right now — everything is paid. 🎉',
+    cpRemainingTotal:(x)=>`${x} left to pay in total.`,
+    cpToday:'today',
+    cpInDays:(n)=>`in ${n} day${n===1?'':'s'}`,
+    cpRemainingNext15:(base,lista)=>`${base} In the next 15 days: ${lista}.`,
+    cpRSVPInfoExplain:(n)=>`In Settings → RSVP Invites you can generate an individual link for each guest — they respond there whether they're coming, their meal and restrictions, without seeing the full list or the budget. Right now you have ${n} guest${n===1?'':'s'} yet to respond.`,
+    cpGuestCount:(total,confirmed)=>`You have ${total} guests on the list, of which ${confirmed} have already confirmed attendance (counted by each one's weight — children and staff can count as half or nothing, depending on what you set).`,
+    cpBudgetSummary:(orc,gasto,pago)=>`The budget you set is ${orc}. You already have ${gasto} in recorded expenses, of which ${pago} have been paid.`,
+    cpCountdownFuture:(dias,date)=>`${dias} days left until the big day (${date}).`,
+    cpCountdownPast:(date)=>`The wedding was on ${date}. I hope it all went beautifully!`,
+    cpTableCount:(n)=>`You have ${n} tables set up in the Tables section.`,
+    cpDocFound:(doc,snippet)=>`I found this in "${doc}":\n\n"${snippet}"`,
+    cpDemoFallback:'I\'m still in demo mode (not connected to a real AI model), but I can already answer about guests, budget, dates, tables, payments, this week\'s tasks, and search the documents you\'ve uploaded — ask me, for example, "how many guests have confirmed?".',
+    cpSupplierPaymentNotFound:'I couldn\'t find a supplier matching that question — try using their name or category (e.g. "photographer", "venue").',
+    cpPaidSoFar:(name,paid)=>`${name} — paid so far: ${paid}`,
+    cpOfContracted:(x)=>` of ${x} contracted`,
+    cpNextPayment:(amount,date)=>` Next payment: ${amount} on ${date}.`,
+    cpNextPaymentNoDate:(amount)=>` You have an upcoming payment of ${amount} with no date set.`,
+    cpSourceContract:' (Source: contract + budget.)',
+    cpSourceBudgetOnly:' (Source: budget — no contract uploaded yet.)',
+    cpAllContracted:'All suppliers are already contracted. 🎉',
+    cpUncontractedList:(lista)=>`Still to contract: ${lista}.`,
+    cpNoPaymentsThisMonth:'You have no payments due this month.',
+    cpPaymentsThisMonthList:(lista,extra)=>`This month you have: ${lista}${extra}.`,
+    cpContractSupplierNotFound:'I couldn\'t find a supplier matching that question — try using their name or category.',
+    cpContractLegacyOnly:(name)=>`${name}'s contract is still only stored on this phone (not synced) — I can't search its text from here. Upload it again on the supplier's page to sync it.`,
+    cpContractNotUploaded:(name)=>`I don't have ${name}'s contract uploaded yet — you can add it on their page, under Suppliers.`,
+    cpContractNoMatch:(name)=>`I have ${name}'s contract, but couldn't find anything about that in its text.`,
+    cpContractFound:(name,snippet)=>`In ${name}'s contract:\n\n"${snippet}"`,
+    cpNoBudgetMismatch:'I didn\'t find any mismatch — what\'s recorded in the Budget for each supplier matches the contracted amount.',
+    cpBudgetMismatchList:(lista)=>`I found differences in: ${lista}.`,
+    cpMoreWord:'more',
+    cpLessWord:'less',
+    cpAllGuestsHaveTable:'All confirmed guests already have a table assigned.',
+    cpGuestsWithoutTableList:(lista,extra)=>`Still without a table: ${lista}${extra}.`,
+    cpContractedLabel:'contracted',
+    cpInBudgetLabel:'in Budget',
+    cpSuggestPendingRSVP:(n)=>`${n} guest${n===1?'':'s'} ${n===1?'has':'have'} not responded to the RSVP yet.`,
+    cpSuggestRSVPDeadlineToday:'The RSVP deadline is today.',
+    cpSuggestRSVPDeadlineDays:(days)=>`The RSVP deadline is in ${days} day${days===1?'':'s'}.`,
+    cpSuggestOverBudget:(x)=>`You've gone over budget by ${x}.`,
+    mesa3dModeTableByTable:'Table by table',
+    mesa3dModeRoomView:'Room view',
+    mesa3dSyncBtn:'Sync seats with guests',
+    mesa3dTablesCount:(n)=>`${n} tables`,
+    alertSeatingSyncPartialFailure:(failed,total)=>`The table was synced, but ${failed} of ${total} guest invite(s) weren't updated just now. Try syncing again in a bit.`,
+    salaLegendFree:'Free',
+    salaViewHint:'tap a table to see the names · drag to move it',
+    seatFreeLabel:'Empty seat',
+    childLabel:'Child',
+    childAgeYears:(age)=>`${age} years old`,
+    alreadyAtLabel:(loc)=>`already at ${loc}`,
+    seatLabelFormat:(t,s)=>`Table ${t} · seat ${s}`,
   }
 };
 function ta(key){
@@ -4429,12 +4579,12 @@ function viewInicio(){
   const totalValue = totalExpenseValue();
   const budgetTotal = state.budget.total;
   const spentPct = budgetTotal ? Math.round((totalValue/budgetTotal)*100) : 0;
-  const name1 = escapeHTML(weddingSettings.coupleName1 || 'Nome 1');
-  const name2 = escapeHTML(weddingSettings.coupleName2 || 'Nome 2');
+  const name1 = escapeHTML(weddingSettings.coupleName1 || ta('genericName1'));
+  const name2 = escapeHTML(weddingSettings.coupleName2 || ta('genericName2'));
   const initials = (name1[0]||'?') + (name2[0]||'?');
   const hasDate = !!weddingSettings.weddingDate;
   const days = hasDate ? daysUntil(weddingSettings.weddingDate) : null;
-  const venue = escapeHTML(weddingSettings.venue || 'Local por definir');
+  const venue = escapeHTML(weddingSettings.venue || ta('genericVenueTBD'));
   const events = (state.daySchedule||[]).slice().sort((a,b)=>(a.time||'99:99').localeCompare(b.time||'99:99'));
   const eventsHTML = events.length ? `
     <div class="timeline-card">
@@ -4763,7 +4913,7 @@ function guestGroupHTML(side, catKey, catLabel, icon, colorIdx, isCustom){
       <button class="remove-x" data-remove="${side}|${catKey}|${idx}">✕</button>
       ${hasPayment ? `
       <div class="child-extra-row">
-        ${isChildren ? `<input type="number" min="0" max="17" class="child-age-input" placeholder="Idade" data-editchildage="${side}|${catKey}|${idx}" value="${escapeHTML(age)}">` : ''}
+        ${isChildren ? `<input type="number" min="0" max="17" class="child-age-input" placeholder="${ta('placeholderAge')}" data-editchildage="${side}|${catKey}|${idx}" value="${escapeHTML(age)}">` : ''}
         <select class="payment-pct-select" data-editpaypct="${side}|${catKey}|${idx}">
           <option value="0" ${payingPct===0?'selected':''}>${ta('payingNone')}</option>
           <option value="0.5" ${payingPct===0.5?'selected':''}>${ta('paying50')}</option>
@@ -7493,19 +7643,19 @@ function getProactiveSuggestions(){
     return !rsvpHasResponded(memberRSVPResponse(g));
   }).length;
   if(pendingCount>0){
-    out.push({ icon:ICONS.bell, text:`${fmtGuestCount(pendingCount)} convidado${pendingCount===1?'':'s'} ainda ${pendingCount===1?'não respondeu':'não responderam'} ao RSVP.`, ask:'quantos convidados já confirmaram presença' });
+    out.push({ icon:ICONS.bell, text:ta('cpSuggestPendingRSVP')(fmtGuestCount(pendingCount)), ask:'quantos convidados já confirmaram presença' });
   }
   const deadline = weddingSettings.rsvpDeadline;
   if(deadline && pendingCount>0){
     const days = Math.ceil((new Date(deadline+'T00:00:00') - new Date())/86400000);
     if(days>=0 && days<=7){
-      out.push({ icon:ICONS.calendar, text: days===0 ? 'O prazo para responder ao RSVP é hoje.' : `O prazo para responder ao RSVP é daqui a ${days} dia${days===1?'':'s'}.`, ask:'como funciona o rsvp' });
+      out.push({ icon:ICONS.calendar, text: days===0 ? ta('cpSuggestRSVPDeadlineToday') : ta('cpSuggestRSVPDeadlineDays')(days), ask:'como funciona o rsvp' });
     }
   }
   const gasto = totalExpenseValue();
   const orcamento = state.budget && state.budget.total ? state.budget.total : 0;
   if(orcamento>0 && gasto>orcamento && out.length<2){
-    out.push({ icon:ICONS.budget, text:`Já ultrapassaste o orçamento em ${fmtEUR(gasto-orcamento)}.`, ask:'como está o orçamento' });
+    out.push({ icon:ICONS.budget, text:ta('cpSuggestOverBudget')(fmtEUR(gasto-orcamento)), ask:'como está o orçamento' });
   }
   return out.slice(0,2);
 }
@@ -7885,7 +8035,7 @@ async function respondeAssistente(pergunta){
   }
   const permission = checkCopilotIntentPermission(classified.intent, context);
   const I = WEDDY_COPILOT_INTENTS;
-  if(!permission.allowed) return 'Não consigo fazer isso por aqui.';
+  if(!permission.allowed) return ta('cpPermDenied');
 
   const totalConvidados = countGuests('noiva') + countGuests('noivo');
   const totalConfirmados = countConfirmed('noiva') + countConfirmed('noivo');
@@ -7902,127 +8052,127 @@ async function respondeAssistente(pergunta){
         const cat = await WeddyActions.write.createTask(classified.value);
         if(!cat) return null;
         showSaveToast(false);
-        return `Criei a tarefa "${classified.value}" em Tarefas → ${cat.label}. Já a consegues ver e editar lá.`;
+        return ta('cpTaskCreated')(classified.value, cat.label);
       }catch(err){
         showSaveToast(true);
-        return `Não consegui guardar a tarefa "${classified.value}" — houve um problema a gravar agora. Tenta outra vez daqui a pouco.`;
+        return ta('cpTaskCreateFailed')(classified.value);
       }
     }
     case I.GET_UPCOMING_TASKS: {
       const items = WeddyActions.read.getUpcomingTasks();
-      if(!items.length) return 'Não tens tarefas com prazo nos próximos 7 dias.';
-      const lista = items.slice(0,10).map(it=>`${it.text} (${formatDatePT(it.due)}${it.time?` às ${it.time}`:''})`).join('; ');
-      return `Esta semana tens: ${lista}${items.length>10 ? `, e mais ${items.length-10}` : ''}.`;
+      if(!items.length) return ta('cpNoUpcomingTasks');
+      const lista = items.slice(0,10).map(it=>`${it.text} (${formatDatePT(it.due)}${it.time?` ${ta('dateAtTimeSeparator')} ${it.time}`:''})`).join('; ');
+      return ta('cpUpcomingTasksList')(lista, items.length>10 ? ta('cpAndMore')(items.length-10) : '');
     }
     case I.GET_PENDING_RSVPS: {
       const pendentes = WeddyActions.read.getPendingRSVPs();
-      if(!pendentes.length) return 'Todos os convidados com link de RSVP já responderam — não falta ninguém.';
+      if(!pendentes.length) return ta('cpAllRSVPResponded');
       const lista = pendentes.slice(0,15).join(', ');
-      return `Ainda falta responder: ${lista}${pendentes.length>15 ? ` e mais ${pendentes.length-15}` : ''}.`;
+      return ta('cpPendingRSVPList')(lista, pendentes.length>15 ? ta('cpAndMore')(pendentes.length-15) : '');
     }
     case I.GET_LATE_RSVPS: {
       const atrasados = WeddyActions.read.getLateRSVPs();
-      if(!atrasados.length) return 'Não há ninguém atrasado — ou ainda não definiste um prazo de RSVP em Definições → RSVP.';
+      if(!atrasados.length) return ta('cpNoLateRSVP');
       const lista = atrasados.slice(0,15).join(', ');
-      return `Estão atrasados: ${lista}${atrasados.length>15 ? `, e mais ${atrasados.length-15}` : ''}.`;
+      return ta('cpLateRSVPList')(lista, atrasados.length>15 ? ta('cpAndMore')(atrasados.length-15) : '');
     }
     case I.GET_RSVPS_NEEDING_REMINDER: {
       const precisam = WeddyActions.read.getRSVPsNeedingReminder();
-      if(!precisam.length) return 'Neste momento ninguém precisa de um lembrete novo.';
+      if(!precisam.length) return ta('cpNoReminderNeeded');
       const lista = precisam.slice(0,15).join(', ');
-      return `Precisam de um lembrete: ${lista}${precisam.length>15 ? `, e mais ${precisam.length-15}` : ''}. Podes prepará-lo em Definições → RSVP.`;
+      return ta('cpReminderList')(lista, precisam.length>15 ? ta('cpAndMore')(precisam.length-15) : '');
     }
     case I.GET_DIETARY_LIST: {
       const comRestricao = WeddyActions.read.getDietaryList();
-      if(!comRestricao.length) return 'Ainda não há nenhuma restrição alimentar registada nas respostas de RSVP.';
-      return `Convidados com restrições alimentares: ${comRestricao.join(', ')}.`;
+      if(!comRestricao.length) return ta('cpNoDietaryInfo');
+      return ta('cpDietaryList')(comRestricao.join(', '));
     }
     case I.GET_REMAINING_PAYMENTS: {
       const { totalRemaining, upcoming } = WeddyActions.read.getRemainingPayments();
-      if(totalRemaining<=0) return 'Não há nenhum pagamento pendente neste momento — está tudo pago. 🎉';
-      const base = `Falta pagar ${fmtEUR(totalRemaining)} no total.`;
+      if(totalRemaining<=0) return ta('cpAllPaid');
+      const base = ta('cpRemainingTotal')(fmtEUR(totalRemaining));
       if(!upcoming.length) return base;
-      const lista = upcoming.slice(0,8).map(u=>`${u.label} — ${fmtEUR(u.amount)} (${u.days===0?'hoje':`em ${u.days} dia${u.days===1?'':'s'}`})`).join('; ');
-      return `${base} Nos próximos 15 dias: ${lista}.`;
+      const lista = upcoming.slice(0,8).map(u=>`${u.label} — ${fmtEUR(u.amount)} (${u.days===0?ta('cpToday'):ta('cpInDays')(u.days)})`).join('; ');
+      return ta('cpRemainingNext15')(base, lista);
     }
     case I.GET_RSVP_INFO: {
       const pendentes = flattenAllGuestsForRSVP().filter(g=>{
         if(!g.entry.rsvpToken) return true;
         return !rsvpHasResponded(memberRSVPResponse(g));
       }).length;
-      return `Em Definições → Convites RSVP consegues gerar um link individual para cada convidado — ele responde lá se vai, a refeição e restrições, sem ver a lista toda nem o orçamento. Neste momento tens ${fmtGuestCount(pendentes)} convidado${pendentes===1?'':'s'} por responder.`;
+      return ta('cpRSVPInfoExplain')(fmtGuestCount(pendentes));
     }
     case I.GET_GUEST_COUNT:
-      return `Tens ${fmtGuestCount(totalConvidados)} convidados na lista, dos quais ${fmtGuestCount(totalConfirmados)} já confirmaram presença (contando pelo peso de cada um — crianças e staff podem contar meio ou nada, consoante o que definiste).`;
+      return ta('cpGuestCount')(fmtGuestCount(totalConvidados), fmtGuestCount(totalConfirmados));
     case I.GET_BUDGET: {
       const gasto = totalExpenseValue();
       const pago = totalExpensePaid();
       const orcamento = state.budget && state.budget.total ? state.budget.total : 0;
-      return `O orçamento definido é de ${fmtEUR(orcamento)}. Já tens ${fmtEUR(gasto)} em despesas registadas, das quais ${fmtEUR(pago)} já foram pagas.`;
+      return ta('cpBudgetSummary')(fmtEUR(orcamento), fmtEUR(gasto), fmtEUR(pago));
     }
     case I.GET_COUNTDOWN: {
       const dias = daysUntil(weddingSettings.weddingDate);
-      return dias>=0 ? `Faltam ${dias} dias para o grande dia (${formatDatePT(weddingSettings.weddingDate)}).` : `O casamento foi a ${formatDatePT(weddingSettings.weddingDate)}. Espero que tenha corrido tudo lindamente!`;
+      return dias>=0 ? ta('cpCountdownFuture')(dias, formatDatePT(weddingSettings.weddingDate)) : ta('cpCountdownPast')(formatDatePT(weddingSettings.weddingDate));
     }
     case I.GET_TABLE_COUNT: {
       const nTables = (state.seating && state.seating.tables) ? state.seating.tables.length : 0;
-      return `Tens ${nTables} mesas configuradas na secção de Mesas.`;
+      return ta('cpTableCount')(nTables);
     }
     case I.SEARCH_DOCUMENTS: {
       // "Wedding Brain" leve: pesquisa por palavras-chave nos documentos que o
       // casal carregou, sem nenhuma IA real — devolve sempre o texto tal como
       // está escrito no documento, nunca uma resposta "inventada".
       const found = searchWeddingDocuments(pergunta);
-      if(found) return `Encontrei isto em "${found.doc}":\n\n"${found.snippet}"`;
-      return 'Ainda estou em modo de demonstração (sem ligação a um modelo de IA real), mas já consigo responder sobre convidados, orçamento, datas, mesas, pagamentos, tarefas da semana e procurar nos documentos que carregaste — pergunta-me, por exemplo, "quantos convidados já confirmaram?".';
+      if(found) return ta('cpDocFound')(found.doc, found.snippet);
+      return ta('cpDemoFallback');
     }
     // Fase 7 — Wedding Brain: estas respostas juntam mais do que um
     // domínio (Vendors+Budget+Documentos, ou Guests+Mesas). Continua tudo a
     // sair só de WeddyActions — nenhuma destas frases é escrita pela IA.
     case I.GET_SUPPLIER_PAYMENT_INFO: {
       const info = WeddyActions.read.getSupplierPaymentInfo(pergunta);
-      if(!info) return 'Não encontrei nenhum fornecedor que corresponda a essa pergunta — tenta usar o nome dele ou a categoria (ex: "fotógrafo", "espaço").';
-      let resposta = `${info.name} — já pago: ${fmtEUR(info.paid)}`;
-      if(info.total>0) resposta += ` de ${fmtEUR(info.total)} contratados`;
+      if(!info) return ta('cpSupplierPaymentNotFound');
+      let resposta = ta('cpPaidSoFar')(info.name, fmtEUR(info.paid));
+      if(info.total>0) resposta += ta('cpOfContracted')(fmtEUR(info.total));
       resposta += '.';
-      if(info.nextAmount>0 && info.nextDate) resposta += ` Próximo pagamento: ${fmtEUR(info.nextAmount)} em ${formatDatePT(info.nextDate)}.`;
-      else if(info.nextAmount>0) resposta += ` Tens um próximo pagamento de ${fmtEUR(info.nextAmount)} sem data definida.`;
-      resposta += info.hasContract ? ' (Fonte: contrato + orçamento.)' : ' (Fonte: orçamento — ainda sem contrato carregado.)';
+      if(info.nextAmount>0 && info.nextDate) resposta += ta('cpNextPayment')(fmtEUR(info.nextAmount), formatDatePT(info.nextDate));
+      else if(info.nextAmount>0) resposta += ta('cpNextPaymentNoDate')(fmtEUR(info.nextAmount));
+      resposta += info.hasContract ? ta('cpSourceContract') : ta('cpSourceBudgetOnly');
       return resposta;
     }
     case I.GET_UNCONTRACTED_SUPPLIERS: {
       const list = WeddyActions.read.getUncontractedSuppliers();
-      if(!list.length) return 'Todos os fornecedores já estão contratados. 🎉';
-      return `Ainda faltam contratar: ${list.join(', ')}.`;
+      if(!list.length) return ta('cpAllContracted');
+      return ta('cpUncontractedList')(list.join(', '));
     }
     case I.GET_PAYMENTS_THIS_MONTH: {
       const list = WeddyActions.read.getPaymentsThisMonth();
-      if(!list.length) return 'Não tens nenhum pagamento previsto para este mês.';
+      if(!list.length) return ta('cpNoPaymentsThisMonth');
       const lista = list.slice(0,10).map(u=>`${u.label} — ${fmtEUR(u.amount)} (${formatDatePT(u.dueDate)})`).join('; ');
-      return `Este mês tens: ${lista}${list.length>10 ? `, e mais ${list.length-10}` : ''}.`;
+      return ta('cpPaymentsThisMonthList')(lista, list.length>10 ? ta('cpAndMore')(list.length-10) : '');
     }
     case I.SEARCH_SUPPLIER_CONTRACT: {
       const result = WeddyActions.read.searchSupplierContract(pergunta);
-      if(!result) return 'Não encontrei nenhum fornecedor que corresponda a essa pergunta — tenta usar o nome dele ou a categoria.';
-      if(result.legacyOnly) return `O contrato de ${result.supplierName} ainda só está guardado neste telemóvel (não sincronizado) — não consigo pesquisar o texto dele a partir daqui. Carrega-o novamente na ficha do fornecedor para o sincronizar.`;
-      if(!result.found) return `Ainda não tenho o contrato de ${result.supplierName} carregado — podes adicioná-lo na ficha dele, em Fornecedores.`;
-      if(!result.snippet) return `Tenho o contrato de ${result.supplierName}, mas não encontrei nada sobre isso no texto dele.`;
-      return `No contrato de ${result.supplierName}:\n\n"${result.snippet}"`;
+      if(!result) return ta('cpContractSupplierNotFound');
+      if(result.legacyOnly) return ta('cpContractLegacyOnly')(result.supplierName);
+      if(!result.found) return ta('cpContractNotUploaded')(result.supplierName);
+      if(!result.snippet) return ta('cpContractNoMatch')(result.supplierName);
+      return ta('cpContractFound')(result.supplierName, result.snippet);
     }
     case I.GET_SUPPLIER_BUDGET_MISMATCHES: {
       const list = WeddyActions.read.getSupplierBudgetMismatches();
-      if(!list.length) return 'Não encontrei nenhuma discrepância — o que está registado no Budget para cada fornecedor bate certo com o valor contratado.';
-      const lista = list.slice(0,8).map(m=>`${m.name} (contratado: ${fmtEUR(m.contracted)}, no Budget: ${fmtEUR(m.budgeted)}, ${m.diff>0?'a mais':'a menos'}: ${fmtEUR(Math.abs(m.diff))})`).join('; ');
-      return `Encontrei diferenças em: ${lista}.`;
+      if(!list.length) return ta('cpNoBudgetMismatch');
+      const lista = list.slice(0,8).map(m=>`${m.name} (${ta('cpContractedLabel')}: ${fmtEUR(m.contracted)}, ${ta('cpInBudgetLabel')}: ${fmtEUR(m.budgeted)}, ${m.diff>0?ta('cpMoreWord'):ta('cpLessWord')}: ${fmtEUR(Math.abs(m.diff))})`).join('; ');
+      return ta('cpBudgetMismatchList')(lista);
     }
     case I.GET_GUESTS_WITHOUT_TABLE: {
       const list = WeddyActions.read.getGuestsWithoutTable();
-      if(!list.length) return 'Todos os convidados confirmados já têm mesa atribuída.';
+      if(!list.length) return ta('cpAllGuestsHaveTable');
       const lista = list.slice(0,15).join(', ');
-      return `Ainda sem mesa: ${lista}${list.length>15 ? `, e mais ${list.length-15}` : ''}.`;
+      return ta('cpGuestsWithoutTableList')(lista, list.length>15 ? ta('cpAndMore')(list.length-15) : '');
     }
     default:
-      return 'Ainda estou em modo de demonstração (sem ligação a um modelo de IA real), mas já consigo responder sobre convidados, orçamento, datas, mesas, pagamentos, tarefas da semana e procurar nos documentos que carregaste — pergunta-me, por exemplo, "quantos convidados já confirmaram?".';
+      return ta('cpDemoFallback');
   }
 }
 // "Wedding Brain" leve — pesquisa por palavras-chave nos documentos que o
@@ -9875,8 +10025,8 @@ function bindHandlers(){
   if(defSaveCasamento) defSaveCasamento.addEventListener('click', ()=>{
     weddingSettings = {
       ...weddingSettings,
-      coupleName1: document.getElementById('def-name1').value.trim() || 'Nome 1',
-      coupleName2: document.getElementById('def-name2').value.trim() || 'Nome 2',
+      coupleName1: document.getElementById('def-name1').value.trim() || ta('genericName1'),
+      coupleName2: document.getElementById('def-name2').value.trim() || ta('genericName2'),
       weddingDate: document.getElementById('def-date').value,
       venue: document.getElementById('def-venue').value.trim()
     };
@@ -11045,23 +11195,23 @@ function findGuestSeatKey(guestId, excludeSeatKey){
 }
 function seatLabel(seatKey){
   const m = seatKey.match(/^t(\d+)-s(\d+)$/);
-  return m ? `Mesa ${m[1]} · lugar ${m[2]}` : seatKey;
+  return m ? ta('seatLabelFormat')(m[1], m[2]) : seatKey;
 }
 function renderSeatPickerList(){
   const list = document.getElementById('seat-picker-list');
   const current = state.seating.assignments[editingSeatKey] || '';
   const q = seatQuery.toLowerCase();
-  let rows = `<div class="picker-row ${current===''?'is-selected':''}" data-pick=""><span class="side-tag" style="background:var(--ink-soft);">—</span><span class="pname">Lugar livre</span></div>`;
+  let rows = `<div class="picker-row ${current===''?'is-selected':''}" data-pick=""><span class="side-tag" style="background:var(--ink-soft);">—</span><span class="pname">${ta('seatFreeLabel')}</span></div>`;
   allAdultGuests().forEach(g=>{
     if(!g.key) return; // sem guestId (não devia acontecer após a migração), ignora
     if(q && !g.name.toLowerCase().includes(q)) return;
     const val = g.key; // Fase 8.0: o valor gravado é o guestId, já não "lado|cat|idx::Nome"
     const elsewhere = findGuestSeatKey(g.key, editingSeatKey);
     const childInfo = g.cat==='criancas' ? getGuestNames(g.side,'criancas')[g.idx] : null;
-    const childTag = childInfo ? `<span class="pname-hint">Criança${childInfo.age?' · '+escapeHTML(String(childInfo.age))+' anos':''}</span>` : '';
+    const childTag = childInfo ? `<span class="pname-hint">${ta('childLabel')}${childInfo.age?' · '+ta('childAgeYears')(escapeHTML(String(childInfo.age))):''}</span>` : '';
     rows += `<div class="picker-row ${current===val?'is-selected':''}" data-pick="${escapeHTML(val)}">
-      <span class="side-tag" style="background:${g.side==='noiva'?'var(--blush-dark)':'var(--dusty-dark)'};">${g.side==='noiva'?'Noiva':'Noivo'}</span>
-      <span class="pname">${escapeHTML(g.name)}${elsewhere?`<span class="pname-hint">já em ${seatLabel(elsewhere)}</span>`:childTag}</span>
+      <span class="side-tag" style="background:${g.side==='noiva'?'var(--blush-dark)':'var(--dusty-dark)'};">${g.side==='noiva'?ta('sideBride'):ta('sideGroom')}</span>
+      <span class="pname">${escapeHTML(g.name)}${elsewhere?`<span class="pname-hint">${ta('alreadyAtLabel')(seatLabel(elsewhere))}</span>`:childTag}</span>
     </div>`;
   });
   list.innerHTML = rows;
@@ -11109,17 +11259,17 @@ function ensureMesa3DHeader(){
   const seatsPerTable = selTable ? selTable.seats : 0;
   const badge = mesa3dViewMode==='mesa'
     ? `<div class="mini-ring">${donutSVG(seatsPerTable? filled/seatsPerTable : 0, 'var(--blush-dark)', 34, 4)}<span class="mini-ring-txt">${filled}/${seatsPerTable}</span></div>`
-    : `<span class="mesa3d-fillcount">${state.seating.tables.length} mesas</span>`;
+    : `<span class="mesa3d-fillcount">${ta('mesa3dTablesCount')(state.seating.tables.length)}</span>`;
   el.innerHTML = `
     <div class="navbar navbar-row">
-      <div><h1>Lugares</h1></div>
+      <div><h1>${ta('tabSeating')}</h1></div>
       ${badge}
     </div>
     <div class="segmented">
-      <button data-mesa3dview="mesa" class="${mesa3dViewMode==='mesa'?'active':''}">Mesa a mesa</button>
-      <button data-mesa3dview="sala" class="${mesa3dViewMode==='sala'?'active':''}">Visão da sala</button>
+      <button data-mesa3dview="mesa" class="${mesa3dViewMode==='mesa'?'active':''}">${ta('mesa3dModeTableByTable')}</button>
+      <button data-mesa3dview="sala" class="${mesa3dViewMode==='sala'?'active':''}">${ta('mesa3dModeRoomView')}</button>
     </div>
-    <button id="mesa3d-sync-btn" class="mesa3d-sync-btn">${ICONS.refresh} Sincronizar lugares com os convidados</button>
+    <button id="mesa3d-sync-btn" class="mesa3d-sync-btn">${ICONS.refresh} ${ta('mesa3dSyncBtn')}</button>
   `;
   el.querySelectorAll('[data-mesa3dview]').forEach(btn=>{
     btn.addEventListener('click', e=>{
@@ -11308,7 +11458,7 @@ function syncSeatingToGuestDocs(btn){
     return;
   }
   const original = btn ? btn.textContent : '';
-  if(btn){ btn.disabled = true; btn.textContent = 'A sincronizar…'; }
+  if(btn){ btn.disabled = true; btn.textContent = ta('googleCalendarSyncing'); }
   // Fase 8.0 (Set 2026): antes, esta função recalculava a "morada"
   // lado|categoria|índice do convidado NO MOMENTO do sync e procurava-a
   // num mapa cujas chaves tinham sido gravadas com o índice de QUANDO o
@@ -11405,7 +11555,7 @@ function syncSeatingToGuestDocs(btn){
       if(failedTokens.length){
         btn.textContent = original;
         btn.disabled = false;
-        alert(`A mesa foi sincronizada, mas ${failedTokens.length} de ${writes.length} convite(s) de convidados não foram atualizados agora. Tenta sincronizar de novo daqui a pouco.`);
+        alert(ta('alertSeatingSyncPartialFailure')(failedTokens.length, writes.length));
       } else {
         btn.textContent = ta('btnSyncedCheck');
         setTimeout(()=>{ btn.textContent = original; btn.disabled = false; }, 1400);
@@ -11859,11 +12009,11 @@ function renderSalaView(){
   });
   wrap.innerHTML = `
     <div class="sala-legend">
-      <span class="sala-legend-item"><span class="sala-legend-dot" style="background:#CB8577;"></span>Noiva</span>
-      <span class="sala-legend-item"><span class="sala-legend-dot" style="background:#6C8296;"></span>Noivo</span>
-      <span class="sala-legend-item"><span class="sala-legend-dot" style="background:#E7DEC8;"></span>Livre</span>
+      <span class="sala-legend-item"><span class="sala-legend-dot" style="background:#CB8577;"></span>${ta('sideBride')}</span>
+      <span class="sala-legend-item"><span class="sala-legend-dot" style="background:#6C8296;"></span>${ta('sideGroom')}</span>
+      <span class="sala-legend-item"><span class="sala-legend-dot" style="background:#E7DEC8;"></span>${ta('salaLegendFree')}</span>
     </div>
-    <div class="sala-hint">toca numa mesa para ver os nomes · arrasta para a mover</div>
+    <div class="sala-hint">${ta('salaViewHint')}</div>
     <div class="sala-canvas" id="sala-canvas" style="width:${maxX}px; height:${maxY}px;">${items}</div>
   `;
   wrap.querySelectorAll('.sala-table-item').forEach(bindSalaTableDrag);
@@ -12578,7 +12728,7 @@ function exportToExcel(){
     }
     const wb = XLSX.utils.book_new();
     const coupleTitle = `${weddingSettings.coupleName1||''} & ${weddingSettings.coupleName2||''}`.trim() || 'O nosso casamento';
-    const subInfo = `${formatDatePT(weddingSettings.weddingDate)} · ${weddingSettings.venue||'Local por definir'}`;
+    const subInfo = `${formatDatePT(weddingSettings.weddingDate)} · ${weddingSettings.venue||ta('genericVenueTBD')}`;
 
     // Orçamento
     const orcDataRows = state.categories.map((c,i)=>{
@@ -12736,7 +12886,7 @@ function exportToPDF(){
   const c1 = weddingSettings.coupleName1||'';
   const c2 = weddingSettings.coupleName2||'';
   const dateStr = formatDatePT(weddingSettings.weddingDate);
-  const venue = weddingSettings.venue||'Local por definir';
+  const venue = weddingSettings.venue||ta('genericVenueTBD');
 
   let y = 20;
   doc.setFont('helvetica','bold');
