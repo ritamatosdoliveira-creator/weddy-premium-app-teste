@@ -2933,6 +2933,42 @@ const APP_I18N = {
     seatsToAssignLabel:'lugares por atribuir',
     tablesHint:'Toca numa mesa para ver, editar a forma e atribuir lugares',
 
+    // Achado ao vivo da Fase 4 (Rita): esta secção inteira (AI Seating)
+    // estava com texto fixo em português, mesmo com appLang='en' — nunca
+    // tinha sido passada por ta(). Também aproveitado para reorganizar o
+    // ecrã "Gerar proposta" (ver comentário em viewAISeatingPrefs).
+    aiSeatingOpenBtn:'Organizar com Weddy AI',
+    aiSeatingTitle:'Organizar com Weddy AI',
+    aiSeatingProposalTitle:'✨ Proposta da Weddy',
+    aiSeatingLoadingText:'A Weddy está a preparar a proposta de mesas…',
+    aiSeatingIntroText:'A Weddy AI organiza os teus convidados pelas mesas, tendo em conta os lugares disponíveis e as preferências que definires abaixo.',
+    aiSeatingConfirmedGuestsLabel:'Convidados confirmados', aiSeatingTablesCountLabel:'Mesas',
+    aiSeatingSeatsAvailableLabel:'Lugares disponíveis',
+    sectionPreferences:'Preferências',
+    aiSeatingNoPreferencesText:'Ainda não adicionaste nenhuma preferência — podes gerar a proposta na mesma, a Weddy só vai preencher as mesas por ordem, respeitando a capacidade.',
+    aiSeatingNewPreferenceLabel:'Nova preferência', priorityNextPrefLabel:'Prioridade', aiSeatingTypeStepLabel:'Tipo',
+    aiSeatingFreeTextLabel:'Ou escreve por palavras (opcional)',
+    aiSeatingFreeTextPlaceholder:'Ex: "Quero os meus pais perto dos padrinhos e não quero o tio António perto do João."',
+    aiSeatingOverCapacityText:(confirmed,seats)=>`Tens ${confirmed} convidados confirmados mas só ${seats} lugares disponíveis. Ajusta as mesas em "Mesas" antes de gerar uma proposta.`,
+    btnGenerateProposal:'Gerar proposta',
+    aiSeatingSearchGuestPlaceholder:'Procurar convidado…',
+    aiSeatingNoConfirmedGuestsText:'Sem convidados confirmados.',
+    btnAddCount:(n)=>`Adicionar (${n})`,
+    aiSeatingTypeTogether:'Juntos', aiSeatingTypeApart:'Separados', aiSeatingTypeNear:'Perto',
+    aiSeatingPriorityHard:'🔴 Obrigatório', aiSeatingPriorityStrong:'🟠 Importante', aiSeatingPrioritySoft:'🟡 Se possível',
+    aiSeatingVerbTogether:'juntos', aiSeatingVerbApart:'separados', aiSeatingVerbNear:'perto',
+    pctPreferencesRespectedLabel:'das preferências pedidas foram respeitadas',
+    requiredPreferencesNotRespectedLabel:'Preferências obrigatórias não respeitadas',
+    aiSeatingUnresolvedFreeTextText:(list)=>`Não encontrei "${list}" na lista de convidados confirmados — essa parte do texto foi ignorada.`,
+    aiSeatingStaleProposalText:'Esta proposta já não corresponde à configuração atual das mesas/convidados (algo mudou entretanto). Gera uma nova proposta antes de aceitar.',
+    aiSeatingFailedCountText:(n)=>`${n} preferência(s) não foi(ram) possível respeitar.`,
+    btnAcceptProposal:'Aceitar proposta', btnConfirmingEllipsis:'A confirmar…',
+    btnAcceptAndEditManually:'Aceitar e editar manualmente',
+    btnGenerateAnother:'Gerar outra (com as mesmas preferências)',
+    aiSeatingRsvpSyncErrorText:'A distribuição foi guardada, mas houve um problema a atualizar os convites RSVP dos convidados. Sincroniza outra vez em "Lugares".',
+    aiSeatingProposalGenericErrorText:'Não foi possível gerar a proposta.',
+    aiSeatingProposalStaleErrorText:'Esta proposta já não corresponde à configuração atual das mesas/convidados. Gera uma nova proposta.',
+
     navInspirationTitle:'Inspiração',
     inspirationHint:'Guarda imagens que te inspiraram — vestidos, decoração, flores, o que quiseres (máx. 6)',
     btnAdd:'Adicionar',
@@ -3569,6 +3605,38 @@ const APP_I18N = {
     totalTablesLabel:'tables in total',
     seatsToAssignLabel:'seats left to assign',
     tablesHint:'Tap a table to view it, edit its shape and assign seats',
+
+    aiSeatingOpenBtn:'Organize with Weddy AI',
+    aiSeatingTitle:'Organize with Weddy AI',
+    aiSeatingProposalTitle:"✨ Weddy's proposal",
+    aiSeatingLoadingText:'Weddy is preparing your seating proposal…',
+    aiSeatingIntroText:'Weddy AI arranges your guests across your tables, based on the seats available and any preferences you set below.',
+    aiSeatingConfirmedGuestsLabel:'Confirmed guests', aiSeatingTablesCountLabel:'Tables',
+    aiSeatingSeatsAvailableLabel:'Seats available',
+    sectionPreferences:'Preferences',
+    aiSeatingNoPreferencesText:"You haven't added any preferences yet — you can still generate a proposal, Weddy will just fill the tables in order, respecting capacity.",
+    aiSeatingNewPreferenceLabel:'New preference', priorityNextPrefLabel:'Priority', aiSeatingTypeStepLabel:'Type',
+    aiSeatingFreeTextLabel:'Or write it out (optional)',
+    aiSeatingFreeTextPlaceholder:'E.g.: "I want my parents near the best man and maid of honor, and I don\'t want uncle Tony near John."',
+    aiSeatingOverCapacityText:(confirmed,seats)=>`You have ${confirmed} confirmed guests but only ${seats} seats available. Adjust your tables in "Tables" before generating a proposal.`,
+    btnGenerateProposal:'Generate proposal',
+    aiSeatingSearchGuestPlaceholder:'Search guest…',
+    aiSeatingNoConfirmedGuestsText:'No confirmed guests.',
+    btnAddCount:(n)=>`Add (${n})`,
+    aiSeatingTypeTogether:'Together', aiSeatingTypeApart:'Apart', aiSeatingTypeNear:'Near',
+    aiSeatingPriorityHard:'🔴 Required', aiSeatingPriorityStrong:'🟠 Important', aiSeatingPrioritySoft:'🟡 If possible',
+    aiSeatingVerbTogether:'together', aiSeatingVerbApart:'apart', aiSeatingVerbNear:'near',
+    pctPreferencesRespectedLabel:'of requested preferences were honored',
+    requiredPreferencesNotRespectedLabel:'Required preferences not honored',
+    aiSeatingUnresolvedFreeTextText:(list)=>`I couldn't find "${list}" among the confirmed guests — that part of the text was ignored.`,
+    aiSeatingStaleProposalText:"This proposal no longer matches the current tables/guests setup (something changed meanwhile). Generate a new proposal before accepting.",
+    aiSeatingFailedCountText:(n)=>`${n} preference(s) could not be honored.`,
+    btnAcceptProposal:'Accept proposal', btnConfirmingEllipsis:'Confirming…',
+    btnAcceptAndEditManually:'Accept and edit manually',
+    btnGenerateAnother:'Generate another (same preferences)',
+    aiSeatingRsvpSyncErrorText:'The seating was saved, but there was a problem updating guests\' RSVP invites. Sync again from "Tables".',
+    aiSeatingProposalGenericErrorText:'Could not generate the proposal.',
+    aiSeatingProposalStaleErrorText:'This proposal no longer matches the current tables/guests setup. Generate a new proposal.',
 
     navInspirationTitle:'Inspiration',
     inspirationHint:'Save images that inspire you — dresses, decor, flowers, whatever you like (max. 6)',
@@ -5190,7 +5258,7 @@ function viewMesas(){
 
   ${tables.length ? `
   <button id="ai-seating-open-btn" class="rsvp-copy-btn" style="margin:2px 16px 14px; display:flex; align-items:center; justify-content:center; gap:8px;">
-    ${ICONS.sparkle||'✨'} Organizar com Weddy AI
+    ${ICONS.sparkle||'✨'} ${ta('aiSeatingOpenBtn')}
   </button>` : ''}
 
   <div class="section-label">${ta('tablesHint')}</div>
@@ -5210,12 +5278,12 @@ function viewAISeatingLocked(){
   return `
   <div class="navbar navbar-row">
     <button class="nav-action" data-aiseatback>${ICONS.chevleft||ICONS.chev}</button>
-    <div><h1>Organizar com Weddy AI</h1></div>
+    <div><h1>${ta('aiSeatingTitle')}</h1></div>
   </div>
   <div class="premium-upsell">
     <div class="premium-upsell-icon">${ICONS.sparkle||''}</div>
     <div class="premium-upsell-title">Weddy Premium</div>
-    <div class="premium-upsell-text">${ta('premiumLockedText')('Organizar com Weddy AI')}</div>
+    <div class="premium-upsell-text">${ta('premiumLockedText')(ta('aiSeatingTitle'))}</div>
     <button class="login-btn" id="premium-subscribe-btn" style="max-width:none;">${ta('btnSubscribePremium')}</button>
   </div>
   `;
@@ -5291,7 +5359,7 @@ function aiSeatingOverCapacity(){
 // sempre descartável até ao commit explícito.
 function runAISeatingGeneration(){
   if(aiSeatingOverCapacity()){
-    aiSeatingErrorMsg = `Tens ${aiSeatingConfirmedGuests().length} convidados confirmados mas só ${totalSeatsCount()} lugares disponíveis — ajusta as mesas em "Mesas" antes de gerar uma proposta.`;
+    aiSeatingErrorMsg = ta('aiSeatingOverCapacityText')(aiSeatingConfirmedGuests().length, totalSeatsCount());
     aiSeatingScreen = 'prefs';
     render();
     return;
@@ -5305,7 +5373,7 @@ function runAISeatingGeneration(){
       aiSeatingProposal = { ...res.proposal, generatedAt: Date.now(), ...aiSeatingSnapshotHash() };
       aiSeatingScreen = 'proposal';
     } else {
-      aiSeatingErrorMsg = (res && res.message) || 'Não foi possível gerar a proposta.';
+      aiSeatingErrorMsg = (res && res.message) || ta('aiSeatingProposalGenericErrorText');
       aiSeatingScreen = 'prefs';
     }
     render();
@@ -5321,7 +5389,7 @@ function commitSeatingProposal(proposal){
   if(aiSeatingProposalIsStale(proposal)){
     aiSeatingProposal = null;
     aiSeatingScreen = 'prefs';
-    aiSeatingErrorMsg = 'Esta proposta já não corresponde à configuração atual das mesas/convidados. Gera uma nova proposta.';
+    aiSeatingErrorMsg = ta('aiSeatingProposalStaleErrorText');
     render();
     return;
   }
@@ -5331,7 +5399,7 @@ function commitSeatingProposal(proposal){
   render();
   pushRemote(true);
   Promise.resolve(syncSeatingToGuestDocs()).catch(()=>{
-    alert('A distribuição foi guardada, mas houve um problema a atualizar os convites RSVP dos convidados. Sincroniza outra vez em "Lugares".');
+    alert(ta('aiSeatingRsvpSyncErrorText'));
   }).finally(()=>{
     aiSeatingCommitting = false;
     aiSeatingScreen = null;
@@ -5351,85 +5419,112 @@ function viewAISeatingScreen(){
 function viewAISeatingLoading(){
   return `
   <div class="navbar navbar-row">
-    <div><h1>Organizar com Weddy AI</h1></div>
+    <div><h1>${ta('aiSeatingTitle')}</h1></div>
   </div>
   <div class="empty-note" style="margin:60px 16px; text-align:center;">
     <div style="font-size:34px; margin-bottom:10px;">${ICONS.sparkle||'✨'}</div>
-    A Weddy está a preparar a proposta de mesas…
+    ${ta('aiSeatingLoadingText')}
   </div>
   `;
 }
 
-const AI_SEATING_TYPE_LABEL = { TOGETHER:'Juntos', APART:'Separados', NEAR:'Perto' };
-const AI_SEATING_PRIORITY_LABEL = { HARD:'🔴 Obrigatório', STRONG:'🟠 Importante', SOFT:'🟡 Se possível' };
+// Achado ao vivo da Fase 4 (Rita): eram const's fixas em português,
+// avaliadas uma única vez no arranque do script — mudar o idioma na app
+// (appLang) nunca as atualizava. Passaram a funções que leem de ta() a
+// cada chamada, para acompanharem o idioma atual tal como o resto da app.
+function AI_SEATING_TYPE_LABEL_MAP(){
+  return { TOGETHER: ta('aiSeatingTypeTogether'), APART: ta('aiSeatingTypeApart'), NEAR: ta('aiSeatingTypeNear') };
+}
+function AI_SEATING_PRIORITY_LABEL_MAP(){
+  return { HARD: ta('aiSeatingPriorityHard'), STRONG: ta('aiSeatingPriorityStrong'), SOFT: ta('aiSeatingPrioritySoft') };
+}
 
 function viewAISeatingPrefs(){
   const confirmedGuests = aiSeatingConfirmedGuests();
   const totalSeats = totalSeatsCount();
   const tableCount = state.seating.tables.length;
   const overCapacity = aiSeatingOverCapacity();
+  const TYPE_LABEL = AI_SEATING_TYPE_LABEL_MAP();
+  const PRIORITY_LABEL = AI_SEATING_PRIORITY_LABEL_MAP();
   const constraintsHTML = aiSeatingConstraints.map((c,i)=>`
     <div class="list-row" style="padding:10px 14px;">
       <div class="def-row-mid" style="flex:1;">
-        <div class="def-row-title" style="font-weight:500;">${AI_SEATING_TYPE_LABEL[c.type]} <span style="font-weight:400; color:var(--ink-soft); font-size:12.5px;">${AI_SEATING_PRIORITY_LABEL[c.priority]}</span></div>
+        <div class="def-row-title" style="font-weight:500;">${TYPE_LABEL[c.type]} <span style="font-weight:400; color:var(--ink-soft); font-size:12.5px;">${PRIORITY_LABEL[c.priority]}</span></div>
         <div class="phase-desc">${c.names.map(escapeHTML).join(', ')}</div>
       </div>
       <button class="remove-x" data-aiseatrmconstraint="${i}">✕</button>
     </div>`).join('');
 
+  // Reorganização da Fase 4 (Rita: "a página de gerar proposta está muito
+  // confusa, organiza melhor a informação"). O que mudou, comparado com a
+  // versão antiga: (1) os 3 números (convidados/mesas/lugares) passaram de
+  // 3 linhas com "·" soltas para um cartão com colunas, igual ao padrão já
+  // usado no resto da app (ex.: ring-stat-card de Mesas); (2) o bloco de
+  // "adicionar preferência" (prioridade + tipo) deixou de ser 2 filas de
+  // botões soltas a seguir a um único section-label ambíguo — passou a
+  // estar dentro do seu próprio cartão, com um título claro ("Adicionar
+  // preferência") e um rótulo por cada passo (Prioridade / Tipo), para
+  // ficar óbvio que são 2 escolhas de UM MESMO fluxo, não duas listas
+  // soltas de botões.
   const pickerHTML = aiSeatingPicking ? `
-    <div class="visit-detail" style="margin:12px 14px 0; padding:12px; background:var(--card); border:1px solid var(--line); border-radius:12px;">
-      <div style="font-weight:500; margin-bottom:8px;">${AI_SEATING_TYPE_LABEL[aiSeatingPicking.type]} — ${AI_SEATING_PRIORITY_LABEL[aiSeatingPicking.priority]}</div>
-      <input type="text" id="ai-seat-pick-query" placeholder="Procurar convidado…" value="${escapeHTML(aiSeatingPickQuery)}" style="all:unset; box-sizing:border-box; width:100%; background:var(--bg); border:1px solid var(--line); border-radius:10px; padding:9px 10px; font-size:13px; margin-bottom:8px;">
+    <div class="visit-detail" style="margin:12px 16px 0; padding:12px 14px; background:var(--card); border:1px solid var(--line); border-radius:12px;">
+      <div style="font-weight:500; margin-bottom:8px;">${TYPE_LABEL[aiSeatingPicking.type]} — ${PRIORITY_LABEL[aiSeatingPicking.priority]}</div>
+      <input type="text" id="ai-seat-pick-query" placeholder="${ta('aiSeatingSearchGuestPlaceholder')}" value="${escapeHTML(aiSeatingPickQuery)}" style="all:unset; box-sizing:border-box; width:100%; background:var(--bg); border:1px solid var(--line); border-radius:10px; padding:9px 10px; font-size:13px; margin-bottom:8px;">
       <div style="max-height:220px; overflow:auto;">
         ${confirmedGuests.filter(g=>!aiSeatingPickQuery || g.name.toLowerCase().includes(aiSeatingPickQuery.toLowerCase())).map(g=>`
           <div class="picker-row ${aiSeatingPickIds.includes(g.guestId)?'is-selected':''}" data-aiseatpick="${g.guestId}">
             <span class="side-tag" style="background:${g.side==='noiva'?'var(--blush-dark)':'var(--dusty-dark)'};">${g.side==='noiva'?'N':'N'}</span>
             <span class="pname">${escapeHTML(g.name)}</span>
             ${aiSeatingPickIds.includes(g.guestId)?ICONS.check:''}
-          </div>`).join('') || '<div class="empty-note">Sem convidados confirmados.</div>'}
+          </div>`).join('') || `<div class="empty-note">${ta('aiSeatingNoConfirmedGuestsText')}</div>`}
       </div>
       <div style="display:flex; gap:8px; margin-top:10px;">
-        <button class="visit-action-btn" data-aiseatpickcancel style="flex:1;">Cancelar</button>
-        <button class="login-btn" data-aiseatpickadd style="flex:1; max-width:none;" ${aiSeatingPickIds.length<2?'disabled':''}>Adicionar (${aiSeatingPickIds.length})</button>
+        <button class="visit-action-btn" data-aiseatpickcancel style="flex:1;">${ta('btnCancel')}</button>
+        <button class="login-btn" data-aiseatpickadd style="flex:1; max-width:none;" ${aiSeatingPickIds.length<2?'disabled':''}>${ta('btnAddCount')(aiSeatingPickIds.length)}</button>
       </div>
     </div>
   ` : `
-    <div class="section-label" style="margin-top:14px;">Prioridade da próxima preferência</div>
-    <div style="display:flex; gap:8px; padding:0 14px; flex-wrap:wrap;">
-      ${Object.keys(AI_SEATING_PRIORITY_LABEL).map(pr=>`
-        <button class="visit-action-btn ${aiSeatingNewPriority===pr?'is-selected':''}" data-aiseatpriority="${pr}" style="${aiSeatingNewPriority===pr?'border-color:var(--ink); font-weight:600;':''}">${AI_SEATING_PRIORITY_LABEL[pr]}</button>
-      `).join('')}
-    </div>
-    <div style="display:flex; gap:8px; padding:10px 14px 0; flex-wrap:wrap;">
-      ${Object.keys(AI_SEATING_TYPE_LABEL).map(type=>`
-        <button class="visit-action-btn" data-aiseatstart="${type}|${aiSeatingNewPriority}">+ ${AI_SEATING_TYPE_LABEL[type]}</button>
-      `).join('')}
+    <div class="visit-detail" style="margin:12px 16px 0; padding:12px 14px; background:var(--card); border:1px solid var(--line); border-radius:12px;">
+      <div style="font-weight:500; margin-bottom:10px;">${ta('aiSeatingNewPreferenceLabel')}</div>
+      <div style="font-size:11.5px; color:var(--ink-soft); margin-bottom:5px;">${ta('priorityNextPrefLabel')}</div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
+        ${Object.keys(PRIORITY_LABEL).map(pr=>`
+          <button class="visit-action-btn ${aiSeatingNewPriority===pr?'is-selected':''}" data-aiseatpriority="${pr}" style="${aiSeatingNewPriority===pr?'border-color:var(--ink); font-weight:600;':''}">${PRIORITY_LABEL[pr]}</button>
+        `).join('')}
+      </div>
+      <div style="font-size:11.5px; color:var(--ink-soft); margin-bottom:5px;">${ta('aiSeatingTypeStepLabel')}</div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        ${Object.keys(TYPE_LABEL).map(type=>`
+          <button class="visit-action-btn" data-aiseatstart="${type}|${aiSeatingNewPriority}">+ ${TYPE_LABEL[type]}</button>
+        `).join('')}
+      </div>
     </div>
   `;
 
   return `
   <div class="navbar navbar-row">
     <button class="nav-action" data-aiseatback>${ICONS.chevleft||ICONS.chev}</button>
-    <div><h1>Organizar com Weddy AI</h1></div>
+    <div><h1>${ta('aiSeatingTitle')}</h1></div>
   </div>
-  <div class="empty-note" style="margin:0 16px 10px;">A Weddy AI vai organizar os teus convidados tendo em conta as mesas, os lugares e as preferências que definires abaixo.</div>
-  <div class="visit-detail" style="margin:0 16px 14px; padding:12px 14px; background:var(--card); border:1px solid var(--line); border-radius:12px; line-height:1.9;">
-    · convidados confirmados: <strong>${confirmedGuests.length}</strong><br>
-    · mesas: <strong>${tableCount}</strong><br>
-    · lugares disponíveis: <strong style="${overCapacity?'color:var(--danger,#b3413a);':''}">${totalSeats}</strong>
+  <div class="empty-note" style="margin:0 16px 10px;">${ta('aiSeatingIntroText')}</div>
+  <div class="ring-stat-card" style="margin:0 16px 14px; padding:14px;">
+    <div class="ring-stat-list" style="flex:1; display:flex; justify-content:space-between;">
+      <div class="ring-stat-item"><span class="n">${confirmedGuests.length}</span><span class="l">${ta('aiSeatingConfirmedGuestsLabel')}</span></div>
+      <div class="ring-stat-item"><span class="n">${tableCount}</span><span class="l">${ta('aiSeatingTablesCountLabel')}</span></div>
+      <div class="ring-stat-item"><span class="n" style="${overCapacity?'color:var(--danger,#b3413a);':''}">${totalSeats}</span><span class="l">${ta('aiSeatingSeatsAvailableLabel')}</span></div>
+    </div>
   </div>
 
-  <div class="section-label">Preferências</div>
-  ${aiSeatingConstraints.length ? `<div class="list-group" style="margin:0 16px 4px;">${constraintsHTML}</div>` : `<div class="empty-note" style="margin:0 16px 4px;">Ainda não adicionaste nenhuma preferência — podes gerar a proposta na mesma, a Weddy só vai preencher as mesas por ordem, respeitando a capacidade.</div>`}
+  <div class="section-label">${ta('sectionPreferences')}</div>
+  ${aiSeatingConstraints.length ? `<div class="list-group" style="margin:0 16px 4px;">${constraintsHTML}</div>` : `<div class="empty-note" style="margin:0 16px 4px;">${ta('aiSeatingNoPreferencesText')}</div>`}
   ${pickerHTML}
 
-  <div class="section-label" style="margin-top:18px;">Ou escreve por palavras (opcional)</div>
-  <textarea id="ai-seat-freetext" rows="3" placeholder='Ex: "Quero os meus pais perto dos padrinhos e não quero o tio António perto do João."' style="all:unset; box-sizing:border-box; width:calc(100% - 32px); margin:0 16px; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:10px 12px; font-family:inherit; font-size:13px; resize:vertical;">${escapeHTML(aiSeatingFreeText)}</textarea>
+  <div class="section-label" style="margin-top:18px;">${ta('aiSeatingFreeTextLabel')}</div>
+  <textarea id="ai-seat-freetext" rows="3" placeholder="${escapeHTML(ta('aiSeatingFreeTextPlaceholder'))}" style="all:unset; box-sizing:border-box; width:calc(100% - 32px); margin:0 16px; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:10px 12px; font-family:inherit; font-size:13px; resize:vertical;">${escapeHTML(aiSeatingFreeText)}</textarea>
 
-  ${overCapacity ? `<div class="empty-note" style="margin:14px 16px 0; color:var(--danger,#b3413a);">⚠️ Tens ${confirmedGuests.length} convidados confirmados mas só ${totalSeats} lugares disponíveis. Ajusta as mesas em "Mesas" antes de gerar uma proposta.</div>` : ''}
+  ${overCapacity ? `<div class="empty-note" style="margin:14px 16px 0; color:var(--danger,#b3413a);">⚠️ ${ta('aiSeatingOverCapacityText')(confirmedGuests.length, totalSeats)}</div>` : ''}
   <div style="padding:18px 16px 8px;">
-    <button id="ai-seat-generate-btn" class="login-btn" style="max-width:none;" ${overCapacity?'disabled':''}>${ICONS.sparkle||'✨'} Gerar proposta</button>
+    <button id="ai-seat-generate-btn" class="login-btn" style="max-width:none;" ${overCapacity?'disabled':''}>${ICONS.sparkle||'✨'} ${ta('btnGenerateProposal')}</button>
   </div>
   ${(aiSeatingErrorMsg && !overCapacity) ? `<div class="empty-note" style="margin:0 16px 16px; color:var(--danger,#b3413a);">⚠️ ${escapeHTML(aiSeatingErrorMsg)}</div>` : ''}
   `;
@@ -5449,33 +5544,33 @@ function viewAISeatingProposal(){
   }).join('');
 
   const violationsHTML = (p.violations||[]).length ? `
-    <div class="section-label" style="margin-top:16px; color:var(--danger,#b3413a);">Preferências obrigatórias não respeitadas</div>
+    <div class="section-label" style="margin-top:16px; color:var(--danger,#b3413a);">${ta('requiredPreferencesNotRespectedLabel')}</div>
     <div class="empty-note" style="margin:0 16px;">${p.violations.map(escapeHTML).join('<br>')}</div>
   ` : '';
   const unresolvedHTML = (p.unresolvedFreeText||[]).length ? `
-    <div class="empty-note" style="margin:8px 16px;">Não encontrei "${p.unresolvedFreeText.map(escapeHTML).join('", "')}" na lista de convidados confirmados — essa parte do texto foi ignorada.</div>
+    <div class="empty-note" style="margin:8px 16px;">${ta('aiSeatingUnresolvedFreeTextText')(p.unresolvedFreeText.map(escapeHTML).join('", "'))}</div>
   ` : '';
 
   // Checklist ✓/⚠ por preferência pedida, calculado aqui no cliente a
   // partir de p.assignments (mesma lógica TOGETHER/APART/NEAR do
   // Constraint Engine) — mostra os NOMES reais de cada preferência, em
   // vez de só a frase genérica que a Cloud Function devolve.
+  const VERB = { TOGETHER: ta('aiSeatingVerbTogether'), APART: ta('aiSeatingVerbApart'), NEAR: ta('aiSeatingVerbNear') };
   const constraintChecks = aiSeatingConstraints.map(c=>{
     const tids = c.guestIds.map(gid=>aiSeatingTableIdInAssignments(p.assignments, gid));
     const allPlaced = tids.every(t=>t!=null);
     let ok;
     if(c.type==='APART') ok = allPlaced && new Set(tids).size===tids.length;
     else ok = allPlaced && new Set(tids).size===1; // TOGETHER e NEAR (v1: "perto" ~ "mesma mesa")
-    const verb = c.type==='TOGETHER' ? 'juntos' : c.type==='APART' ? 'separados' : 'perto';
-    return { ok, label: `${c.names.map(escapeHTML).join(' + ')} ${verb}` };
+    return { ok, label: `${c.names.map(escapeHTML).join(' + ')} ${VERB[c.type]}` };
   });
   const failedCount = constraintChecks.filter(c=>!c.ok).length;
   const constraintChecklistHTML = constraintChecks.length ? `
-    <div class="section-label" style="margin-top:16px;">Preferências</div>
+    <div class="section-label" style="margin-top:16px;">${ta('sectionPreferences')}</div>
     <div class="visit-detail" style="margin:0 16px; padding:12px 14px; background:var(--card); border:1px solid var(--line); border-radius:12px; line-height:1.9;">
       ${constraintChecks.map(c=>`${c.ok?'✓':'⚠️'} ${c.label}`).join('<br>')}
     </div>
-    ${failedCount ? `<div class="empty-note" style="margin:6px 16px 0; color:var(--danger,#b3413a);">⚠️ ${failedCount} preferência(s) não foi(ram) possível respeitar.</div>` : ''}
+    ${failedCount ? `<div class="empty-note" style="margin:6px 16px 0; color:var(--danger,#b3413a);">⚠️ ${ta('aiSeatingFailedCountText')(failedCount)}</div>` : ''}
   ` : '';
 
   const stale = aiSeatingProposalIsStale(p);
@@ -5483,27 +5578,27 @@ function viewAISeatingProposal(){
   return `
   <div class="navbar navbar-row">
     <button class="nav-action" data-aiseatback ${aiSeatingCommitting?'disabled':''}>${ICONS.chevleft||ICONS.chev}</button>
-    <div><h1>✨ Proposta da Weddy</h1></div>
+    <div><h1>${ta('aiSeatingProposalTitle')}</h1></div>
   </div>
   <div class="ring-stat-card" style="margin-top:2px;">
     <div class="ring-wrap" style="width:78px;height:78px;flex-shrink:0;">
       ${donutSVG(p.satisfiedPct/100, 'var(--blush-dark)', 78, 8)}
       <div class="ring-center"><span class="num" style="font-size:15px;">${p.satisfiedPct}%</span></div>
     </div>
-    <div class="ring-stat-list"><div class="ring-stat-item"><span class="l">das preferências pedidas foram respeitadas</span></div></div>
+    <div class="ring-stat-list"><div class="ring-stat-item"><span class="l">${ta('pctPreferencesRespectedLabel')}</span></div></div>
   </div>
   <div class="empty-note" style="margin:0 16px 14px;">${escapeHTML(p.explanation||'')}</div>
   ${unresolvedHTML}
   ${violationsHTML}
   ${constraintChecklistHTML}
-  <div class="section-label" style="margin-top:16px;">Mesas</div>
+  <div class="section-label" style="margin-top:16px;">${ta('navTablesTitle')}</div>
   ${tablesHTML}
-  ${stale ? `<div class="empty-note" style="margin:16px 16px 0; color:var(--danger,#b3413a);">⚠️ Esta proposta já não corresponde à configuração atual das mesas/convidados (algo mudou entretanto). Gera uma nova proposta antes de aceitar.</div>` : ''}
+  ${stale ? `<div class="empty-note" style="margin:16px 16px 0; color:var(--danger,#b3413a);">⚠️ ${ta('aiSeatingStaleProposalText')}</div>` : ''}
   <div style="display:flex; flex-direction:column; gap:8px; padding:18px 16px 10px;">
-    <button id="ai-seat-accept-btn" class="login-btn" style="max-width:none;" ${(aiSeatingCommitting||stale)?'disabled':''}>${aiSeatingCommitting?'A confirmar…':'Aceitar proposta'}</button>
-    <button id="ai-seat-edit-btn" class="visit-action-btn" ${(aiSeatingCommitting||stale)?'disabled':''}>Aceitar e editar manualmente</button>
-    <button id="ai-seat-regenerate-btn" class="visit-action-btn" ${aiSeatingCommitting?'disabled':''}>Gerar outra (com as mesmas preferências)</button>
-    <button id="ai-seat-cancel-btn" class="visit-action-btn" ${aiSeatingCommitting?'disabled':''} data-aiseatback>Cancelar</button>
+    <button id="ai-seat-accept-btn" class="login-btn" style="max-width:none;" ${(aiSeatingCommitting||stale)?'disabled':''}>${aiSeatingCommitting?ta('btnConfirmingEllipsis'):ta('btnAcceptProposal')}</button>
+    <button id="ai-seat-edit-btn" class="visit-action-btn" ${(aiSeatingCommitting||stale)?'disabled':''}>${ta('btnAcceptAndEditManually')}</button>
+    <button id="ai-seat-regenerate-btn" class="visit-action-btn" ${aiSeatingCommitting?'disabled':''}>${ta('btnGenerateAnother')}</button>
+    <button id="ai-seat-cancel-btn" class="visit-action-btn" ${aiSeatingCommitting?'disabled':''} data-aiseatback>${ta('btnCancel')}</button>
   </div>
   `;
 }
@@ -11487,7 +11582,18 @@ function initMesa3D(){
   canvas.addEventListener('pointerup', e=>{
     mesa3d.dragging = false;
     stopDragLoop();
-    if(mesa3d.moved < 6){ handleMesa3DTap(e); }
+    // Achado ao vivo da Fase 4 (Rita): "ao fazer tap to assign nos lugares,
+    // não fica assigned à primeira vez, tenho de fazer sempre 2x". Causa
+    // mais provável: este limiar de 6px (para distinguir um toque de um
+    // arrastar a rodar a mesa) é apertado a mais para um dedo real num ecrã
+    // tátil — jitter normal do toque facilmente passa de 6px, fazendo o
+    // PRIMEIRO toque ser interpretado como um arrastar minúsculo (roda a
+    // mesa por uma fração impercetível) em vez de um toque — silenciosamente
+    // ignorado — e só o SEGUNDO toque, mais parado, fica abaixo do limiar e
+    // funciona. Subido para 12px, mais alinhado com os limiares habituais
+    // de "toque vs. arrastar" em interfaces táteis (tipicamente 8-16px,
+    // nunca tão apertado como 6).
+    if(mesa3d.moved < 12){ handleMesa3DTap(e); }
   });
 
   window.addEventListener('resize', resizeMesa3D);
