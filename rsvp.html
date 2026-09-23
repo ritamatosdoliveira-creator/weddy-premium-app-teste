@@ -1413,7 +1413,9 @@ h1{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:30px; col
   }
 
   function matchCustomFaq(p){
-    const list = Array.isArray(guestData.guestFaqList) ? guestData.guestFaqList : [];
+    // (Set 2026) O casal pode desligar uma pergunta sem a apagar no editor
+    // "Perguntas personalizadas" — active===false não deve ser respondida.
+    const list = (Array.isArray(guestData.guestFaqList) ? guestData.guestFaqList : []).filter(f=>f.active!==false);
     if(!list.length) return null;
     const qWords = p.split(/\W+/).filter(w=>w.length>=4);
     if(!qWords.length) return null;

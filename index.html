@@ -41,7 +41,14 @@
 b, strong{ font-weight:600; }
 html{background:#FAF8F5;}
 html.login-active{ background:#FBF1E7 url('login-bg.jpg') center/cover no-repeat; }
-html,body{margin:0;padding:0;height:100%;background:#FAF8F5;}
+html,body{margin:0;padding:0;height:100%;background:#FAF8F5;
+  /* Corrigido (Set 2026): sem isto, o Safari/iOS por vezes "infla" o
+     tamanho do texto sozinho em certos ecrãs (o título aparecia gigante
+     e cortado no topo, sempre nos mesmos sítios, na app instalada no
+     ecrã principal) — comportamento conhecido do WebKit quando esta
+     propriedade não está fixada a 100%. */
+  -webkit-text-size-adjust:100%; text-size-adjust:100%;
+}
 body{
   background:var(--cream);
   font-family:'Manrope',-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",Arial,sans-serif;
@@ -123,6 +130,15 @@ html{
 .def-row-badge{ flex-shrink:0; min-width:19px; height:19px; padding:0 6px; border-radius:10px; background:var(--rust); color:#fff; font-size:11px; font-weight:700; display:flex; align-items:center; justify-content:center; }
 .def-signout-btn{ all:unset; box-sizing:border-box; display:flex; align-items:center; justify-content:center; gap:9px; width:calc(100% - 32px); margin:22px 16px 30px; padding:15px 0; border-radius:16px; background:#F3E2DC; color:var(--rust-dark); font-size:14.5px; font-weight:600; cursor:pointer; }
 .def-signout-btn svg{ width:16px; height:16px; }
+/* Corrigido (Set 2026): esta classe era usada em "Desligar Google
+   Calendar" sem nenhuma regra CSS a defini-la em lado nenhum do
+   ficheiro — o botão caía no estilo nativo do browser (cinzento,
+   estreito, alinhado à esquerda), em vez de seguir o resto da app.
+   Este estilo alinha-o com os outros botões do mesmo ecrã: largura
+   total, texto centrado, tom "de aviso" mais discreto que um botão
+   principal. */
+.delete-response-link{ all:unset; box-sizing:border-box; display:block; width:100%; text-align:center; padding:11px 0; font-size:14px; font-weight:600; color:var(--rust-dark); cursor:pointer; }
+.delete-response-link:active{ opacity:.6; }
 .lang-switch-row{ display:flex; align-items:center; justify-content:space-between; margin:0 16px 18px; padding:12px 14px; background:#F7F1EC; border-radius:14px; }
 .lang-switch-label{ font-size:13.5px; font-weight:600; color:var(--rust-dark); }
 .lang-switch-pills{ display:flex; background:#fff; border-radius:10px; padding:3px; gap:2px; }
@@ -176,6 +192,24 @@ html{
 .ring-breakdown{ display:flex; gap:14px; margin-top:11px; }
 .ring-breakdown .n{ font-size:13px; font-weight:600; color:var(--ink); text-align:center; }
 .ring-breakdown .l{ font-size:8.5px; color:var(--ink-soft); text-align:center; margin-top:1px; }
+
+/* Reorganização (Set 2026): áreas Premium (RSVP, Wedding Health, Memórias,
+   Documentos, Google Calendar) passaram de linhas escondidas em Definições
+   para cartões na página principal — com cadeado+transparência por cima de
+   quem ainda não tem Premium ativo, que desaparece assim que a subscrição
+   fica ativa. */
+.premium-feature-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:0 16px 8px; }
+.premium-feature-card{ all:unset; box-sizing:border-box; position:relative; display:block; background:var(--card); border:1px solid var(--line); border-radius:16px; padding:14px; box-shadow:var(--shadow); cursor:pointer; overflow:hidden; }
+.premium-feature-card:active{ opacity:.85; }
+.premium-feature-icon{ width:34px; height:34px; border-radius:11px; display:flex; align-items:center; justify-content:center; margin-bottom:10px; }
+.premium-feature-icon svg{ width:16px; height:16px; }
+.premium-feature-title{ font-size:13px; font-weight:600; color:var(--ink); }
+.premium-feature-desc{ font-size:11px; color:var(--ink-soft); margin-top:2px; line-height:1.35; }
+.premium-feature-badge{ position:absolute; top:10px; right:10px; min-width:18px; height:18px; padding:0 5px; border-radius:9px; background:var(--rust); color:#fff; font-size:10.5px; font-weight:700; display:flex; align-items:center; justify-content:center; box-sizing:border-box; }
+.premium-feature-lock{ position:absolute; inset:0; background:rgba(250,248,245,0.78); display:flex; align-items:center; justify-content:center; }
+.premium-feature-lock svg{ width:19px; height:19px; }
+.premium-feature-lock-icon{ width:34px; height:34px; border-radius:50%; background:var(--card); box-shadow:var(--shadow); display:flex; align-items:center; justify-content:center; color:var(--rust-dark); }
+.premium-feature-lock-icon svg{ width:15px; height:15px; }
 
 /* Inspiração */
 .insp-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; padding:4px 16px 24px; }
@@ -276,6 +310,12 @@ html{
 .guest-row .check svg{ width:12px; height:12px; color:#fff; opacity:0; }
 .guest-row.confirmed .check svg{ opacity:1; }
 .remove-x{ all:unset; cursor:pointer; color:#B4AFA6; font-size:15px; width:22px; height:22px; display:flex; align-items:center; justify-content:center; flex-shrink:0;  line-height:1;}
+/* Corrigido (Set 2026): mesmo problema do .delete-response-link acima —
+   este "×" de remover documento não tinha nenhuma regra CSS a defini-lo,
+   por isso ficava com o botão nativo do browser em vez do "x" pequeno e
+   cinzento usado em todos os outros sítios da app. Mesmo estilo do
+   .remove-x, que já é usado exatamente para este tipo de botão. */
+.child-remove{ all:unset; cursor:pointer; color:#B4AFA6; font-size:15px; width:22px; height:22px; display:flex; align-items:center; justify-content:center; flex-shrink:0; line-height:1; }
 .reorder-btn{ all:unset; cursor:pointer; color:#B4AFA6; width:20px; height:20px; display:flex; align-items:center; justify-content:center; flex-shrink:0; line-height:1; }
 .drag-handle{ all:unset; cursor:grab; color:#C7C2B8; width:20px; height:26px; display:flex; align-items:center; justify-content:center; flex-shrink:0; line-height:1; touch-action:none; }
 .drag-handle svg{ width:11px; height:18px; }
@@ -626,10 +666,47 @@ html{
 .rsvp-deadline-card{ margin:0 16px 12px; padding:12px 14px; display:flex; align-items:center; gap:10px; background:var(--card); border:1px solid var(--line); border-radius:16px; box-shadow:var(--shadow); }
 .rsvp-deadline-card .l{ font-size:10.8px; color:var(--ink-soft); margin:0 0 4px; }
 .rsvp-deadline-card input[type="date"]{ border:none; outline:none; background:transparent; font-size:14.5px; color:var(--ink); font-family:inherit; padding:0; width:100%; }
-.rsvp-deadline-save{ all:unset; box-sizing:border-box; flex-shrink:0; padding:9px 14px; border-radius:11px; background:var(--rust); color:#fff; font-size:12.5px; font-weight:600; cursor:pointer; }
+.rsvp-deadline-save{ all:unset; box-sizing:border-box; flex-shrink:0; display:inline-flex; align-items:center; justify-content:center; gap:6px; text-align:center; padding:9px 14px; border-radius:11px; background:var(--rust); color:#fff; font-size:12.5px; font-weight:600; cursor:pointer; }
+/* Corrigido (Set 2026): este botão é reutilizado com um ícone à frente do
+   texto (ex: "Preparar lembrete" no RSVP Autopilot) — sem "display:flex"
+   nem um tamanho fixo para o svg, o ícone ficava ao tamanho nativo do
+   browser (enorme, a ocupar o cartão todo) em vez de um sino pequeno ao
+   lado do texto. */
+.rsvp-deadline-save svg{ width:15px; height:15px; flex-shrink:0; }
 .rsvp-deadline-save:active{ opacity:.8; }
 .rsvp-deadline-warn{ margin:0 16px 12px; padding:11px 14px; border-radius:14px; background:rgba(193,88,62,0.1); color:var(--rust-dark); font-size:12.5px; line-height:1.45; display:flex; align-items:flex-start; gap:8px; }
 .rsvp-deadline-warn svg{ width:15px; height:15px; flex-shrink:0; margin-top:1px; }
+/* Reorganização (Set 2026): linhas de navegação do "hub" de RSVP
+   (Prazo/Informações/Respostas) — mesmo padrão visual do defMenuRow de
+   Definições, com ícone à esquerda, título+descrição ao centro e chevron. */
+.rsvp-nav-row{ display:flex; align-items:center; gap:12px; padding:13px 14px; background:var(--card); border:1px solid var(--line); border-radius:16px; box-shadow:var(--shadow); margin:0 16px 10px; cursor:pointer; }
+.rsvp-nav-row:active{ opacity:.7; }
+.rsvp-nav-row-icon{ flex-shrink:0; width:38px; height:38px; border-radius:12px; display:flex; align-items:center; justify-content:center; }
+.rsvp-nav-row-icon svg{ width:18px; height:18px; }
+.rsvp-nav-row-mid{ flex:1; min-width:0; }
+.rsvp-nav-row-title{ font-size:14.5px; font-weight:600; color:var(--ink); }
+.rsvp-nav-row-desc{ font-size:12px; color:var(--ink-soft); margin-top:2px; }
+.rsvp-nav-row-chev{ color:var(--ink-soft); flex-shrink:0; opacity:.6; }
+.rsvp-nav-row-chev svg{ width:16px; height:16px; }
+/* Editor de "Perguntas personalizadas" (Concierge FAQ) — lista de cartões
+   com interruptor on/off por pergunta. */
+.faq-card{ margin:0 16px 10px; padding:12px 14px; background:var(--card); border:1px solid var(--line); border-radius:14px; box-shadow:var(--shadow); }
+.faq-card-top{ display:flex; align-items:flex-start; gap:10px; }
+.faq-card-q{ flex:1; min-width:0; font-size:13.5px; font-weight:600; color:var(--ink); }
+.faq-card-a{ font-size:12.5px; color:var(--ink-soft); margin-top:4px; line-height:1.4; }
+.faq-card.off .faq-card-q, .faq-card.off .faq-card-a{ opacity:.45; }
+.faq-toggle{ all:unset; box-sizing:border-box; position:relative; width:38px; height:22px; border-radius:12px; background:var(--line); cursor:pointer; flex-shrink:0; transition:background .15s; }
+.faq-toggle.on{ background:var(--rust); }
+.faq-toggle .faq-toggle-knob{ position:absolute; top:2px; left:2px; width:18px; height:18px; border-radius:50%; background:#fff; transition:left .15s; box-shadow:0 1px 2px rgba(0,0,0,.2); }
+.faq-toggle.on .faq-toggle-knob{ left:18px; }
+.faq-card-actions{ display:flex; gap:14px; margin-top:9px; }
+.faq-card-action{ all:unset; box-sizing:border-box; display:flex; align-items:center; gap:5px; font-size:12px; font-weight:600; color:var(--ink-soft); cursor:pointer; }
+.faq-card-action svg{ width:13px; height:13px; }
+.faq-card-action.danger{ color:var(--rust-dark); }
+.faq-edit-field{ width:100%; border:1.6px solid var(--line); border-radius:12px; padding:9px 11px; font-size:13.5px; font-family:inherit; color:var(--ink); resize:vertical; box-sizing:border-box; margin-bottom:8px; }
+.faq-add-btn{ all:unset; box-sizing:border-box; display:flex; align-items:center; justify-content:center; gap:7px; width:calc(100% - 32px); margin:4px 16px 14px; padding:12px 0; border-radius:14px; border:1.6px dashed var(--line); color:var(--rust-dark); font-size:13px; font-weight:600; cursor:pointer; }
+.faq-add-btn svg{ width:14px; height:14px; }
+.faq-add-btn:active{ opacity:.7; }
 .rsvp-actions-row{ display:flex; gap:8px; margin:0 16px 10px; }
 .rsvp-actions-row .rsvp-copy-btn{ background:var(--card); }
 .rsvp-actions-inline{ display:flex; gap:8px; width:100%; }
@@ -645,6 +722,15 @@ html{
 .rsvp-qr-name{ font-family:Georgia,serif; font-size:17px; margin-bottom:10px; color:var(--ink); }
 .rsvp-qr-card img{ border-radius:10px; }
 .rsvp-qr-link{ font-size:11px; color:var(--ink-soft); word-break:break-all; margin:12px 0 16px; }
+/* Reorganização (Set 2026): folha "Enviar lembretes" — ícone+título,
+   canal cosmético (Email/SMS — não muda o envio, que continua a ser
+   "copiar mensagem"), mensagem editável com contador de caracteres. */
+.reminder-modal-icon{ width:44px; height:44px; border-radius:14px; background:var(--cream); color:var(--rust-dark); display:flex; align-items:center; justify-content:center; margin:0 auto 12px; }
+.reminder-modal-icon svg{ width:21px; height:21px; }
+.reminder-field-label{ text-align:left; font-size:10.8px; font-weight:700; letter-spacing:.03em; text-transform:uppercase; color:var(--ink-soft); margin:14px 0 6px; }
+.reminder-msg-textarea{ width:100%; min-height:110px; border:1.6px solid var(--line); border-radius:14px; padding:11px 13px; font-size:13.5px; font-family:inherit; color:var(--ink); resize:vertical; box-sizing:border-box; text-align:left; }
+.reminder-char-count{ text-align:right; font-size:11px; color:var(--ink-soft); margin-top:5px; }
+.reminder-recipients-note{ text-align:left; font-size:12px; color:var(--ink-soft); margin-top:2px; }
 /* --- Ficha completa do fornecedor --- */
 .supd-card{ display:flex; align-items:center; gap:13px; margin:2px 16px 16px; padding:16px; background:var(--card); border:1px solid var(--line); border-radius:18px; box-shadow:var(--shadow); }
 .supd-photo-wrap{ position:relative; width:64px; height:64px; border-radius:16px; flex-shrink:0; cursor:pointer; }
@@ -977,6 +1063,16 @@ html{
 .login-btn{ all:unset; box-sizing:border-box; cursor:pointer; width:100%; max-width:280px; text-align:center; margin:10px auto 0; display:block; padding:10px 0; border-radius:11px; background:var(--rust); color:#fff; font-size:13.5px; font-weight:600; }
 .login-btn svg{ width:14px; height:14px; flex-shrink:0; vertical-align:-2px; }
 .login-btn:active{ opacity:.8; }
+/* Corrigido (Set 2026): mais classes usadas sem nenhuma regra CSS a
+   defini-las — mesmo problema do .delete-response-link/.child-remove
+   acima, encontrado numa revisão a todo o ficheiro. */
+.loading{ padding:60px 0; color:var(--ink-soft); font-size:13.5px; text-align:center; }
+.hm-city-num{ flex-shrink:0; width:22px; height:22px; border-radius:50%; background:var(--rust); color:#fff; font-size:11.5px; font-weight:700; display:flex; align-items:center; justify-content:center; margin-right:10px; }
+/* Caixa de seleção do "modo grupo" no ecrã de RSVP (criar um link de
+   família a partir de vários convidados escolhidos à mão) — sem esta
+   regra ficava com o checkbox genérico do sistema operativo, destoando
+   de tudo o resto da app, que nunca usa controlos nativos. */
+.rsvp-group-checkbox{ accent-color:var(--rust); cursor:pointer; }
 .login-msg{ margin:16px auto 0; font-size:12.5px; color:var(--ink-soft); max-width:280px; line-height:1.5; }
 .login-msg.error{ color:var(--rust-dark); }
 .login-msg.success{ color:var(--sage-dark); }
@@ -1135,6 +1231,20 @@ html.rotate-blocked .rotate-lock-overlay{ display:flex; }
     <div class="sheet-btns">
       <button class="btn-cancel" id="gf-cancel" data-t="btnCancel">Cancelar</button>
       <button class="btn-save" id="gf-save" data-t="btnSave">Guardar</button>
+    </div>
+  </div>
+  <div class="sheet" id="guest-phone-sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title" data-t="sheetTitleGuestPhone">Telefone e comunicações</div>
+    <div class="sheet-field"><label data-t="labelPhoneOptional">Telefone (opcional)</label><input type="tel" id="gp-phone" data-t-placeholder="phGuestPhoneExample" placeholder="Ex: +351 912 345 678"></div>
+    <div class="sheet-toggle-row" id="gp-consent-row" style="display:none;">
+      <div class="toggle-label"><span data-t="labelWhatsappConsent">Pode receber comunicações da Weddy por WhatsApp</span><small data-t="subWhatsappConsent">Vais enviar-lhe lembretes e informações do casamento por WhatsApp. Pode deixar de receber a qualquer momento respondendo STOP.</small></div>
+      <button type="button" class="mini-toggle" id="gp-consent-toggle"><span class="knob"></span></button>
+    </div>
+    <div class="login-msg error" id="gp-error" style="display:none; margin-top:4px;"></div>
+    <div class="sheet-btns">
+      <button class="btn-cancel" id="gp-cancel" data-t="btnCancel">Cancelar</button>
+      <button class="btn-save" id="gp-save" data-t="btnSave">Guardar</button>
     </div>
   </div>
   <div class="sheet" id="event-sheet">
@@ -1487,6 +1597,33 @@ const CalendarService = {
     }
   }
 };
+// Fase 9.2 (parte 1) — telefone + consentimento do convidado. Nunca
+// escrito diretamente no Firestore como o resto da lista de convidados
+// (ver comentário em functions-deliverable/index.js, updateGuestPhone):
+// só esta Cloud Function valida o E.164, garante que o número é único em
+// toda a Weddy e mantém o índice invertido sincronizado.
+const GuestCommsService = {
+  async updateGuestPhone(guestId, phone, optedIn){
+    if(!cloudFunctions) return { ok:false, message:'Sem ligação à Weddy neste momento.' };
+    try{
+      const call = cloudFunctions.httpsCallable('updateGuestPhone');
+      const payload = { guestId, phone };
+      if(typeof optedIn === 'boolean') payload.optedIn = optedIn;
+      const res = await call(payload);
+      return { ok:true, phone: res && res.data && res.data.phone };
+    }catch(err){
+      console.error('Weddy GuestCommsService.updateGuestPhone error:', err.code, err.message);
+      return { ok:false, code: err && err.code, message: guestPhoneErrorMessage(err) };
+    }
+  }
+};
+function guestPhoneErrorMessage(err){
+  const code = err && err.code;
+  if(code==='already-exists') return 'Este número já está associado a outro convidado.';
+  if(code==='invalid-argument') return 'Número inválido — usa o formato internacional, ex: +351912345678.';
+  if(code==='not-found') return 'Não foi possível encontrar este convidado.';
+  return 'Não foi possível guardar. Tenta novamente.';
+}
 // Mensagens de erro amigáveis (spec §34) — nunca mostra err.message cru
 // (pode vir em inglês/técnico do lado do Google).
 function googleCalendarErrorMessage(err){
@@ -2509,7 +2646,20 @@ const APP_I18N = {
     tabHome:'Início', tabBudget:'Orçamento', tabGuests:'Convidados', tabExpenses:'Gastos', tabTables:'Mesas', tabSeating:'Lugares',
     defTitle:'Definições', defSubtitle:'Personaliza a tua experiência na Weddy<br>e gere o teu casamento.',
     sectionPremium:'Weddy Premium', sectionWedding:'O casamento', sectionData:'Os teus dados', sectionAccess:'Acesso e conta', sectionInfo:'Informação', sectionHelp:'Ajuda',
+    subscriptionTitle:'Gerir subscrição', subscriptionDesc:'O estado do teu plano Weddy Premium',
+    subscriptionActiveStatus:'Weddy Premium está ativo', subscriptionActiveText:'Tens acesso a todas as funcionalidades Premium — RSVP, Wedding Health, Memórias, Documentos e Google Calendar.',
+    subscriptionPlanLabel:'Plano', subscriptionManageNote:'(Protótipo — a gestão de faturação/cancelamento real ainda não está ligada a nenhum pagamento.)',
+    homePremiumSectionLabel:'Weddy Premium',
     rsvpTitle:'Convites RSVP', rsvpDesc:'Envia e acompanha as respostas dos convidados',
+    rsvpRespostasNavTitle:'Respostas dos convidados', rsvpRespostasNavDesc:'Vê, pesquisa e agrupa quem já respondeu',
+    rsvpDeadlineNavDesc:'Define até quando os convidados podem responder',
+    rsvpFaqNavTitle:'Perguntas personalizadas', rsvpFaqNavDesc:'O que o assistente responde aos convidados',
+    rsvpDeadlineUnset:'Ainda não definido',
+    btnAddFaq:'Adicionar pergunta', faqEmptyState:'Ainda não tens perguntas personalizadas. Adiciona a primeira.',
+    faqQuestionPlaceholder:'Pergunta (ex: Posso levar acompanhante?)', faqAnswerPlaceholder:'Resposta que o assistente vai dar',
+    btnEditFaq:'Editar', btnDeleteFaq:'Eliminar', confirmDeleteFaq:'Eliminar esta pergunta?',
+    faqToggleHint:'Desliga uma pergunta para o assistente deixar de a usar, sem a apagar.',
+    rsvpInfoSeeFaqLink:'Gerir perguntas personalizadas',
     healthTitle:'Wedding Health', healthDesc:'Um raio-x rápido ao estado do teu casamento',
     healthAllGood:'Está tudo controlado! 🎉',
     healthAllGoodDesc:'Não encontrei nada a precisar da tua atenção neste momento — passa por aqui de vez em quando.',
@@ -2867,6 +3017,10 @@ const APP_I18N = {
     autopilotModalTitle:(n)=>`Rever lembrete para ${n} convidado${n===1?'':'s'}`,
     autopilotModalHint:'A Weddy prepara o texto com o link de cada um. Confirma para copiar — o envio continua a ser sempre feito por ti (email, WhatsApp, o que preferires).',
     autopilotConfirmBtn:'Confirmar e copiar',
+    reminderChannelLabel:'Canal', reminderMsgLabel:'Mensagem',
+    reminderCharCount: n => `${n} caractere${n===1?'':'s'}`,
+    reminderRecipientsLabel: n => `Vai para ${n} convidado${n===1?'':'s'}`,
+    reminderDefaultGreeting:'Olá! É só um lembrete simpático para confirmares presença 💌',
     autopilotBadgeLate:'Atrasado — o prazo já passou',
     autopilotBadgeDue:'Precisa de um lembrete',
     btnExportCSV:'Exportar CSV',
@@ -3108,6 +3262,11 @@ const APP_I18N = {
     sheetTitleAddGuest:'Adicionar convidado',
     labelGuestName:'Nome',
     phGuestNameExample:'Ex: Maria Santos',
+    sheetTitleGuestPhone:'Telefone e comunicações',
+    labelPhoneOptional:'Telefone (opcional)',
+    phGuestPhoneExample:'Ex: +351 912 345 678',
+    labelWhatsappConsent:'Pode receber comunicações da Weddy por WhatsApp',
+    subWhatsappConsent:'Vais enviar-lhe lembretes e informações do casamento por WhatsApp. Pode deixar de receber a qualquer momento respondendo STOP.',
     labelSide:'Lado',
     labelEventName:'Nome',
     phEventNameExample:'Ex: Cerimónia, Cocktail, Jantar…',
@@ -3142,7 +3301,20 @@ const APP_I18N = {
     tabHome:'Home', tabBudget:'Budget', tabGuests:'Guests', tabExpenses:'Expenses', tabTables:'Tables', tabSeating:'Seating',
     defTitle:'Settings', defSubtitle:'Customize your Weddy experience<br>and manage your wedding.',
     sectionPremium:'Weddy Premium', sectionWedding:'The wedding', sectionData:'Your data', sectionAccess:'Access & account', sectionInfo:'Information', sectionHelp:'Help',
+    subscriptionTitle:'Manage subscription', subscriptionDesc:'Your Weddy Premium plan status',
+    subscriptionActiveStatus:'Weddy Premium is active', subscriptionActiveText:"You have access to every Premium feature — RSVP, Wedding Health, Memories, Documents and Google Calendar.",
+    subscriptionPlanLabel:'Plan', subscriptionManageNote:'(Prototype — real billing/cancellation management is not connected to any payment yet.)',
+    homePremiumSectionLabel:'Weddy Premium',
     rsvpTitle:'RSVP invitations', rsvpDesc:"Send and track your guests' responses",
+    rsvpRespostasNavTitle:'Guest responses', rsvpRespostasNavDesc:"See, search and group who's already replied",
+    rsvpDeadlineNavDesc:'Set the deadline for guests to respond',
+    rsvpFaqNavTitle:'Custom questions', rsvpFaqNavDesc:'What the assistant answers to guests',
+    rsvpDeadlineUnset:'Not set yet',
+    btnAddFaq:'Add question', faqEmptyState:"You don't have any custom questions yet. Add the first one.",
+    faqQuestionPlaceholder:'Question (e.g. Can I bring a plus one?)', faqAnswerPlaceholder:'Answer the assistant should give',
+    btnEditFaq:'Edit', btnDeleteFaq:'Delete', confirmDeleteFaq:'Delete this question?',
+    faqToggleHint:"Turn a question off for the assistant to stop using it, without deleting it.",
+    rsvpInfoSeeFaqLink:'Manage custom questions',
     healthTitle:'Wedding Health', healthDesc:"A quick check-up on how your wedding is going",
     healthAllGood:'Everything looks good! 🎉',
     healthAllGoodDesc:"Nothing needs your attention right now — check back every now and then.",
@@ -3500,6 +3672,10 @@ const APP_I18N = {
     autopilotModalTitle:(n)=>`Review reminder for ${n} guest${n===1?'':'s'}`,
     autopilotModalHint:'Weddy prepares the text with each guest\'s link. Confirm to copy — sending is always up to you (email, WhatsApp, whatever you prefer).',
     autopilotConfirmBtn:'Confirm and copy',
+    reminderChannelLabel:'Channel', reminderMsgLabel:'Message',
+    reminderCharCount: n => `${n} character${n===1?'':'s'}`,
+    reminderRecipientsLabel: n => `Going to ${n} guest${n===1?'':'s'}`,
+    reminderDefaultGreeting:"Hi! Just a friendly reminder to confirm you're coming 💌",
     autopilotBadgeLate:'Late — the deadline has passed',
     autopilotBadgeDue:'Needs a reminder',
     btnExportCSV:'Export CSV',
@@ -3741,6 +3917,11 @@ const APP_I18N = {
     sheetTitleAddGuest:'Add guest',
     labelGuestName:'Name',
     phGuestNameExample:'E.g. Maria Santos',
+    sheetTitleGuestPhone:'Phone and communications',
+    labelPhoneOptional:'Phone (optional)',
+    phGuestPhoneExample:'E.g. +351 912 345 678',
+    labelWhatsappConsent:'Can receive communications from Weddy by WhatsApp',
+    subWhatsappConsent:'You\'ll be sending reminders and wedding info by WhatsApp. They can stop receiving these at any time by replying STOP.',
     labelSide:'Side',
     labelEventName:'Name',
     phEventNameExample:'E.g. Ceremony, Cocktail, Dinner…',
@@ -4162,6 +4343,9 @@ function viewInicio(){
     </div>
   </div>
 
+  <div class="section-label-v2">${ta('homePremiumSectionLabel')}</div>
+  ${premiumFeatureGrid()}
+
   <div class="section-label-row-v2">
     <span class="section-label-v2" style="margin:0; flex:1;">${ta('homeBigDayLabel')}</span>
     <button class="nav-action" id="add-event-btn" style="width:26px;height:26px;">${ICONS.plus}</button>
@@ -4169,6 +4353,32 @@ function viewInicio(){
   ${eventsHTML}
 
   `;
+}
+// Reorganização (Set 2026): grelha de cartões Premium na página principal —
+// substitui as antigas linhas escondidas dentro de Definições. Quem ainda
+// não tem Premium ativo vê os cartões com um cadeado por cima (transparência
+// + ícone); ao ativar a subscrição, o cadeado desaparece e os cartões ficam
+// normais, tocáveis, exatamente como qualquer outro atalho da Início.
+function premiumFeatureCard(key, icon, colorIdx, title, desc, badge, locked){
+  return `
+  <button class="premium-feature-card" data-premiumgoto="${key}">
+    <div class="premium-feature-icon" style="${chipStyle(colorIdx)}">${icon}</div>
+    <div class="premium-feature-title">${title}</div>
+    ${desc? `<div class="premium-feature-desc">${desc}</div>` : ''}
+    ${(!locked && badge) ? `<span class="premium-feature-badge">${badge}</span>` : ''}
+    ${locked ? `<div class="premium-feature-lock"><div class="premium-feature-lock-icon">${ICONS.lock}</div></div>` : ''}
+  </button>`;
+}
+function premiumFeatureGrid(){
+  const subscribed = hasActiveSubscription();
+  return `
+  <div class="premium-feature-grid">
+    ${premiumFeatureCard('rsvp', ICONS.mail, 6, ta('rsvpTitle'), subscribed ? ta('rsvpDesc') : '', subscribed ? getRSVPNewResponsesCount() : 0, !subscribed)}
+    ${premiumFeatureCard('health', ICONS.warn||ICONS.checklist, 2, ta('healthTitle'), subscribed ? ta('healthDesc') : '', subscribed ? getWeddingHealthChecks().length : 0, !subscribed)}
+    ${premiumFeatureCard('memories', ICONS.camera, 3, ta('memoriesTitle'), subscribed ? ta('memoriesDesc') : '', 0, !subscribed)}
+    ${premiumFeatureCard('documentos', ICONS.docnote||ICONS.checklist, 4, ta('documentsTitle'), subscribed ? ta('documentsDesc') : '', 0, !subscribed)}
+    ${premiumFeatureCard('googlecalendar', ICONS.calendar, 0, ta('googleCalendarTitle'), subscribed ? (googleCalendarIntegration && googleCalendarIntegration.connected ? ta('googleCalendarConnectedDesc') : ta('googleCalendarDesc')) : '', 0, !subscribed)}
+  </div>`;
 }
 
 /* ============================================================
@@ -4319,6 +4529,7 @@ function guestGroupHTML(side, catKey, catLabel, icon, colorIdx, isCustom){
       ${!isSearching ? `<button class="drag-handle" data-draghandle="${side}|${catKey}">${ICONS.draghandle}</button>` : '<span style="width:20px;flex-shrink:0;"></span>'}
       <div class="check tappable" data-confirm="${side}|${catKey}|${idx}">${ICONS.check}</div>
       <input type="text" class="title-input-inline" style="flex:1; min-width:0;" data-editguest="${side}|${catKey}|${idx}" value="${escapeHTML(name)}">
+      <button class="remove-x" style="${(typeof n==='object'&&n&&n.phone)?'color:var(--rust,#B5654B);opacity:1;':'opacity:.35;'}" data-editphone="${side}|${catKey}|${idx}" title="${ta('labelPhoneOptional')}">${ICONS.phone}</button>
       <button class="remove-x" data-remove="${side}|${catKey}|${idx}">✕</button>
       ${hasPayment ? `
       <div class="child-extra-row">
@@ -4435,6 +4646,12 @@ function bindGuestGroupHandlers(scope){
         console.error('Weddy: falha a apagar o convite RSVP associado ao convidado removido.', err && err.code, err && err.message);
       });
       softUpdateConvidados();
+    });
+  });
+  scope.querySelectorAll('[data-editphone]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      const [side,cat,idx] = e.currentTarget.dataset.editphone.split('|');
+      openGuestPhoneSheet(side, cat, Number(idx));
     });
   });
   scope.querySelectorAll('[data-editguest]').forEach(inp=>{
@@ -6314,6 +6531,13 @@ let lastRSVPRefreshAt = null;
 // "side|catId|idx" dos convidados escolhidos até se criar o link.
 let rsvpGroupMode = false;
 let rsvpGroupSelection = [];
+// Reorganização (Set 2026): ecrã de gestão do RSVP passou a ser um pequeno
+// "hub" de navegação em vez de uma página única com tudo — rsvpSubScreen
+// guarda em que sub-ecrã estamos (null = ecrã principal do hub).
+let rsvpSubScreen = null; // null | 'deadline' | 'info' | 'faq' | 'respostas'
+// Edição de perguntas frequentes (Concierge): null = nenhuma a editar,
+// 'new' = a criar uma nova, ou o índice (número) da pergunta existente.
+let rsvpFaqEditingIndex = null;
 function fmtRelativeTime(date){
   if(!date) return '';
   const diffMin = Math.round((Date.now() - date.getTime())/60000);
@@ -7793,19 +8017,170 @@ function viewDefWeddingHealth(){
 function viewDefRSVP(){
   if(!hasActiveSubscription()) return viewDefPremiumLocked(ta('rsvpTitle'));
   if(!rsvpResponsesLoaded && !rsvpLoadingResponses) loadRSVPResponses();
+  if(rsvpSubScreen==='deadline') return viewRSVPDeadline();
+  if(rsvpSubScreen==='info') return viewRSVPInfo();
+  if(rsvpSubScreen==='faq') return viewRSVPFaq();
+  if(rsvpSubScreen==='respostas') return viewRSVPRespostas();
+  return viewRSVPHome();
+}
+// Reorganização (Set 2026): ecrã principal do RSVP passou a ser um "hub" de
+// navegação (3 cartões de estatística + 3 linhas de navegação), em vez de
+// uma única página com tudo em sequência — usa.data-rsvpgoto para navegar
+// para cada sub-ecrã (viewRSVPDeadline/viewRSVPInfo/viewRSVPRespostas),
+// tal como o data-defgoto do menu de Definições faz para as suas secções.
+function rsvpNavRow(key, icon, colorIdx, title, desc){
+  return `
+  <div class="rsvp-nav-row tappable" data-rsvpgoto="${key}">
+    <div class="rsvp-nav-row-icon" style="${chipStyle(colorIdx)}">${icon}</div>
+    <div class="rsvp-nav-row-mid">
+      <div class="rsvp-nav-row-title">${title}</div>
+      <div class="rsvp-nav-row-desc">${desc}</div>
+    </div>
+    <span class="rsvp-nav-row-chev">${ICONS.chev}</span>
+  </div>`;
+}
+function viewRSVPHome(){
   const allGuests = flattenAllGuestsForRSVP();
   const totalGuests = allGuests.length;
   let responded = 0, confirmedYes = 0;
-  // Calcula o estado de cada convidado uma vez (para as estatísticas do
-  // topo contarem sempre TODOS os convidados, mesmo com a pesquisa/filtro
-  // ativos a esconder linhas da lista).
-  let maybeCount = 0;
-  const withStatus = allGuests.map(item=>{
+  allGuests.forEach(item=>{
     const token = item.entry.rsvpToken;
     const resp = token ? memberRSVPResponse(item) : null;
     const status = rsvpStatusOf(resp);
     if(status!=='pending') responded++;
     if(status==='yes') confirmedYes++;
+  });
+  const deadline = weddingSettings.rsvpDeadline || '';
+  const deadlineLabel = deadline ? formatDatePT(deadline) : ta('rsvpDeadlineUnset');
+  return `
+  ${defSubHeader(ta('rsvpTitle'))}
+  <div class="stats-row">
+    <div class="stat-card"><div class="l" style="margin:0 0 4px;">${ta('tabGuests')}</div><div class="n">${fmtGuestCount(totalGuests)}</div></div>
+    <div class="stat-card"><div class="l" style="margin:0 0 4px;">${ta('respondedLabel')}</div><div class="n">${fmtGuestCount(responded)}</div></div>
+    <div class="stat-card"><div class="l" style="margin:0 0 4px;">${ta('lblConfirmed')}</div><div class="n">${fmtGuestCount(confirmedYes)}</div></div>
+  </div>
+  ${rsvpNavRow('deadline', ICONS.calendar, 0, ta('labelRSVPDeadline'), deadlineLabel)}
+  ${rsvpNavRow('info', ICONS.pencil, 1, ta('guestInfoLabel'), ta('guestInfoSubLabel'))}
+  ${rsvpNavRow('respostas', ICONS.guests, 2, ta('rsvpRespostasNavTitle'), ta('rsvpRespostasNavDesc'))}
+  <div class="empty-note" style="margin:16px 16px 28px;">${ta('rsvpNoteAutoFree')}</div>
+  `;
+}
+function viewRSVPDeadline(){
+  const allGuests = flattenAllGuestsForRSVP();
+  const withStatus = allGuests.map(item=>{
+    const token = item.entry.rsvpToken;
+    const resp = token ? memberRSVPResponse(item) : null;
+    return { status: rsvpStatusOf(resp) };
+  });
+  const pending = withStatus.filter(w=>w.status==='pending');
+  const autopilot = rsvpAutopilotList();
+  const lateList = autopilot.filter(x=>x.bucket==='late');
+  const dueList = autopilot.filter(x=>x.bucket==='due');
+  const needsAttention = [...lateList, ...dueList];
+  const deadline = weddingSettings.rsvpDeadline || '';
+  const deadlinePassed = deadline && deadline < new Date().toISOString().slice(0,10);
+  const deadlineWarnHtml = (deadlinePassed && pending.length)
+    ? `<div class="rsvp-deadline-warn">${ICONS.warn}<div>${ta('deadlinePassedWarn')(formatDatePT(deadline), pending.length)}</div></div>`
+    : '';
+  return `
+  ${defSubHeader(ta('labelRSVPDeadline'))}
+  <div class="rsvp-deadline-card">
+    <div style="flex:1; min-width:0;">
+      <div class="l">${ta('labelRSVPDeadline')}</div>
+      <input type="date" id="rsvp-deadline-input" value="${escapeHTML(deadline)}">
+    </div>
+    <button class="rsvp-deadline-save" id="rsvp-deadline-save">${ta('btnSave')}</button>
+  </div>
+  ${deadlineWarnHtml}
+  ${autopilot.length ? `
+  <div class="stat-card" style="margin:0 16px 12px;">
+    <div class="l" style="margin:0 0 8px;">${ta('autopilotTitle')}</div>
+    <div class="empty-note" style="margin:0 0 10px; font-style:normal;">${[
+      lateList.length ? ta('autopilotLateCount')(lateList.length) : '',
+      dueList.length ? ta('autopilotDueCount')(dueList.length) : ''
+    ].filter(Boolean).join(' · ') || ta('autopilotAllOnTime')}</div>
+    <button class="rsvp-deadline-save" id="rsvp-autopilot-prepare" style="width:100%;" ${needsAttention.length? '':'disabled'}>${ICONS.bell} ${ta('autopilotPrepareBtn')(needsAttention.length)}</button>
+  </div>` : ''}
+  `;
+}
+function viewRSVPInfo(){
+  return `
+  ${defSubHeader(ta('guestInfoLabel'))}
+  <div class="stat-card" style="margin:0 16px 12px;">
+    <div class="l" style="margin:0 0 8px;">${ta('guestInfoLabel')} <span style="font-weight:400;">${ta('guestInfoSubLabel')}</span></div>
+    <input class="field-input" id="rsvp-dresscode-input" type="text" placeholder="${ta('phDressCode')}" value="${escapeHTML(weddingSettings.guestDressCode||'')}" style="text-align:left; margin-bottom:10px; border:1.6px solid var(--line); border-radius:12px; padding:10px 12px; font-size:13.5px;">
+    <textarea id="rsvp-guestnotes-input" placeholder="${ta('phGuestNotes')}" style="width:100%; min-height:70px; border:1.6px solid var(--line); border-radius:12px; padding:10px 12px; font-size:13.5px; font-family:inherit; color:var(--ink); resize:vertical;">${escapeHTML(weddingSettings.guestInfoNotes||'')}</textarea>
+    <button class="rsvp-deadline-save" id="rsvp-guestinfo-save" style="margin-top:10px; width:100%;">${ta('btnSaveInfo')}</button>
+  </div>
+  <div class="stat-card" style="margin:0 16px 12px;">
+    <div class="l" style="margin:0 0 8px;">${ta('conciergeLabel')} <span style="font-weight:400;">${ta('conciergeSubLabel')}</span></div>
+    <input class="field-input" id="rsvp-parking-input" type="text" placeholder="${ta('phParking')}" value="${escapeHTML(weddingSettings.guestParkingInfo||'')}" style="text-align:left; margin-bottom:8px; border:1.6px solid var(--line); border-radius:12px; padding:10px 12px; font-size:13.5px;">
+    <input class="field-input" id="rsvp-transport-input" type="text" placeholder="${ta('phTransport')}" value="${escapeHTML(weddingSettings.guestTransportInfo||'')}" style="text-align:left; margin-bottom:8px; border:1.6px solid var(--line); border-radius:12px; padding:10px 12px; font-size:13.5px;">
+    <input class="field-input" id="rsvp-accommodation-input" type="text" placeholder="${ta('phAccommodation')}" value="${escapeHTML(weddingSettings.guestAccommodationInfo||'')}" style="text-align:left; margin-bottom:8px; border:1.6px solid var(--line); border-radius:12px; padding:10px 12px; font-size:13.5px;">
+    <input class="field-input" id="rsvp-gifts-input" type="text" placeholder="${ta('phGifts')}" value="${escapeHTML(weddingSettings.guestGiftsInfo||'')}" style="text-align:left; margin-bottom:8px; border:1.6px solid var(--line); border-radius:12px; padding:10px 12px; font-size:13.5px;">
+    <input class="field-input" id="rsvp-contact-input" type="text" placeholder="${ta('phContact')}" value="${escapeHTML(weddingSettings.guestContactInfo||'')}" style="text-align:left; margin-bottom:10px; border:1.6px solid var(--line); border-radius:12px; padding:10px 12px; font-size:13.5px;">
+    <button class="rsvp-deadline-save" id="rsvp-concierge-save" style="margin-top:10px; width:100%;">${ta('btnSaveInfo')}</button>
+  </div>
+  ${rsvpNavRow('faq', ICONS.question, 2, ta('rsvpFaqNavTitle'), ta('rsvpFaqNavDesc'))}
+  `;
+}
+function viewRSVPFaq(){
+  const list = Array.isArray(weddingSettings.guestFaqList) ? weddingSettings.guestFaqList : [];
+  const editing = rsvpFaqEditingIndex;
+  const cards = list.map((f,i)=>{
+    const active = f.active!==false;
+    if(editing===i){
+      return `
+      <div class="faq-card">
+        <textarea class="faq-edit-field" id="rsvp-faq-edit-q" rows="2" placeholder="${ta('faqQuestionPlaceholder')}">${escapeHTML(f.q||'')}</textarea>
+        <textarea class="faq-edit-field" id="rsvp-faq-edit-a" rows="3" placeholder="${ta('faqAnswerPlaceholder')}">${escapeHTML(f.a||'')}</textarea>
+        <div style="display:flex; gap:8px;">
+          <button class="rsvp-deadline-save" data-faqsave="${i}" style="flex:1;">${ta('btnSave')}</button>
+          <button class="rsvp-copy-btn" data-faqcancel style="flex:0 0 auto;">${ta('btnCancel')||'Cancelar'}</button>
+        </div>
+      </div>`;
+    }
+    return `
+    <div class="faq-card${active?'':' off'}">
+      <div class="faq-card-top">
+        <div>
+          <div class="faq-card-q">${escapeHTML(f.q||'')}</div>
+          <div class="faq-card-a">${escapeHTML(f.a||'')}</div>
+        </div>
+        <button class="faq-toggle${active?' on':''}" data-faqtoggle="${i}"><span class="faq-toggle-knob"></span></button>
+      </div>
+      <div class="faq-card-actions">
+        <button class="faq-card-action" data-faqedit="${i}">${ICONS.pencil} ${ta('btnEditFaq')}</button>
+        <button class="faq-card-action danger" data-faqdel="${i}">${ICONS.trash} ${ta('btnDeleteFaq')}</button>
+      </div>
+    </div>`;
+  }).join('');
+  const newCardHtml = editing==='new' ? `
+    <div class="faq-card">
+      <textarea class="faq-edit-field" id="rsvp-faq-edit-q" rows="2" placeholder="${ta('faqQuestionPlaceholder')}"></textarea>
+      <textarea class="faq-edit-field" id="rsvp-faq-edit-a" rows="3" placeholder="${ta('faqAnswerPlaceholder')}"></textarea>
+      <div style="display:flex; gap:8px;">
+        <button class="rsvp-deadline-save" data-faqsave="new" style="flex:1;">${ta('btnSave')}</button>
+        <button class="rsvp-copy-btn" data-faqcancel style="flex:0 0 auto;">${ta('btnCancel')||'Cancelar'}</button>
+      </div>
+    </div>` : '';
+  return `
+  ${defSubHeader(ta('rsvpFaqNavTitle'))}
+  <div class="empty-note" style="margin:0 16px 12px; font-style:normal;">${ta('faqToggleHint')}</div>
+  ${list.length ? cards : (editing==='new' ? '' : `<div class="empty-note" style="margin:0 16px 12px;">${ta('faqEmptyState')}</div>`)}
+  ${newCardHtml}
+  ${editing==='new' ? '' : `<button class="faq-add-btn" id="rsvp-faq-add">${ICONS.plus} ${ta('btnAddFaq')}</button>`}
+  <button id="rsvp-faq-silent-save" hidden></button>
+  `;
+}
+function viewRSVPRespostas(){
+  const allGuests = flattenAllGuestsForRSVP();
+  const totalGuests = allGuests.length;
+  let maybeCount = 0;
+  const withStatus = allGuests.map(item=>{
+    const token = item.entry.rsvpToken;
+    const resp = token ? memberRSVPResponse(item) : null;
+    const status = rsvpStatusOf(resp);
     if(status==='maybe') maybeCount++;
     return { item, token, resp, status };
   });
@@ -7897,69 +8272,15 @@ function viewDefRSVP(){
     const style = `padding:8px 13px; font-size:12px;${active? ' background:var(--rust); color:#fff; border-color:var(--rust);':''}`;
     return `<button class="assist-chip" style="${style}" data-rsvpfilter="${key}">${escapeHTML(label)}</button>`;
   }).join('');
-  const pending = withStatus.filter(w=>w.status==='pending');
-  // Fase 5 — RSVP Autopilot: classifica todos os pendentes por urgência.
-  // needsAttention (atrasados + a precisar de lembrete) é quem entra por
-  // omissão no lembrete preparado pela Weddy — quem ainda está bem dentro
-  // do prazo (🟡) não é incomodado sem necessidade.
-  const autopilot = rsvpAutopilotList();
-  const lateList = autopilot.filter(x=>x.bucket==='late');
-  const dueList = autopilot.filter(x=>x.bucket==='due');
-  const needsAttention = [...lateList, ...dueList];
   const transporteCount = withStatus.filter(w=>w.status==='yes' && w.resp && w.resp.transporte).length;
   const alojamentoCount = withStatus.filter(w=>w.status==='yes' && w.resp && w.resp.alojamento).length;
-  const deadline = weddingSettings.rsvpDeadline || '';
-  const deadlinePassed = deadline && deadline < new Date().toISOString().slice(0,10);
-  const deadlineWarnHtml = (deadlinePassed && pending.length)
-    ? `<div class="rsvp-deadline-warn">${ICONS.warn}<div>${ta('deadlinePassedWarn')(formatDatePT(deadline), pending.length)}</div></div>`
-    : '';
   return `
-  ${defSubHeader(ta('rsvpTitle'))}
-  <div class="stats-row">
-    <div class="stat-card"><div class="l" style="margin:0 0 4px;">${ta('tabGuests')}</div><div class="n">${fmtGuestCount(totalGuests)}</div></div>
-    <div class="stat-card"><div class="l" style="margin:0 0 4px;">${ta('respondedLabel')}</div><div class="n">${fmtGuestCount(responded)}</div></div>
-    <div class="stat-card"><div class="l" style="margin:0 0 4px;">${ta('lblConfirmed')}</div><div class="n">${fmtGuestCount(confirmedYes)}</div></div>
-  </div>
+  ${defSubHeader(ta('rsvpRespostasNavTitle'))}
   ${(maybeCount || transporteCount || alojamentoCount) ? `<div class="empty-note" style="margin:0 16px 12px; font-style:normal;">${[
     maybeCount ? ta('maybeCountLabel')(maybeCount) : '',
     transporteCount ? ta('transportCountLabel')(transporteCount) : '',
     alojamentoCount ? ta('accommodationCountLabel')(alojamentoCount) : ''
   ].filter(Boolean).join(' · ')}</div>` : ''}
-  ${autopilot.length ? `
-  <div class="stat-card" style="margin:0 16px 12px;">
-    <div class="l" style="margin:0 0 8px;">${ta('autopilotTitle')}</div>
-    <div class="empty-note" style="margin:0 0 10px; font-style:normal;">${[
-      lateList.length ? ta('autopilotLateCount')(lateList.length) : '',
-      dueList.length ? ta('autopilotDueCount')(dueList.length) : ''
-    ].filter(Boolean).join(' · ') || ta('autopilotAllOnTime')}</div>
-    <button class="rsvp-deadline-save" id="rsvp-autopilot-prepare" style="width:100%;" ${needsAttention.length? '':'disabled'}>${ICONS.bell} ${ta('autopilotPrepareBtn')(needsAttention.length)}</button>
-  </div>` : ''}
-  <div class="rsvp-deadline-card">
-    <div style="flex:1; min-width:0;">
-      <div class="l">${ta('labelRSVPDeadline')}</div>
-      <input type="date" id="rsvp-deadline-input" value="${escapeHTML(deadline)}">
-    </div>
-    <button class="rsvp-deadline-save" id="rsvp-deadline-save">${ta('btnSave')}</button>
-  </div>
-  ${deadlineWarnHtml}
-  <div class="stat-card" style="margin:0 16px 12px;">
-    <div class="l" style="margin:0 0 8px;">${ta('guestInfoLabel')} <span style="font-weight:400;">${ta('guestInfoSubLabel')}</span></div>
-    <input class="field-input big" id="rsvp-dresscode-input" type="text" placeholder="${ta('phDressCode')}" value="${escapeHTML(weddingSettings.guestDressCode||'')}" style="text-align:left; margin-bottom:10px;">
-    <textarea id="rsvp-guestnotes-input" placeholder="${ta('phGuestNotes')}" style="width:100%; min-height:70px; border:1.6px solid var(--line); border-radius:12px; padding:10px 12px; font-size:13.5px; font-family:inherit; color:var(--ink); resize:vertical;">${escapeHTML(weddingSettings.guestInfoNotes||'')}</textarea>
-    <button class="rsvp-deadline-save" id="rsvp-guestinfo-save" style="margin-top:10px; width:100%;">${ta('btnSaveInfo')}</button>
-  </div>
-  <div class="stat-card" style="margin:0 16px 12px;">
-    <div class="l" style="margin:0 0 8px;">${ta('conciergeLabel')} <span style="font-weight:400;">${ta('conciergeSubLabel')}</span></div>
-    <input class="field-input big" id="rsvp-parking-input" type="text" placeholder="${ta('phParking')}" value="${escapeHTML(weddingSettings.guestParkingInfo||'')}" style="text-align:left; margin-bottom:8px;">
-    <input class="field-input big" id="rsvp-transport-input" type="text" placeholder="${ta('phTransport')}" value="${escapeHTML(weddingSettings.guestTransportInfo||'')}" style="text-align:left; margin-bottom:8px;">
-    <input class="field-input big" id="rsvp-accommodation-input" type="text" placeholder="${ta('phAccommodation')}" value="${escapeHTML(weddingSettings.guestAccommodationInfo||'')}" style="text-align:left; margin-bottom:8px;">
-    <input class="field-input big" id="rsvp-gifts-input" type="text" placeholder="${ta('phGifts')}" value="${escapeHTML(weddingSettings.guestGiftsInfo||'')}" style="text-align:left; margin-bottom:8px;">
-    <input class="field-input big" id="rsvp-contact-input" type="text" placeholder="${ta('phContact')}" value="${escapeHTML(weddingSettings.guestContactInfo||'')}" style="text-align:left; margin-bottom:10px;">
-    <div class="l" style="margin:0 0 6px;">${ta('conciergeFaqLabel')}</div>
-    <textarea id="rsvp-faq-input" placeholder="${ta('phConciergeFaq')}" style="width:100%; min-height:110px; border:1.6px solid var(--line); border-radius:12px; padding:10px 12px; font-size:13.5px; font-family:inherit; color:var(--ink); resize:vertical;">${escapeHTML(faqListToRaw(weddingSettings.guestFaqList))}</textarea>
-    <div class="empty-note" style="margin:6px 0 0; font-style:normal;">${ta('conciergeFaqHint')}</div>
-    <button class="rsvp-deadline-save" id="rsvp-concierge-save" style="margin-top:10px; width:100%;">${ta('btnSaveInfo')}</button>
-  </div>
   <button class="rsvp-refresh-btn" id="rsvp-refresh-respostas" ${rsvpLoadingResponses?'disabled':''}>${ICONS.refresh} ${rsvpLoadingResponses? ta('updatingLabel') : ta('btnUpdateResponses')}</button>
   <div class="rsvp-updated-note">${lastRSVPRefreshAt? ta('lastUpdateLabel')(fmtRelativeTime(lastRSVPRefreshAt)) : ta('neverUpdatedLabel')}</div>
   ${lastRSVPSyncSummary ? `<div class="empty-note" style="margin:0 16px 10px; font-style:normal;">${rsvpSyncSummaryText(lastRSVPSyncSummary)}</div>` : ''}
@@ -8131,7 +8452,28 @@ function viewDefinicoes(){
   if(definicoesSection==='memories') return viewDefMemories();
   if(definicoesSection==='documentos') return viewDefDocumentos();
   if(definicoesSection==='googlecalendar') return viewDefGoogleCalendar();
+  if(definicoesSection==='subscricao') return viewDefSubscricao();
   return viewDefMenu();
+}
+// Reorganização (Set 2026): as áreas Premium (RSVP, Wedding Health,
+// Memórias, Documentos, Google Calendar) passaram a viver como cartões na
+// página principal (ver premiumFeatureGrid em viewInicio) em vez de linhas
+// aqui — Definições fica só com esta entrada para gerir a subscrição em si.
+function viewDefSubscricao(){
+  if(!hasActiveSubscription()) return viewDefPremiumLocked(ta('subscriptionTitle'));
+  const plan = (currentSubscription && currentSubscription.plan) || '';
+  return `
+  ${defSubHeader(ta('subscriptionTitle'))}
+  <div class="stat-card" style="margin:0 16px 12px; display:flex; align-items:center; gap:12px;">
+    <div class="premium-upsell-icon" style="width:36px; height:36px; margin:0; flex-shrink:0;">${ICONS.sparkle}</div>
+    <div>
+      <div class="l" style="margin:0 0 2px; font-size:15px; color:var(--ink);">${ta('subscriptionActiveStatus')}</div>
+      ${plan? `<div class="l" style="margin:0;">${ta('subscriptionPlanLabel')}: ${escapeHTML(plan)}</div>` : ''}
+    </div>
+  </div>
+  <div class="empty-note" style="margin:0 16px 12px;">${ta('subscriptionActiveText')}</div>
+  <div class="empty-note" style="margin:0 16px 28px;">${ta('subscriptionManageNote')}</div>
+  `;
 }
 
 function defMenuRow(key, icon, colorIdx, label, desc, badge){
@@ -8162,11 +8504,7 @@ function viewDefMenu(){
 
   <div class="section-label-caps">${ta('sectionPremium')}</div>
   <div class="list-group">
-    ${defMenuRow('rsvp', ICONS.mail, 6, ta('rsvpTitle'), subscribed ? ta('rsvpDesc') : ta('subscriptionNeeded'), subscribed ? getRSVPNewResponsesCount() : 0)}
-    ${defMenuRow('health', ICONS.warn||ICONS.checklist, 2, ta('healthTitle'), subscribed ? ta('healthDesc') : ta('subscriptionNeeded'), subscribed ? getWeddingHealthChecks().length : 0)}
-    ${defMenuRow('memories', ICONS.camera, 3, ta('memoriesTitle'), subscribed ? ta('memoriesDesc') : ta('subscriptionNeeded'))}
-    ${defMenuRow('documentos', ICONS.docnote||ICONS.checklist, 4, ta('documentsTitle'), subscribed ? ta('documentsDesc') : ta('subscriptionNeeded'))}
-    ${defMenuRow('googlecalendar', ICONS.calendar, 0, ta('googleCalendarTitle'), subscribed ? (googleCalendarIntegration && googleCalendarIntegration.connected ? ta('googleCalendarConnectedDesc') : ta('googleCalendarDesc')) : ta('subscriptionNeeded'))}
+    ${defMenuRow('subscricao', ICONS.sparkle||ICONS.lock, 6, ta('subscriptionTitle'), subscribed ? ta('subscriptionActiveStatus') : ta('subscriptionNeeded'))}
   </div>
 
   <div class="section-label-caps">${ta('sectionWedding')}</div>
@@ -9043,12 +9381,51 @@ function bindHandlers(){
     el.addEventListener('click', e=>{
       const key = e.currentTarget.dataset.defgoto;
       definicoesSection = key;
+      rsvpSubScreen = null;
+      if(key==='rsvp') setRSVPSeenCount(countRSVPResponded());
+      _origRender();
+    });
+  });
+  // Reorganização (Set 2026): navegação dentro do "hub" do RSVP (Prazo,
+  // Informações, Respostas) — mesmo padrão do data-defgoto, mas para os
+  // sub-ecrãs dentro da secção "rsvp".
+  document.querySelectorAll('[data-rsvpgoto]').forEach(el=>{
+    el.addEventListener('click', e=>{
+      rsvpSubScreen = e.currentTarget.dataset.rsvpgoto;
+      rsvpFaqEditingIndex = null;
+      _origRender();
+    });
+  });
+  // Reorganização (Set 2026): cartões Premium na página principal (Início)
+  // — mesmo padrão do data-healthgoto "def:x" já usado pelo Wedding Health,
+  // salta direto para a secção certa dentro de Definições (que continua a
+  // decidir se mostra o ecrã normal ou o upsell, consoante a subscrição).
+  document.querySelectorAll('[data-premiumgoto]').forEach(el=>{
+    el.addEventListener('click', e=>{
+      const key = e.currentTarget.dataset.premiumgoto;
+      closeAllSheets();
+      activeTab = 'definicoes';
+      definicoesSection = key;
+      rsvpSubScreen = null;
       if(key==='rsvp') setRSVPSeenCount(countRSVPResponded());
       _origRender();
     });
   });
   document.querySelectorAll('[data-defback]').forEach(el=>{
-    el.addEventListener('click', ()=>{ definicoesSection = null; _origRender(); });
+    el.addEventListener('click', ()=>{
+      // Se estivermos num sub-ecrã do hub de RSVP, o botão "voltar" primeiro
+      // regressa ao hub (não sai logo de "Convites RSVP" para o menu geral
+      // de Definições).
+      if(definicoesSection==='rsvp' && rsvpSubScreen){
+        if(rsvpSubScreen==='faq'){ rsvpSubScreen = 'info'; }
+        else { rsvpSubScreen = null; }
+        rsvpFaqEditingIndex = null;
+        _origRender();
+        return;
+      }
+      definicoesSection = null;
+      _origRender();
+    });
   });
   // Botões "Resolver" do Wedding Health — saltam para o separador principal
   // (tab:x) ou para uma secção de Definições (def:x), fechando a própria
@@ -9317,14 +9694,89 @@ function bindHandlers(){
     const accommodationInput = document.getElementById('rsvp-accommodation-input');
     const giftsInput = document.getElementById('rsvp-gifts-input');
     const contactInput = document.getElementById('rsvp-contact-input');
-    const faqInput = document.getElementById('rsvp-faq-input');
+    // Nota (Set 2026): as perguntas frequentes (guestFaqList) já não têm
+    // textarea própria aqui — têm o seu próprio ecrã/editor ("Perguntas
+    // personalizadas") com guardado independente (ver handlers data-faq*
+    // abaixo), por isso este botão já não lhes mexe.
     saveAndSyncWeddingSettingsToGuests(rsvpConciergeSave, {
       guestParkingInfo: parkingInput? parkingInput.value.trim() : '',
       guestTransportInfo: transportInput? transportInput.value.trim() : '',
       guestAccommodationInfo: accommodationInput? accommodationInput.value.trim() : '',
       guestGiftsInfo: giftsInput? giftsInput.value.trim() : '',
-      guestContactInfo: contactInput? contactInput.value.trim() : '',
-      guestFaqList: rawToFaqList(faqInput? faqInput.value : '')
+      guestContactInfo: contactInput? contactInput.value.trim() : ''
+    });
+  });
+  // Editor de "Perguntas personalizadas" (Concierge FAQ) — cada pergunta
+  // guarda-se de imediato (toggle/editar/eliminar/adicionar), sem depender
+  // do botão "Guardar" de nenhum outro cartão.
+  // Nota: saveAndSyncWeddingSettingsToGuests precisa de um botão real (usa
+  // btn.textContent para mostrar "A guardar…"/"Guardado ✓"); os botões dos
+  // cartões de FAQ (toggle/eliminar) não têm esse texto, por isso guardamos
+  // via um botão dedicado invisível de "Guardar" sempre presente no ecrã
+  // (ver #rsvp-faq-silent-save no viewRSVPFaq) para não rebentar nem mudar
+  // o texto de um botão que a pessoa não está a ver como "guardar".
+  function rsvpSaveFaqList(list){
+    weddingSettings.guestFaqList = list;
+    const silentBtn = document.getElementById('rsvp-faq-silent-save');
+    if(silentBtn) saveAndSyncWeddingSettingsToGuests(silentBtn, { guestFaqList: list });
+  }
+  document.querySelectorAll('[data-faqtoggle]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      const i = Number(e.currentTarget.dataset.faqtoggle);
+      const list = Array.isArray(weddingSettings.guestFaqList) ? weddingSettings.guestFaqList.slice() : [];
+      if(!list[i]) return;
+      list[i] = Object.assign({}, list[i], { active: list[i].active===false ? true : false });
+      rsvpSaveFaqList(list);
+      _origRender();
+    });
+  });
+  document.querySelectorAll('[data-faqedit]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      rsvpFaqEditingIndex = Number(e.currentTarget.dataset.faqedit);
+      _origRender();
+    });
+  });
+  document.querySelectorAll('[data-faqdel]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      const i = Number(e.currentTarget.dataset.faqdel);
+      if(!confirm(ta('confirmDeleteFaq'))) return;
+      const list = Array.isArray(weddingSettings.guestFaqList) ? weddingSettings.guestFaqList.slice() : [];
+      list.splice(i,1);
+      rsvpFaqEditingIndex = null;
+      rsvpSaveFaqList(list);
+      _origRender();
+    });
+  });
+  const rsvpFaqAddBtn = document.getElementById('rsvp-faq-add');
+  if(rsvpFaqAddBtn) rsvpFaqAddBtn.addEventListener('click', ()=>{
+    rsvpFaqEditingIndex = 'new';
+    _origRender();
+  });
+  document.querySelectorAll('[data-faqcancel]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      rsvpFaqEditingIndex = null;
+      _origRender();
+    });
+  });
+  document.querySelectorAll('[data-faqsave]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      const key = e.currentTarget.dataset.faqsave;
+      const qInput = document.getElementById('rsvp-faq-edit-q');
+      const aInput = document.getElementById('rsvp-faq-edit-a');
+      const q = qInput? qInput.value.trim() : '';
+      const a = aInput? aInput.value.trim() : '';
+      if(!q && !a) return;
+      const list = Array.isArray(weddingSettings.guestFaqList) ? weddingSettings.guestFaqList.slice() : [];
+      if(key==='new'){
+        list.push({ q, a, active:true });
+      } else {
+        const i = Number(key);
+        if(!list[i]) return;
+        list[i] = Object.assign({}, list[i], { q, a });
+      }
+      rsvpFaqEditingIndex = null;
+      rsvpSaveFaqList(list);
+      _origRender();
     });
   });
   // Fase 5 — RSVP Autopilot: em vez de copiar logo, abre um passo de
@@ -9996,6 +10448,68 @@ document.getElementById('gf-save').addEventListener('click', ()=>{
 document.getElementById('ef-guestvisible').addEventListener('click', e=>{
   e.currentTarget.classList.toggle('on');
 });
+// Fase 9.2 (parte 1) — sheet de telefone + consentimento WhatsApp de um
+// convidado. Guarda a localização (lado|categoria|índice) para conseguir
+// ler/escrever a entrada certa em state.guests, mas a gravação em si
+// nunca é feita diretamente — passa sempre por GuestCommsService
+// (updateGuestPhone), nunca por pushRemote().
+let editingGuestPhoneRef = null; // { side, cat, idx, guestId }
+function openGuestPhoneSheet(side, cat, idx){
+  closeAllSheets();
+  const arr = getGuestNames(side, cat);
+  const entry = arr && arr[idx];
+  if(!entry || typeof entry!=='object' || !entry.guestId) return; // convidados antigos (string simples) ainda não têm guestId — nada a fazer aqui
+  editingGuestPhoneRef = { side, cat, idx, guestId: entry.guestId };
+  const phoneEl = document.getElementById('gp-phone');
+  phoneEl.value = entry.phone || '';
+  phoneEl.classList.remove('field-error');
+  const consentOn = !!(entry.communicationPreferences && entry.communicationPreferences.whatsapp && entry.communicationPreferences.whatsapp.optedIn);
+  document.getElementById('gp-consent-toggle').classList.toggle('on', consentOn);
+  document.getElementById('gp-consent-row').style.display = phoneEl.value.trim() ? '' : 'none';
+  document.getElementById('gp-error').style.display = 'none';
+  document.getElementById('guest-phone-sheet').classList.add('show');
+  document.getElementById('sheet-backdrop').classList.add('show');
+}
+function closeGuestPhoneSheet(){
+  document.getElementById('guest-phone-sheet').classList.remove('show');
+  document.getElementById('sheet-backdrop').classList.remove('show');
+  editingGuestPhoneRef = null;
+}
+document.getElementById('gp-cancel').addEventListener('click', closeGuestPhoneSheet);
+document.getElementById('gp-phone').addEventListener('input', e=>{
+  e.target.classList.remove('field-error');
+  document.getElementById('gp-consent-row').style.display = e.target.value.trim() ? '' : 'none';
+});
+document.getElementById('gp-consent-toggle').addEventListener('click', e=>{
+  e.currentTarget.classList.toggle('on');
+});
+document.getElementById('gp-save').addEventListener('click', async ()=>{
+  if(!editingGuestPhoneRef) return;
+  const phoneEl = document.getElementById('gp-phone');
+  const errEl = document.getElementById('gp-error');
+  const phone = phoneEl.value.trim();
+  const optedIn = document.getElementById('gp-consent-toggle').classList.contains('on');
+  errEl.style.display = 'none';
+  const saveBtn = document.getElementById('gp-save');
+  saveBtn.disabled = true;
+  const originalLabel = saveBtn.textContent;
+  saveBtn.textContent = ta('btnSavingEllipsis') || originalLabel;
+  const { guestId } = editingGuestPhoneRef;
+  const res = await GuestCommsService.updateGuestPhone(guestId, phone, phone ? optedIn : null);
+  saveBtn.disabled = false;
+  saveBtn.textContent = originalLabel;
+  if(!res.ok){
+    phoneEl.classList.add('field-error');
+    errEl.textContent = res.message;
+    errEl.style.display = '';
+    return;
+  }
+  closeGuestPhoneSheet();
+  // Não escrevemos em "state" aqui de propósito — quem grava foi a Cloud
+  // Function (updateGuestPhone), diretamente no Firestore. O listener em
+  // tempo real (attachFirestoreSync) traz o valor novo em breve; nada
+  // mais a fazer aqui.
+});
 document.getElementById('ef-save').addEventListener('click', ()=>{
   const labelEl = document.getElementById('ef-label');
   const label = labelEl.value.trim();
@@ -10023,12 +10537,12 @@ function deleteEvent(eventId){
 function closeAllSheets(){
   closeExpenseSheet(); closeSeatSheet(); closeEventSheet(); closeGuestSheet(); closeVisitSheet();
   closeHmOptionSheet(); closeTodoNotesSheet(); closeTodoCatSheet();
-  closeDeleteAccountSheet();
+  closeDeleteAccountSheet(); closeGuestPhoneSheet();
   // Rede de segurança: se um gesto de arrastar for interrompido a meio (ex: o
   // dedo sai do ecrã sem soltar), pode ficar um "transform" preso na sheet.
   // Ao fechar tudo, limpamos sempre esse estilo para nunca ficar uma sheet
   // meio visível por cima de outra.
-  ['expense-sheet','event-sheet','guest-sheet','visit-sheet','seat-sheet','hm-option-sheet','todo-notes-sheet','todo-cat-sheet','delete-account-sheet'].forEach(id=>{
+  ['expense-sheet','event-sheet','guest-sheet','visit-sheet','seat-sheet','hm-option-sheet','todo-notes-sheet','todo-cat-sheet','delete-account-sheet','guest-phone-sheet'].forEach(id=>{
     const el = document.getElementById(id);
     if(el){
       el.style.transform=''; el.style.transition='';
@@ -10328,23 +10842,49 @@ function openRSVPAutopilotModal(entries){
       <span style="width:8px; height:8px; border-radius:50%; background:${bucket==='late'?'#C0523F':'#D8A657'}; flex-shrink:0;"></span>
       <div style="flex:1;">${escapeHTML(item.name)}</div>
     </div>`).join('');
+  const defaultMsg = ta('reminderDefaultGreeting');
   wrap.innerHTML = `
-    <div class="rsvp-qr-card" style="max-height:80vh; overflow-y:auto;">
+    <div class="rsvp-qr-card" style="max-width:380px; max-height:85vh; overflow-y:auto;">
       <button class="rsvp-qr-close" id="rsvp-autopilot-close">${ICONS.close||'&times;'}</button>
+      <div class="reminder-modal-icon">${ICONS.bell}</div>
       <div class="rsvp-row-name" style="margin-bottom:4px;">${ta('autopilotModalTitle')(entries.length)}</div>
-      <div class="empty-note" style="margin:0 0 10px; font-style:normal; text-align:left;">${ta('autopilotModalHint')}</div>
-      <div class="list-group" style="text-align:left; margin-bottom:14px;">${rows}</div>
-      <button class="rsvp-deadline-save" id="rsvp-autopilot-confirm" style="width:100%;">${ta('autopilotConfirmBtn')}</button>
+      <div class="empty-note" style="margin:0 0 4px; font-style:normal; text-align:left;">${ta('autopilotModalHint')}</div>
+      <div class="reminder-field-label">${ta('reminderChannelLabel')}</div>
+      <div class="lang-switch-pills" id="reminder-channel-switch" style="width:100%;">
+        <button type="button" data-reminderchannel="email" class="active" style="flex:1;">Email</button>
+        <button type="button" data-reminderchannel="sms" style="flex:1;">SMS</button>
+      </div>
+      <div class="reminder-field-label">${ta('reminderMsgLabel')}</div>
+      <textarea class="reminder-msg-textarea" id="rsvp-reminder-msg">${escapeHTML(defaultMsg)}</textarea>
+      <div class="reminder-char-count" id="rsvp-reminder-charcount">${ta('reminderCharCount')(defaultMsg.length)}</div>
+      <div class="reminder-recipients-note">${ta('reminderRecipientsLabel')(entries.length)}</div>
+      <div class="list-group" style="text-align:left; margin:8px 0 14px; max-height:120px; overflow-y:auto;">${rows}</div>
+      <button class="rsvp-deadline-save" id="rsvp-autopilot-confirm" style="width:100%;">${ICONS.mail} ${ta('autopilotConfirmBtn')}</button>
     </div>
   `;
   document.body.appendChild(wrap);
   document.getElementById('rsvp-autopilot-close').addEventListener('click', closeRSVPAutopilotModal);
   wrap.addEventListener('click', e=>{ if(e.target===wrap) closeRSVPAutopilotModal(); });
+  // O canal (Email/SMS) é só uma preferência visual guardada com o lembrete
+  // — o envio em si continua a ser sempre "preparar e copiar", como a Rita
+  // confirmou; não há nenhuma integração real de email/SMS a acionar aqui.
+  wrap.querySelectorAll('[data-reminderchannel]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      wrap.querySelectorAll('[data-reminderchannel]').forEach(b=>b.classList.remove('active'));
+      e.currentTarget.classList.add('active');
+    });
+  });
+  const msgInput = document.getElementById('rsvp-reminder-msg');
+  const charCount = document.getElementById('rsvp-reminder-charcount');
+  if(msgInput) msgInput.addEventListener('input', ()=>{
+    if(charCount) charCount.textContent = ta('reminderCharCount')(msgInput.value.length);
+  });
   document.getElementById('rsvp-autopilot-confirm').addEventListener('click', async (e)=>{
     const btn = e.currentTarget;
     btn.disabled = true;
+    const msg = (msgInput? msgInput.value.trim() : '') || defaultMsg;
     const linhas = entries.map(({item, token})=>`${item.name}: ${RSVP_BASE_URL}?g=${token}`);
-    const texto = `Olá! É só um lembrete simpático para confirmares presença 💌\n\n${linhas.join('\n')}`;
+    const texto = `${msg}\n\n${linhas.join('\n')}`;
     try{
       await navigator.clipboard.writeText(texto);
     }catch(err){
