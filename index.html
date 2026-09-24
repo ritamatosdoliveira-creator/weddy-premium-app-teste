@@ -2479,7 +2479,19 @@ normalizeCategories();
 migrateCategoryDescriptions();
 migrateGuestCategories();
 migrateConfirmedAndSeatingToGuestId();
-let weddingSettings = defaultSettings();
+// Bug encontrado ao vivo (Set 2026): "defaultSettings()" chamada aqui, sem
+// argumentos, cai no fallback "name1 || ta('genericName1')" — e ta() precisa
+// de APP_I18N, que só é declarado bastante mais abaixo neste mesmo ficheiro.
+// Como esta inicialização corre imediatamente ao carregar a página (é
+// código de topo, não dentro de nenhuma função chamada mais tarde), isso
+// tentava ler APP_I18N ainda dentro da "temporal dead zone" — um
+// ReferenceError síncrono que travava a aplicação inteira ANTES de sequer
+// desenhar o ecrã de login ("A carregar…" para sempre). Este valor é sempre
+// só um placeholder, substituído a seguir por defaultSettings(name1,name2,…)
+// no Assistente de Configuração ou pelos dados reais vindos do Firestore —
+// por isso não precisa mesmo nada de passar por ta() aqui; construímos o
+// objeto à mão, com a mesma forma de defaultSettings(), sem essa dependência.
+let weddingSettings = { coupleName1:'', coupleName2:'', weddingDate:'', venue:'', accentColor:'rust', heroPhotoUrl:null, heroPhotoPosX:50, heroPhotoPosY:50, heroPhotoZoom:100 };
 let activeTab = 'inicio';
 let guestSeg = 'noiva';
 let openDesc = {};
