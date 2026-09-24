@@ -55,9 +55,19 @@ body{
   overflow:hidden;
   position:fixed;
   top:0; left:0;
-  /* O tamanho é definido em pixels fixos por JavaScript, uma única vez, e nunca
-     mais é atualizado — por isso rodar o telemóvel não muda literalmente nada
-     aqui, a app fica exatamente com o mesmo aspeto e tamanho de sempre. */
+  /* A LARGURA continua fixada em pixels por JavaScript (setBodySize), uma
+     única vez — precisa disso para o bloqueio de orientação/desktop. A
+     ALTURA passou a vir só daqui (100dvh, com 100vh como recurso em
+     navegadores muito antigos) — deixámos de a fixar em pixels via JS
+     porque isso "trancava" a app na altura que o Safari/iOS tinha no
+     preciso instante em que a página carregou; se a barra de endereço
+     estivesse expandida nesse instante (ecrã visível mais curto), a app
+     ficava presa nesse tamanho curto e, quando a barra recolhia (mais
+     ecrã visível), sobrava uma faixa da cor de fundo lisa por baixo do
+     fundo/imagem, em vez de esta ir até ao fim — exatamente o bug
+     reportado (login e imagem "não iam até baixo"). O 100dvh acompanha
+     sempre a altura visível real, sem precisar de JS a recalcular. */
+  height:100vh; height:100dvh;
   /* Impede o gesto nativo de "deslizar da margem para voltar" (o que causava
      o ecrã a ficar branco a meio da transição). overscroll-behavior é feito
      especificamente para isto — mais fiável do que só bloquear com JS. */
@@ -15302,7 +15312,11 @@ document.getElementById('payment-alert-popup').addEventListener('click', e=>{
   }
   function setBodySize(){
     document.body.style.width = window.innerWidth + 'px';
-    document.body.style.height = window.innerHeight + 'px';
+    // A altura já não é fixada aqui — fica só a cargo do CSS (100dvh), que
+    // acompanha a barra de endereço do Safari a aparecer/desaparecer. Fixar
+    // aqui em pixels, uma única vez, era o que causava a faixa de cor lisa
+    // a aparecer por baixo do fundo/imagem quando a barra mudava de estado
+    // depois do carregamento inicial.
   }
   // Decide, de forma explícita em JS (não só por CSS), se a app deve
   // mostrar o aviso a bloquear o ecrã. Isto garante que a barra de
