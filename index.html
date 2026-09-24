@@ -3371,6 +3371,14 @@ const APP_I18N = {
     confirmDeleteVisit:'Eliminar esta visita?',
     confirmDeleteTodoCategory: title=>`Eliminar "${title}"? Os itens lá dentro perdem-se.`,
     confirmDeleteHoneymoonOption:'Eliminar esta hipótese de lua-de-mel?',
+    sectionHoneymoonAttachments:'Anexos',
+    honeymoonAttachmentsIntroText:'Reservas de hotel, voos, vouchers, passaportes ou outros documentos desta hipótese — em PDF ou foto.',
+    honeymoonAttachmentsEmptyText:'Ainda sem anexos nesta hipótese.',
+    honeymoonAttachmentsSaveFirstText:'Guarda esta hipótese primeiro para poderes anexar documentos.',
+    btnAddHoneymoonAttachment:'Adicionar anexo (PDF ou foto)',
+    errAttachmentUnsupportedType:'Tipo de ficheiro não suportado. Usa um PDF ou uma imagem, até 15MB.',
+    errOpenAttachmentFailed:'Não foi possível abrir este anexo. Tenta novamente.',
+    confirmDeleteHoneymoonAttachment:'Eliminar este anexo?',
     confirmSignOut:'Tens a certeza que queres sair da conta?',
     alertOnlyCreatorCanRemoveAccess:'Só quem criou o casamento pode remover o próprio acesso.',
     confirmRemoveAccess: email=>`Remover o acesso de ${email}?`,
@@ -4339,6 +4347,14 @@ const APP_I18N = {
     confirmDeleteVisit:'Delete this visit?',
     confirmDeleteTodoCategory: title=>`Delete "${title}"? The items inside will be lost.`,
     confirmDeleteHoneymoonOption:'Delete this honeymoon option?',
+    sectionHoneymoonAttachments:'Attachments',
+    honeymoonAttachmentsIntroText:'Hotel reservations, flights, vouchers, passports or other documents for this option — PDF or photo.',
+    honeymoonAttachmentsEmptyText:'No attachments on this option yet.',
+    honeymoonAttachmentsSaveFirstText:'Save this option first so you can attach documents.',
+    btnAddHoneymoonAttachment:'Add attachment (PDF or photo)',
+    errAttachmentUnsupportedType:'Unsupported file type. Use a PDF or an image, up to 15MB.',
+    errOpenAttachmentFailed:'Could not open this attachment. Please try again.',
+    confirmDeleteHoneymoonAttachment:'Delete this attachment?',
     confirmSignOut:'Are you sure you want to sign out?',
     alertOnlyCreatorCanRemoveAccess:'Only the person who created the wedding can remove their own access.',
     confirmRemoveAccess: email=>`Remove ${email}'s access?`,
@@ -6786,6 +6802,23 @@ function viewLuademelOption(o){
 
   <div class="sheet-field" style="margin:16px 16px 20px;"><label>${ta('labelNotesHelp')}</label><input type="text" id="hmo-notes" value="${escapeHTML(o.notes||'')}" placeholder="${ta('phNotesHelpExample')}"></div>
 
+  ${o.id ? `
+  <div class="section-label">${ta('sectionHoneymoonAttachments')}</div>
+  <p style="font-size:12.5px; color:var(--ink-soft); margin:0 16px 10px; line-height:1.5;">${ta('honeymoonAttachmentsIntroText')}</p>
+  <div class="list-group" style="margin:0 16px 6px;">
+    ${honeymoonAttachmentDocs(o.id).map(({d,i})=>hmAttachmentRowHTML(d,i)).join('') || `<div class="empty-note">${ta('honeymoonAttachmentsEmptyText')}</div>`}
+    <label class="add-row" for="hmo-attach-input" style="cursor:pointer;">
+      <span style="flex:1; color:var(--ink-soft); font-size:13.5px;">${ta('btnAddHoneymoonAttachment')}</span>
+      <span class="add-circle">${ICONS.plus}</span>
+    </label>
+  </div>
+  <input type="file" id="hmo-attach-input" accept="application/pdf,image/*" style="display:none;">
+  <div id="hmo-attach-status" class="empty-note" style="margin:0 16px 20px;"></div>
+  ` : `
+  <div class="section-label">${ta('sectionHoneymoonAttachments')}</div>
+  <div class="empty-note" style="margin:0 16px 20px;">${ta('honeymoonAttachmentsSaveFirstText')}</div>
+  `}
+
   <button class="login-btn" id="save-hmoption-btn" style="width:calc(100% - 32px); max-width:none; margin:0 16px 12px;">${ICONS.check} ${ta('btnSave')}</button>
   <button class="visit-action-btn danger" id="del-hmoption-btn" style="width:calc(100% - 32px); margin:0 16px 30px;">${ICONS.trash} ${ta('btnDeleteThisOption')}</button>
   `;
@@ -7061,6 +7094,52 @@ async function uploadSupplierContract(supplierId, file){
   const doc = { name:file.name, text, storagePath, uploadedAt:new Date().toISOString(), supplierId };
   state.weddingDocuments.push(doc);
   return doc;
+}
+// Anexos na Lua de Mel (Set 2026, pedido direto da Rita): reservas de
+// hotéis, voos, vouchers, passaportes/documentos, PDFs, confirmações de
+// reserva — tudo ligado a uma hipótese de lua-de-mel específica. Reaproveita
+// por completo a mesma infraestrutura dos Documentos gerais/contrato de
+// fornecedor acima (state.weddingDocuments + Storage em
+// documents/{weddingId}/…), só com "honeymoonOptionId" em vez de
+// "supplierId" a marcar o dono. Ao contrário do contrato de fornecedor (só
+// um por fornecedor, substituído a cada novo upload), aqui podem existir
+// vários anexos por hipótese — nunca substitui os anteriores. E, por viverem
+// no mesmo array que todos os outros documentos, entram automaticamente na
+// pesquisa do Weddy Brain (searchWeddingDocuments) sem precisar de nenhuma
+// alteração lá.
+function honeymoonAttachmentDocs(optionId){
+  return (state.weddingDocuments||[]).map((d,i)=>({d,i})).filter(({d})=>d.honeymoonOptionId===optionId);
+}
+async function uploadHoneymoonAttachment(optionId, file){
+  if(!file) return null;
+  const isPdf = file.type === 'application/pdf';
+  const isImage = file.type && file.type.startsWith('image/');
+  if(!isPdf && !isImage) return null;
+  if(file.size > 15*1024*1024) return null;
+  let text = '';
+  try{ if(isPdf) text = await extractPdfText(file); }catch(e){ text = ''; }
+  let storagePath = null;
+  if(storage && FIREBASE_READY && auth && auth.currentUser && currentWeddingId){
+    storagePath = `documents/${currentWeddingId}/${Date.now()}_${file.name}`;
+    try{ await storage.ref(storagePath).put(file); }catch(err){ storagePath = null; }
+  }
+  if(!state.weddingDocuments) state.weddingDocuments = [];
+  const doc = { name:file.name, text, storagePath, uploadedAt:new Date().toISOString(), honeymoonOptionId:optionId };
+  state.weddingDocuments.push(doc);
+  return doc;
+}
+function hmAttachmentRowHTML(d, i){
+  // Só PDF ou imagem podem chegar aqui (ver uploadHoneymoonAttachment), por
+  // isso basta verificar a extensão ".pdf" para escolher o ícone certo.
+  const isImg = !/\.pdf$/i.test(d.name||'');
+  return `
+  <div class="list-row tappable" style="align-items:center; cursor:pointer;" data-openattach="${i}">
+    <div class="def-row-icon" style="${chipStyle(4)}">${isImg ? ICONS.camera : (ICONS.docnote||ICONS.checklist)}</div>
+    <div class="def-row-mid">
+      <div class="def-row-title">${escapeHTML(d.name)}</div>
+    </div>
+    <button class="child-remove" data-delhmattach="${i}">×</button>
+  </div>`;
 }
 function openSupplierDetail(id){
   closeAllSheets();
@@ -9788,10 +9867,13 @@ function viewDefDocumentos(){
   if(!hasActiveSubscription()) return viewDefPremiumLocked(ta('documentsTitle'));
   // Fase 6.1 — contratos ligados a um fornecedor (d.supplierId) já são
   // mostrados na própria ficha do fornecedor, por isso ficam de fora desta
-  // lista geral para não duplicar. O índice original de cada documento em
-  // state.weddingDocuments é preservado no filtro (não o índice da lista
-  // filtrada), para que data-docdel continue a apagar o documento certo.
-  const docs = (state.weddingDocuments || []).map((d,i)=>({d,i})).filter(({d})=>!d.supplierId);
+  // lista geral para não duplicar. Fase Anexos Lua de Mel (Set 2026): o
+  // mesmo vale para anexos ligados a uma hipótese de lua-de-mel
+  // (d.honeymoonOptionId) — esses vivem na própria hipótese. O índice
+  // original de cada documento em state.weddingDocuments é preservado no
+  // filtro (não o índice da lista filtrada), para que data-docdel continue a
+  // apagar o documento certo.
+  const docs = (state.weddingDocuments || []).map((d,i)=>({d,i})).filter(({d})=>!d.supplierId && !d.honeymoonOptionId);
   const listHtml = docs.length ? docs.map(({d,i})=>`
     <div class="list-row" style="align-items:center;">
       <div class="def-row-icon" style="${chipStyle(4)}">${ICONS.docnote||ICONS.checklist}</div>
@@ -10592,6 +10674,60 @@ function bindHandlers(){
       hmOpenOptionId = null;
       render();
     }
+  });
+
+  // Anexos na Lua de Mel — só existem quando a hipótese já está guardada
+  // (tem id); um rascunho por guardar (hmDraftOption.id===null) nunca mostra
+  // esta secção (ver o "o.id ?" em viewLuademelOption), por isso este bloco
+  // só tem efeito nesse caso.
+  {
+    const hmOptForAttach = getCurrentHmOption();
+    if(hmOptForAttach && hmOptForAttach.id){
+      const hmoAttachInput = document.getElementById('hmo-attach-input');
+      if(hmoAttachInput) hmoAttachInput.addEventListener('change', async (e)=>{
+        const file = e.target.files && e.target.files[0];
+        const statusEl = document.getElementById('hmo-attach-status');
+        if(!file) return;
+        if(statusEl) statusEl.textContent = ta('statusReadingPdf');
+        try{
+          const doc = await uploadHoneymoonAttachment(hmOptForAttach.id, file);
+          if(!doc){
+            if(statusEl) statusEl.textContent = ta('errAttachmentUnsupportedType');
+          } else {
+            pushRemote(true);
+            render();
+          }
+        }catch(err){
+          if(statusEl) statusEl.textContent = ta('statusPdfReadError');
+        }
+        e.target.value = '';
+      });
+    }
+  }
+  document.querySelectorAll('[data-openattach]').forEach(row=>{
+    row.addEventListener('click', async e=>{
+      const i = Number(e.currentTarget.dataset.openattach);
+      const d = state.weddingDocuments && state.weddingDocuments[i];
+      if(!d) return;
+      if(d.storagePath && storage){
+        try{ const url = await storage.ref(d.storagePath).getDownloadURL(); window.open(url, '_blank'); }
+        catch(err){ alert(ta('errOpenAttachmentFailed')); }
+      }
+    });
+  });
+  document.querySelectorAll('[data-delhmattach]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      e.stopPropagation();
+      const i = Number(e.currentTarget.dataset.delhmattach);
+      const d = state.weddingDocuments && state.weddingDocuments[i];
+      if(!d) return;
+      if(confirm(ta('confirmDeleteHoneymoonAttachment'))){
+        if(d.storagePath && storage) storage.ref(d.storagePath).delete().catch(()=>{});
+        state.weddingDocuments.splice(i,1);
+        pushRemote(true);
+        render();
+      }
+    });
   });
 
   // Fornecedores
