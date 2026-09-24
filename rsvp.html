@@ -94,8 +94,24 @@ h1{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:30px; col
 .memories-sub{ font-size:12px; color:var(--ink-soft); margin-bottom:12px; }
 .memories-upload-btn{ display:inline-flex; align-items:center; gap:7px; padding:10px 16px; border-radius:12px; border:1.6px dashed var(--rust); color:var(--rust); font-size:13px; font-weight:600; cursor:pointer; }
 .memories-upload-btn svg{ width:15px; height:15px; }
-.memories-preview-grid{ display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
-.memories-thumb{ width:64px; height:64px; object-fit:cover; border-radius:10px; border:1px solid var(--line); }
+/* Bug corrigido (Set 2026): a pré-visualização só aparecia depois de o
+   upload E de um getDownloadURL() terminarem — e esse getDownloadURL()
+   estava sempre a falhar (as Storage Rules só deixam o CASAL ler estas
+   fotos, nunca o convidado que as envia — por desenho, ver
+   storage.rules.txt), por isso a app mostrava sempre erro no fim, mesmo
+   quando o envio em si tinha corrido bem. Agora a miniatura usa a própria
+   imagem escolhida no telemóvel (URL.createObjectURL, local, sem pedir
+   nada ao servidor) e aparece de imediato, numa fila com scroll horizontal;
+   o envio ao Storage continua a acontecer em paralelo, só que sem depender
+   de conseguir "ler de volta" o ficheiro. */
+.memories-preview-grid{ display:flex; flex-wrap:nowrap; gap:8px; margin-top:12px; overflow-x:auto; -webkit-overflow-scrolling:touch; padding-bottom:4px; }
+.memories-thumb-wrap{ position:relative; flex:0 0 auto; width:64px; height:64px; }
+.memories-thumb{ width:64px; height:64px; object-fit:cover; border-radius:10px; border:1px solid var(--line); display:block; }
+.memories-thumb-wrap.is-uploading .memories-thumb{ opacity:.4; }
+.memories-thumb-spin{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; }
+.memories-thumb-spin svg{ width:20px; height:20px; animation:weddy-memspin .8s linear infinite; color:#fff; }
+.memories-thumb-err{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(179,65,58,.6); border-radius:10px; color:#fff; font-size:18px; font-weight:700; cursor:pointer; }
+@keyframes weddy-memspin{ to{ transform:rotate(360deg); } }
 .lang-switch{ position:absolute; top:14px; right:14px; display:flex; gap:2px; background:var(--cream); border-radius:10px; padding:3px; }
 .lang-switch button{ all:unset; box-sizing:border-box; padding:5px 9px; border-radius:8px; font-size:11px; font-weight:700; color:var(--ink-soft); cursor:pointer; }
 .lang-switch button.active{ background:var(--rust); color:#fff; }
@@ -199,7 +215,7 @@ h1{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:30px; col
           </div>
           <div class="field">
             <label data-t="dietaryLabel">Restrições alimentares ou alergias (opcional)</label>
-            <textarea id="dietary-text" data-t-placeholder="dietaryPlaceholder" placeholder="Ex: alergia a marisco, sem glúten…"></textarea>
+            <textarea id="dietary-text" maxlength="500" data-t-placeholder="dietaryPlaceholder" placeholder="Ex: alergia a marisco, sem glúten…"></textarea>
           </div>
 
           <div class="children-block">
@@ -1001,7 +1017,7 @@ h1{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:30px; col
           </div>
           <div class="field">
             <label>${t('dietaryLabel')}</label>
-            <textarea data-mfield="dietary" data-mid="${mid}" placeholder="${t('dietaryPlaceholder')}">${(st.dietary||'').replace(/</g,'&lt;')}</textarea>
+            <textarea data-mfield="dietary" data-mid="${mid}" maxlength="500" placeholder="${t('dietaryPlaceholder')}">${(st.dietary||'').replace(/</g,'&lt;')}</textarea>
           </div>
           <div class="children-block">
             <label>${t('childrenLabel')}</label>
@@ -1149,48 +1165,76 @@ h1{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:30px; col
   // convite (weddingId/token/ficheiro) e cria SÓ um registo de criação em
   // "memories" (o convidado nunca consegue ler nem listar fotos, nem as
   // suas nem as de outros — só o casal, em Definições → Weddy Memories).
-  document.getElementById('memory-file-input').addEventListener('change', async e=>{
+  document.getElementById('memory-file-input').addEventListener('change', e=>{
     const files = Array.from(e.target.files || []);
     if(!files.length) return;
     const statusEl = document.getElementById('memories-status');
     const previewEl = document.getElementById('memories-preview');
-    for(const file of files){
+    let anySuccess = false, anyError = false;
+    files.forEach(file=>{
       if(!file.type.startsWith('image/')){
         statusEl.textContent = t('memoriesNotImage')(file.name);
         statusEl.className = 'msg error';
-        continue;
+        return;
       }
       if(file.size > 8*1024*1024){
         statusEl.textContent = t('memoriesTooLarge')(file.name);
         statusEl.className = 'msg error';
-        continue;
+        return;
       }
-      statusEl.textContent = t('memoriesSending')(file.name);
-      statusEl.className = 'msg';
+      // Pré-visualização local imediata (o browser gera-a a partir do
+      // próprio ficheiro escolhido — não depende de rede nem de permissões
+      // do Storage), com um pequeno "spinner" por cima enquanto o envio ao
+      // servidor decorre em paralelo.
+      const wrap = document.createElement('div');
+      wrap.className = 'memories-thumb-wrap is-uploading';
+      const objectUrl = URL.createObjectURL(file);
+      const img = document.createElement('img');
+      img.src = objectUrl;
+      img.className = 'memories-thumb';
+      wrap.appendChild(img);
+      const spin = document.createElement('div');
+      spin.className = 'memories-thumb-spin';
+      spin.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 3a9 9 0 1 1-9 9"/></svg>';
+      wrap.appendChild(spin);
+      previewEl.appendChild(wrap);
+
       const path = `memories/${guestData.weddingId}/${guestToken}/${Date.now()}_${file.name}`;
-      try{
-        const ref = storage.ref(path);
-        await ref.put(file);
-        const url = await ref.getDownloadURL();
-        await db.collection('memories').add({
+      const ref = storage.ref(path);
+      ref.put(file).then(()=>{
+        // Nota: propositadamente NÃO chamamos getDownloadURL() aqui — as
+        // Storage Rules só deixam o casal (autenticado, dono do
+        // casamento) ler estas fotos, nunca quem as envia. É o
+        // "storagePath" que fica guardado como fonte de verdade; o casal
+        // gera o link de download, se precisar, no momento em que abre a
+        // galeria em Definições → Weddy Memories.
+        return db.collection('memories').add({
           weddingId: guestData.weddingId,
           token: guestToken,
           guestName: guestData.name || '',
           storagePath: path,
-          url: url,
           createdAt: firebase.firestore.FieldValue.serverTimestamp()
         });
-        const img = document.createElement('img');
-        img.src = url;
-        img.className = 'memories-thumb';
-        previewEl.appendChild(img);
+      }).then(()=>{
+        wrap.classList.remove('is-uploading');
+        anySuccess = true;
         statusEl.textContent = t('memoriesThanks');
         statusEl.className = 'msg success';
-      }catch(err){
-        statusEl.textContent = t('memoriesError');
-        statusEl.className = 'msg error';
-      }
-    }
+      }).catch(()=>{
+        wrap.classList.remove('is-uploading');
+        wrap.classList.add('is-error');
+        const err = document.createElement('div');
+        err.className = 'memories-thumb-err';
+        err.textContent = '!';
+        err.title = t('memoriesError');
+        wrap.appendChild(err);
+        anyError = true;
+        if(!anySuccess){
+          statusEl.textContent = t('memoriesError');
+          statusEl.className = 'msg error';
+        }
+      });
+    });
     e.target.value = '';
   });
 

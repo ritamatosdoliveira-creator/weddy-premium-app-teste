@@ -620,6 +620,16 @@ html{
 .visit-action-btn svg{ width:14px; height:14px; }
 .visit-action-btn.danger{ background:rgba(193,88,62,0.1); color:var(--rust-dark); }
 .visit-action-btn:active{ opacity:.75; }
+/* Bug encontrado ao rever a área de "Preferências" do AI Seating (Set 2026):
+   o botão de prioridade selecionado tentava mostrar-se "escolhido" só com um
+   estilo inline "border-color:var(--ink)" — mas esta classe usa "all:unset",
+   que remove também o border-style/border-width por omissão; sem esses dois,
+   "border-color" sozinho não desenha nada, por isso a seleção nunca era
+   visível. Em vez de reintroduzir bordas (frágil, fácil de voltar a partir-se
+   com outro "all:unset"), usamos o mesmo padrão já usado nos outros "chips"
+   selecionáveis da app (ex.: .sup-chip.active) — fundo preenchido a cor +
+   texto branco, sempre visível independentemente de "all:unset". */
+.visit-action-btn.is-selected{ background:var(--rust); color:#fff; }
 /* --- Weddy Premium: página para subscrever --- */
 .premium-upsell{ margin:20px 16px 32px; text-align:center; }
 .premium-upsell-icon{ width:44px; height:44px; margin:0 auto 12px; color:var(--rust); }
@@ -1022,6 +1032,7 @@ html{
 .btn-cancel{ background:rgba(20,20,20,0.07); color:var(--rust-dark); }
 .btn-save{ background:var(--rust); color:#fff; }
 .btn-cancel:active, .btn-save:active{ opacity:.75; }
+.btn-save:disabled, .btn-cancel:disabled{ opacity:.4; pointer-events:none; }
 .sheet-toggle-row{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:11px 2px; margin-bottom:6px; }
 .sheet-toggle-row .toggle-label{ font-size:13px; font-weight:600; color:var(--ink); }
 .sheet-toggle-row .toggle-label small{ display:block; font-weight:400; color:var(--ink-soft); font-size:11px; margin-top:2px; }
@@ -1071,9 +1082,13 @@ html{
 .mini-ring{ position:relative; width:34px; height:34px; margin-left:auto; flex-shrink:0; }
 .mini-ring svg{ width:100%; height:100%; }
 .mini-ring-txt{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:7.5px; font-weight:600; color:var(--ink); }
-.mesa3d-sync-btn{ width:100%; display:flex; align-items:center; justify-content:center; gap:6px; margin-top:10px; padding:10px 14px; border-radius:12px; border:1px solid var(--line); background:#fff; color:var(--ink); font-size:13px; font-weight:600; font-family:inherit; cursor:pointer; }
+/* Pedido (Set 2026): "sincronizar lugares" deixa de ser um botão com caixa à
+   volta — passa a ser só uma zona de texto/ícone clicável, centrada, sem
+   fundo nem borda, mantendo a mesma posição de sempre. */
+.mesa3d-sync-btn{ all:unset; box-sizing:border-box; width:100%; display:flex; align-items:center; justify-content:center; gap:6px; margin-top:10px; padding:10px 14px; color:var(--rust-dark); font-size:13px; font-weight:600; font-family:inherit; cursor:pointer; text-align:center; }
 .mesa3d-sync-btn svg{ width:15px; height:15px; }
-.mesa3d-sync-btn:disabled{ opacity:.6; }
+.mesa3d-sync-btn:active{ opacity:.6; }
+.mesa3d-sync-btn:disabled{ opacity:.5; pointer-events:none; }
 
 /* Visão da sala */
 .sala-scroll{ flex:1; min-height:0; overflow:auto; padding:2px 0 24px; -webkit-overflow-scrolling:touch; }
@@ -1341,6 +1356,15 @@ html.rotate-blocked .rotate-lock-overlay{ display:flex; }
     <img id="img-lightbox-img" src="" alt="">
   </div>
 
+  <!-- Pré-visualização de documentos PDF anexados (Lua de mel / contratos de
+       fornecedores). Antes, clicar num anexo só fazia window.open(url) —
+       abria um separador novo sem nenhuma forma óbvia de voltar (Set 2026).
+       Reaproveita o mesmo padrão visual do img-lightbox acima. -->
+  <div class="img-lightbox" id="doc-lightbox">
+    <button class="img-lightbox-close" id="doc-lightbox-close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 5l14 14M19 5 5 19"/></svg> <span data-t="btnClose">Fechar</span></button>
+    <iframe id="doc-lightbox-frame" src="" style="width:100%; height:100%; border:0; border-radius:12px; background:#fff;"></iframe>
+  </div>
+
   <div class="tabbar" id="tabbar"></div>
 
   <!-- Botão redondo do Assistente Weddy: fica fora dos separadores/ecrãs de
@@ -1485,18 +1509,39 @@ const CURRENT_PRIVACY_VERSION = '2026-09-24';
   // teclado ocupa mais de 60px (para nunca alterar o layout normal, sem
   // teclado), e volta ao CSS original (estilos inline removidos) assim
   // que o teclado fecha.
+  // Rita continuou a ver o balão a "subir imenso" mesmo depois da 1ª
+  // correção (Fase 4): essa versão calculava um "bottom" a partir da altura
+  // da JANELA INTEIRA ("window.innerHeight"), que em Safari/iOS pode oscilar
+  // ligeiramente por si só quando o teclado abre (barra de sugestões,
+  // autocorreção a aparecer/desaparecer), fazendo o cálculo saltar a cada
+  // pequena oscilação. Passa agora a ancorar-se diretamente ao retângulo que
+  // o VisualViewport diz estar mesmo visível (offsetTop + height) — a forma
+  // recomendada para isto — em vez de inferir esse valor a partir da janela
+  // inteira menos o teclado. Também já não confia num único disparo do
+  // evento: usa requestAnimationFrame para agrupar disparos seguidos
+  // (resize+scroll costumam disparar quase ao mesmo tempo) numa só
+  // atualização.
+  let kbRaf = null;
   function adjustChatPanelForKeyboard(){
-    const panel = document.getElementById('chat-panel');
-    if(!panel || panel.hidden || !window.visualViewport) return;
-    const vv = window.visualViewport;
-    const keyboardInset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
-    if(keyboardInset > 60){
-      panel.style.bottom = (keyboardInset + 8) + 'px';
-      panel.style.maxHeight = Math.max(160, vv.height - 24) + 'px';
-    } else {
-      panel.style.bottom = '';
-      panel.style.maxHeight = '';
-    }
+    if(kbRaf) cancelAnimationFrame(kbRaf);
+    kbRaf = requestAnimationFrame(()=>{
+      kbRaf = null;
+      const panel = document.getElementById('chat-panel');
+      if(!panel || panel.hidden || !window.visualViewport) return;
+      const vv = window.visualViewport;
+      const keyboardInset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+      if(keyboardInset > 60){
+        const visibleBottom = vv.offsetTop + vv.height;
+        const maxH = Math.max(160, Math.min(560, vv.height - 24));
+        panel.style.bottom = 'auto';
+        panel.style.top = Math.max(8, visibleBottom - maxH - 8) + 'px';
+        panel.style.maxHeight = maxH + 'px';
+      } else {
+        panel.style.top = '';
+        panel.style.bottom = '';
+        panel.style.maxHeight = '';
+      }
+    });
   }
   if(window.visualViewport){
     window.visualViewport.addEventListener('resize', adjustChatPanelForKeyboard);
@@ -6208,9 +6253,9 @@ function viewAISeatingPrefs(){
             ${aiSeatingPickIds.includes(g.guestId)?ICONS.check:''}
           </div>`).join('') || `<div class="empty-note">${ta('aiSeatingNoConfirmedGuestsText')}</div>`}
       </div>
-      <div style="display:flex; gap:8px; margin-top:10px;">
-        <button class="visit-action-btn" data-aiseatpickcancel style="flex:1;">${ta('btnCancel')}</button>
-        <button class="login-btn" data-aiseatpickadd style="flex:1; max-width:none;" ${aiSeatingPickIds.length<2?'disabled':''}>${ta('btnAddCount')(aiSeatingPickIds.length)}</button>
+      <div class="sheet-btns">
+        <button class="btn-cancel" data-aiseatpickcancel>${ta('btnCancel')}</button>
+        <button class="btn-save" data-aiseatpickadd ${aiSeatingPickIds.length<2?'disabled':''}>${ta('btnAddCount')(aiSeatingPickIds.length)}</button>
       </div>
     </div>
   ` : `
@@ -6219,7 +6264,7 @@ function viewAISeatingPrefs(){
       <div style="font-size:11.5px; color:var(--ink-soft); margin-bottom:5px;">${ta('priorityNextPrefLabel')}</div>
       <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
         ${Object.keys(PRIORITY_LABEL).map(pr=>`
-          <button class="visit-action-btn ${aiSeatingNewPriority===pr?'is-selected':''}" data-aiseatpriority="${pr}" style="${aiSeatingNewPriority===pr?'border-color:var(--ink); font-weight:600;':''}">${PRIORITY_LABEL[pr]}</button>
+          <button class="visit-action-btn ${aiSeatingNewPriority===pr?'is-selected':''}" data-aiseatpriority="${pr}">${PRIORITY_LABEL[pr]}</button>
         `).join('')}
       </div>
       <div style="font-size:11.5px; color:var(--ink-soft); margin-bottom:5px;">${ta('aiSeatingTypeStepLabel')}</div>
@@ -7352,10 +7397,10 @@ function bindFornecedorDetalheHandlers(){
   const openOrPickContract = async ()=>{
     const synced = supplierContractDoc(s.id);
     if(synced && synced.storagePath && storage){
-      try{ const url = await storage.ref(synced.storagePath).getDownloadURL(); window.open(url, '_blank'); return; }catch(err){}
+      try{ const url = await storage.ref(synced.storagePath).getDownloadURL(); previewAttachment(url, synced.name); return; }catch(err){}
     }
     const legacy = synced ? null : getSupplierContract(s.id);
-    if(legacy && legacy.dataUrl){ window.open(legacy.dataUrl, '_blank'); return; }
+    if(legacy && legacy.dataUrl){ previewAttachment(legacy.dataUrl, legacy.name); return; }
     if(contractInput) contractInput.click();
   };
   if(contractRow) contractRow.addEventListener('click', (e)=>{ if(e.target.closest('#supd-contract-remove')) return; openOrPickContract(); });
@@ -7520,6 +7565,23 @@ function loadMemories(){
       const tb = b.createdAt && b.createdAt.toMillis ? b.createdAt.toMillis() : 0;
       return tb - ta;
     });
+    // Bug encontrado ao corrigir o envio no rsvp.html (Set 2026): o convidado
+    // que envia a foto NUNCA teve permissão para a "ler de volta" (Storage
+    // Rules — só o casal pode), por isso o campo "url" gravado nesse momento
+    // já não fazia sentido (e deixou de ser gravado). É aqui, do lado do
+    // casal (que tem mesmo permissão de leitura), que resolvemos cada
+    // "storagePath" num link de download — ao vivo, a cada carregamento desta
+    // página, tal como já estava documentado (mas não implementado) nas
+    // regras do Storage. Memórias antigas que ainda tenham um "url" gravado
+    // continuam a funcionar na mesma (fallback).
+    return Promise.all(list.map(m=>{
+      if(!storage || !m.storagePath) return m;
+      return storage.ref(m.storagePath).getDownloadURL().then(liveUrl=>{
+        m.url = liveUrl;
+        return m;
+      }).catch(()=>m);
+    }));
+  }).then(list=>{
     weddingMemories = list;
     memoriesLoaded = true;
     memoriesLoading = false;
@@ -9432,7 +9494,7 @@ function buildChatPanelBody(){
       <div class="premium-upsell-icon" style="width:36px; height:36px;">${ICONS.sparkle}</div>
       <div class="premium-upsell-title" style="font-size:19px;">Weddy Premium</div>
       <div class="premium-upsell-text">${ta('assistLockedText')}</div>
-      <button class="login-btn" id="premium-subscribe-btn" style="max-width:none;">${ta('btnSubscribePremium')}</button>
+      <button class="login-btn" id="premium-subscribe-btn" style="max-width:200px; font-size:12.5px; padding:8px 0;">${ta('btnSubscribePremium')}</button>
       <div class="empty-note" style="margin:10px 0 0;">${ta('testAccountNote')}</div>
     </div>`;
   }
@@ -9790,7 +9852,7 @@ function viewDefConvidar(){
   <div class="section-label">${ta('inviteParticipantLabel')}</div>
   <div class="stat-card" style="margin:0 16px 12px;">
     <div class="l" style="margin:0 0 4px;">${ta('labelInviteEmail')}</div>
-    <input class="field-input big" id="def-invite-email" type="email" placeholder="email@exemplo.com" style="text-align:left;">
+    <input class="field-input" id="def-invite-email" type="email" placeholder="email@exemplo.com" style="text-align:left; font-size:14px;">
     <div class="cat-row-perguest" style="margin-top:8px; text-align:left;">${ta('inviteNoEmailNote')}</div>
   </div>
   ${defSaveBtn('def-invite-btn','def-invite-msg').replace('>'+ta('btnSave')+'<','>'+ta('btnInvite')+'<')}
@@ -9861,7 +9923,7 @@ function viewDefMemories(){
     <div class="memories-grid">
       ${weddingMemories.map(m=>`
         <div class="memory-tile">
-          <img src="${escapeHTML(m.url)}" loading="lazy">
+          <img src="${escapeHTML(m.url||'')}" loading="lazy">
           <button class="memory-del" data-memorydel="${m.id}" data-memorypath="${escapeHTML(m.storagePath||'')}">${ICONS.trash}</button>
           ${m.guestName ? `<div class="memory-caption">${escapeHTML(m.guestName)}</div>` : ''}
         </div>
@@ -10730,7 +10792,7 @@ function bindHandlers(){
       const d = state.weddingDocuments && state.weddingDocuments[i];
       if(!d) return;
       if(d.storagePath && storage){
-        try{ const url = await storage.ref(d.storagePath).getDownloadURL(); window.open(url, '_blank'); }
+        try{ const url = await storage.ref(d.storagePath).getDownloadURL(); previewAttachment(url, d.name); }
         catch(err){ alert(ta('errOpenAttachmentFailed')); }
       }
     });
@@ -13462,6 +13524,32 @@ document.getElementById('img-lightbox-close').addEventListener('click', closeImg
 document.getElementById('img-lightbox').addEventListener('click', e=>{
   if(e.target.id === 'img-lightbox') closeImgLightbox();
 });
+// Pré-visualização de PDFs (Lua de mel / contratos) — mesma ideia do
+// img-lightbox, mas com um <iframe> em vez de <img>, já que a maioria dos
+// browsers (Safari/Chrome, desktop e mobile) sabe mostrar um PDF dentro de
+// um iframe sem precisar de nenhuma biblioteca extra.
+function openDocLightbox(url){
+  const frame = document.getElementById('doc-lightbox-frame');
+  frame.src = url;
+  document.getElementById('doc-lightbox').classList.add('show');
+}
+function closeDocLightbox(){
+  document.getElementById('doc-lightbox').classList.remove('show');
+  document.getElementById('doc-lightbox-frame').src = '';
+}
+document.getElementById('doc-lightbox-close').addEventListener('click', closeDocLightbox);
+document.getElementById('doc-lightbox').addEventListener('click', e=>{
+  if(e.target.id === 'doc-lightbox') closeDocLightbox();
+});
+// Ponto único usado por qualquer sítio da app que precise de mostrar um
+// anexo (imagem ou PDF) com uma forma óbvia de sair, sem depender de
+// window.open() (que abre um separador novo e nem sempre existe forma
+// clara de "voltar", sobretudo dentro da app instalada como PWA).
+function previewAttachment(url, fileName){
+  const isPdf = /\.pdf($|\?)/i.test(fileName||'') || /^data:application\/pdf/i.test(url||'');
+  if(isPdf) openDocLightbox(url);
+  else openImgLightbox(url);
+}
 (function bindLightboxZoom(){
   const img = document.getElementById('img-lightbox-img');
   let lastTap = 0;
@@ -14527,7 +14615,12 @@ function attachFirestoreSync(){
       if(data.uidByEmail) currentUidByEmail = data.uidByEmail;
       if(data.subscription !== undefined) currentSubscription = data.subscription;
       if(data.lastAutoSnapshotAt !== undefined) currentLastAutoSnapshotAt = data.lastAutoSnapshotAt;
-      if(Array.isArray(data.assistantChatHistory)) assistChatHistory = data.assistantChatHistory;
+      // Pedido (Set 2026): a conversa do Assistente já NÃO deve continuar de
+      // onde ficou ao reabrir a app ou trocar de sessão — por isso deixámos
+      // de restaurar "assistantChatHistory" aqui. "assistChatHistory" começa
+      // sempre vazio a cada abertura da página (é uma variável normal,
+      // reiniciada nesse momento) e só existe em memória durante a sessão
+      // atual.
     }
     let renderNeeded = changed || !firstSyncDone;
     if(renderNeeded && isEditingTextField()){
@@ -14806,6 +14899,11 @@ if(FIREBASE_READY){
       firstSyncDone = false;
       currentWeddingId = null;
       activeTab = 'inicio';
+      // Pedido (Set 2026): a conversa do Assistente Weddy deve recomeçar
+      // sempre que a pessoa fecha a app ou perde a sessão — nunca continuar
+      // de onde tinha ficado. "Perder a sessão" é exatamente este ramo do
+      // onAuthStateChanged (user===null), por isso é aqui que limpamos.
+      assistChatHistory = [];
       if(unsubscribeSnapshot){ unsubscribeSnapshot(); unsubscribeSnapshot = null; }
       document.getElementById('login-screen').classList.remove('hidden'); document.documentElement.classList.add('login-active');
       renderLoginForm();
