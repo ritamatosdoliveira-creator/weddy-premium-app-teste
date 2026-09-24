@@ -9494,7 +9494,7 @@ function buildChatPanelBody(){
       <div class="premium-upsell-icon" style="width:36px; height:36px;">${ICONS.sparkle}</div>
       <div class="premium-upsell-title" style="font-size:19px;">Weddy Premium</div>
       <div class="premium-upsell-text">${ta('assistLockedText')}</div>
-      <button class="login-btn" id="premium-subscribe-btn" style="max-width:200px; font-size:12.5px; padding:8px 0;">${ta('btnSubscribePremium')}</button>
+      <button class="login-btn" id="chat-premium-subscribe-btn" style="max-width:200px; font-size:12.5px; padding:8px 0;">${ta('btnSubscribePremium')}</button>
       <div class="empty-note" style="margin:10px 0 0;">${ta('testAccountNote')}</div>
     </div>`;
   }
@@ -9570,7 +9570,18 @@ function closeChatPanel(){
 // seus próprios botões são ligados aqui de cada vez — ao contrário do
 // botão e do fundo (esses vivem sempre no DOM, ligados uma única vez).
 function bindChatPanelHandlers(){
-  const subscribeBtn = document.getElementById('premium-subscribe-btn');
+  // Bug encontrado numa varredura por bugs "do mesmo género" (Set 2026): o
+  // botão de subscrever aqui dentro do balão do chat usava o MESMO id
+  // ("premium-subscribe-btn") que o botão equivalente nas páginas de
+  // upsell (AI Seating bloqueado, Wedding Health bloqueado, etc.). Como as
+  // duas coisas podem estar na página ao mesmo tempo (o balão do chat é uma
+  // janela flutuante por cima do ecrã atual, nunca o substitui),
+  // "document.getElementById" só devolvia UM dos dois botões — o outro
+  // ficava sem clique nenhum ligado, um botão que parece normal mas não faz
+  // nada ao tocar, exatamente como o bug das fotos do RSVP. Deu-se um id
+  // próprio a este botão (chat-premium-subscribe-btn) para nunca mais
+  // colidir com o das páginas.
+  const subscribeBtn = document.getElementById('chat-premium-subscribe-btn');
   if(subscribeBtn) subscribeBtn.addEventListener('click', ()=>{
     if(!FIREBASE_READY || !currentWeddingId){ alert(ta('alertNoConnectionRetry')); return; }
     subscribeBtn.disabled = true;
