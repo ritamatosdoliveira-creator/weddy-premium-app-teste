@@ -510,6 +510,18 @@ html{
 .sup-chip-row::-webkit-scrollbar{ display:none; }
 .sup-chip{ all:unset; box-sizing:border-box; flex-shrink:0; padding:8px 16px; border-radius:20px; border:1px solid #E5DDD6; background:#FFFDFB; color:var(--ink); font-size:12.5px; font-weight:500; cursor:pointer; line-height:1; }
 .sup-chip.active{ background:#C3A092; border-color:#C3A092; color:#fff; font-weight:600; }
+/* Pedido (Set 2026): "Informações para os convidados"/"Weddy Concierge"
+   mostravam sempre TODOS os campos vazios de uma vez, sem dar a escolher —
+   passa a ser o próprio casal a decidir quais quer preencher, um a um,
+   ficando os restantes como sugestões por adicionar (com o exemplo de
+   sempre, só que agora no rótulo do botão em vez de dentro de uma caixa
+   vazia). */
+.guestinfo-addchip{ all:unset; box-sizing:border-box; display:inline-flex; align-items:center; gap:5px; padding:8px 14px; border-radius:20px; border:1.4px dashed var(--line); color:var(--ink-soft); font-size:12.5px; font-weight:500; cursor:pointer; line-height:1; margin:0 8px 8px 0; }
+.guestinfo-addchip:active{ background:rgba(20,20,20,0.05); }
+.guestinfo-field{ margin-bottom:12px; }
+.guestinfo-field-top{ display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:4px; }
+.guestinfo-field-top span{ font-size:11px; color:var(--ink-soft); }
+.guestinfo-field-remove{ all:unset; box-sizing:border-box; width:20px; height:20px; border-radius:50%; display:flex; align-items:center; justify-content:center; background:rgba(20,20,20,0.06); color:var(--ink-soft); font-size:12px; cursor:pointer; line-height:1; flex-shrink:0; }
 .sup-banner{ display:flex; gap:12px; align-items:stretch; margin:0 18px 18px; padding:18px; border-radius:16px; background:#EADFD6; }
 .sup-banner-text{ flex:1; min-width:0; }
 .sup-banner-eyebrow{ font-size:9.5px; font-weight:600; letter-spacing:.08em; color:#A9705C; text-transform:uppercase; margin-bottom:7px; }
@@ -1121,6 +1133,15 @@ html{
    defini-las — mesmo problema do .delete-response-link/.child-remove
    acima, encontrado numa revisão a todo o ficheiro. */
 .loading{ padding:60px 0; color:var(--ink-soft); font-size:13.5px; text-align:center; }
+/* Pedido (Set 2026): ao anexar um ficheiro (Lua de mel, contrato de
+   fornecedor, documento), a página ficava sem nenhuma indicação clara de
+   que algo estava a acontecer — só um texto pequeno e cinzento, fácil de
+   não reparar, e no caso do contrato de fornecedor nem isso (nada mudava
+   visivelmente enquanto o ficheiro subia). Este "spinner" pequeno é
+   reaproveitado em todos os sítios da app que sobem um ficheiro. */
+.upload-spin{ display:inline-block; width:14px; height:14px; border:2px solid rgba(20,20,20,0.15); border-top-color:var(--rust); border-radius:50%; animation:weddy-upspin .8s linear infinite; vertical-align:-2px; margin-right:7px; flex-shrink:0; }
+@keyframes weddy-upspin{ to{ transform:rotate(360deg); } }
+.upload-status-row{ display:flex; align-items:center; font-size:12.5px; color:var(--ink-soft); }
 .hm-city-num{ flex-shrink:0; width:22px; height:22px; border-radius:50%; background:var(--rust); color:#fff; font-size:11.5px; font-weight:700; display:flex; align-items:center; justify-content:center; margin-right:10px; }
 /* Caixa de seleção do "modo grupo" no ecrã de RSVP (criar um link de
    família a partir de vários convidados escolhidos à mão) — sem esta
@@ -1362,7 +1383,14 @@ html.rotate-blocked .rotate-lock-overlay{ display:flex; }
        Reaproveita o mesmo padrão visual do img-lightbox acima. -->
   <div class="img-lightbox" id="doc-lightbox">
     <button class="img-lightbox-close" id="doc-lightbox-close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 5l14 14M19 5 5 19"/></svg> <span data-t="btnClose">Fechar</span></button>
-    <iframe id="doc-lightbox-frame" src="" style="width:100%; height:100%; border:0; border-radius:12px; background:#fff;"></iframe>
+    <!-- Bug encontrado ao vivo (Set 2026): um <iframe src="urlDoPdf"> deixa o
+         motor de PDF nativo do telemóvel decidir o zoom inicial — no Safari
+         iOS isso mostrava só um canto ampliado da 1ª página, cortado, sem
+         dar para ver as restantes. Passa a desenhar-se o PDF nós próprios,
+         página a página, com o pdf.js que a app já usa para ler texto dos
+         PDFs — cada página em tamanho fixo (ajustada à largura do ecrã),
+         empilhadas verticalmente, com scroll normal para ver todas. -->
+    <div id="doc-lightbox-pages" style="width:100%; height:100%; overflow:auto; -webkit-overflow-scrolling:touch; display:flex; flex-direction:column; align-items:center; gap:14px; padding:8px 0 30px;"></div>
   </div>
 
   <div class="tabbar" id="tabbar"></div>
@@ -1521,6 +1549,18 @@ const CURRENT_PRIVACY_VERSION = '2026-09-24';
   // evento: usa requestAnimationFrame para agrupar disparos seguidos
   // (resize+scroll costumam disparar quase ao mesmo tempo) numa só
   // atualização.
+  // Bug encontrado ao vivo outra vez (Set 2026, depois da versão acima):
+  // ao ancorar o balão pelo TOPO e esticar o "max-height" para preencher
+  // (quase) todo o espaço visível acima do teclado, o balão passou a
+  // ocupar praticamente o ecrã inteiro (do topo até mesmo por cima do
+  // teclado) em vez de manter o tamanho compacto de sempre — daí parecer
+  // "muito alto". A causa era mesmo essa esticada de "max-height" a seguir
+  // ao espaço disponível, não a posição em si. Correção: o balão MANTÉM
+  // sempre o tamanho normal (o "max-height" do CSS, nunca alterado por
+  // aqui) — só o "bottom" é que sobe o suficiente para não ficar escondido
+  // atrás do teclado, exatamente como fazia a primeira versão desta
+  // correção, mas ainda ancorado ao VisualViewport (não à janela inteira)
+  // para não saltar com pequenas oscilações do teclado.
   let kbRaf = null;
   function adjustChatPanelForKeyboard(){
     if(kbRaf) cancelAnimationFrame(kbRaf);
@@ -1530,16 +1570,12 @@ const CURRENT_PRIVACY_VERSION = '2026-09-24';
       if(!panel || panel.hidden || !window.visualViewport) return;
       const vv = window.visualViewport;
       const keyboardInset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+      panel.style.top = '';
+      panel.style.maxHeight = '';
       if(keyboardInset > 60){
-        const visibleBottom = vv.offsetTop + vv.height;
-        const maxH = Math.max(160, Math.min(560, vv.height - 24));
-        panel.style.bottom = 'auto';
-        panel.style.top = Math.max(8, visibleBottom - maxH - 8) + 'px';
-        panel.style.maxHeight = maxH + 'px';
+        panel.style.bottom = (keyboardInset + 8) + 'px';
       } else {
-        panel.style.top = '';
         panel.style.bottom = '';
-        panel.style.maxHeight = '';
       }
     });
   }
@@ -2974,6 +3010,13 @@ const APP_I18N = {
     subscriptionPlanLabel:'Plano', subscriptionManageNote:'(Protótipo — a gestão de faturação real ainda não está ligada a nenhum pagamento.)',
     subscriptionStartedLabel:'Início', subscriptionExpiresLabel:'Válida até',
     btnCancelSubscription:'Cancelar subscrição', btnCancelingEllipsis:'A cancelar…',
+    subscriptionSubtitleText:'Mais funcionalidades. Um casamento mais completo.',
+    subscriptionActiveBadge:'Ativo',
+    subscriptionFeatureGuests:'Convidados ilimitados', subscriptionFeatureAISeating:'AI Seating', subscriptionFeatureWeddingHealth:'Wedding Health',
+    subscriptionFeatureMemories:'Memórias', subscriptionFeatureRSVP:'RSVP avançado', subscriptionFeatureMore:'E muito mais…',
+    subscriptionCurrentPlanLabel:'Plano atual', subscriptionDefaultPlanName:'Premium — 24 meses', subscriptionPriceText:'29,99€ / 24 meses',
+    subscriptionRenewsOnLabel:(d)=>`Renova a ${d}`,
+    subscriptionNeedHelpTitle:'Precisas de ajuda?', subscriptionNeedHelpDesc:'Fala com a nossa equipa de suporte.',
     confirmCancelSubscriptionText:'Isto cancela já a subscrição Weddy Premium — todas as funcionalidades Premium (RSVP, Wedding Health, Memórias, Documentos, Google Calendar, Assistente) ficam bloqueadas de imediato. Confirmas?',
     alertSubscriptionCancelError:'Não foi possível cancelar a subscrição agora — verifica a ligação e tenta de novo.',
     homePremiumSectionLabel:'Weddy Premium',
@@ -3370,16 +3413,25 @@ const APP_I18N = {
     labelRSVPDeadline:'Prazo para responder',
     guestInfoLabel:'Informações para os convidados',
     guestInfoSubLabel:'(aparecem no link de cada um, em "Perguntas frequentes")',
-    phDressCode:'Dress code (ex: Traje de cerimónia, cores a evitar…)',
-    phGuestNotes:'Outras notas (como chegar, transporte, alojamento perto…)',
+    phDressCode:'ex: Traje de cerimónia, cores a evitar…',
+    phGuestNotes:'ex: como chegar, transporte, alojamento perto…',
     btnSaveInfo:'Guardar informações',
     conciergeLabel:'Weddy Concierge (chat dos convidados)',
     conciergeSubLabel:'(o que o assistente de cada convidado vai saber responder)',
-    phParking:'Estacionamento (ex: gratuito no local, parque a 200m…)',
-    phTransport:'Transporte (ex: shuttle às 18h do hotel X…)',
-    phAccommodation:'Alojamento (ex: hotéis recomendados, desconto com o código X…)',
-    phGifts:'Presentes / lista de casamento (ex: IBAN, lua de mel, sem prendas…)',
-    phContact:'Contacto para dúvidas (ex: telefone ou email dos noivos)',
+    phParking:'ex: gratuito no local, parque a 200m…',
+    phTransport:'ex: shuttle às 18h do hotel X…',
+    phAccommodation:'ex: hotéis recomendados, desconto com o código X…',
+    phGifts:'ex: IBAN, lua de mel, sem prendas…',
+    phContact:'ex: telefone ou email dos noivos',
+    labelDressCode:'Dress code',
+    labelGuestNotes:'Outras notas',
+    labelParking:'Estacionamento',
+    labelTransport:'Transporte',
+    labelAccommodation:'Alojamento',
+    labelGifts:'Presentes / lista de casamento',
+    labelContact:'Contacto para dúvidas',
+    btnAddInfoField:'+ Adicionar',
+    guestInfoAddSectionLabel:'Podes adicionar:',
     conciergeFaqLabel:'Perguntas e respostas personalizadas',
     phConciergeFaq:'P: Posso levar crianças?\nR: Sim, adoramos ter as crianças connosco!\n\nP: Há vegetariano?\nR: Sim, é só dizeres no RSVP.',
     conciergeFaqHint:'Escreve pares "P:" (pergunta) e "R:" (resposta), separados por uma linha em branco. O chat só responde com base no que aqui escreveres.',
@@ -3408,6 +3460,12 @@ const APP_I18N = {
     emptyNoGuestsSaved:'Ainda não tens convidados guardados em "Convidados".',
     rsvpNoteLinkPrivate:'Cada link é só desse convidado — nunca mostra a lista toda nem o orçamento do casamento.',
     rsvpNoteAutoFree:'Quando alguém responde "Não vou", o lugar à mesa (se já estivesse atribuído) fica automaticamente livre. As crianças que a pessoa declarar no link aparecem em "Convidados → Crianças", já contadas e prontas a sentar às mesas.',
+    rsvpRespostasNotesShort:'Cada link é privado. Quem responde "Não vou" liberta o lugar automaticamente e as crianças são contadas em "Convidados → Crianças".',
+    rsvpRefreshErrorNote:'Não foi possível atualizar as respostas agora.',
+    btnReportProblem:'Reportar problema',
+    rsvpTabSendInvites:'Enviar convites', rsvpTabGuestList:'Lista de convidados',
+    rsvpHubSubtitle:'Escolhe como configurar e acompanhar os convites dos teus convidados.',
+    securityHeroTitle:'Os teus dados estão seguros',
     btnGroupFamily:'Agrupar em família',
     btnCancelGroup:'Cancelar',
     groupModeHint:'Seleciona 2 ou mais convidados que devem partilhar o mesmo link de RSVP (ex: um casal ou uma família toda).',
@@ -3424,6 +3482,7 @@ const APP_I18N = {
     relTimeOneDay:'há 1 dia',
     relTimeDays: n=>`há ${n} dias`,
     confirmRemoveContract:'Remover o contrato guardado?',
+    confirmRemoveGuestInfoField:'Remover esta informação? O texto já escrito também é apagado.',
     confirmDeleteSupplier:'Eliminar este fornecedor? Esta ação não pode ser desfeita.',
     confirmDeleteMemory:'Apagar esta fotografia? Não é possível desfazer.',
     alertDeleteMemoryError:'Não foi possível apagar esta fotografia. Tenta novamente.',
@@ -3443,6 +3502,7 @@ const APP_I18N = {
     btnAddHoneymoonAttachment:'Adicionar anexo (PDF ou foto)',
     errAttachmentUnsupportedType:'Tipo de ficheiro não suportado. Usa um PDF ou uma imagem, até 15MB.',
     errOpenAttachmentFailed:'Não foi possível abrir este anexo. Tenta novamente.',
+    btnOpenInNewTab:'Abrir noutro separador',
     confirmDeleteHoneymoonAttachment:'Eliminar este anexo?',
     confirmSignOut:'Tens a certeza que queres sair da conta?',
     alertOnlyCreatorCanRemoveAccess:'Só quem criou o casamento pode remover o próprio acesso.',
@@ -3474,6 +3534,7 @@ const APP_I18N = {
     statusPdfOnly:'Só é possível carregar ficheiros PDF.',
     statusFileTooLarge:'Ficheiro grande demais (máx. 15MB).',
     statusReadingPdf:'A ler o PDF…',
+    statusUploadingFile: (name)=>`A enviar "${name}"…`,
     statusPdfReadError:'Não foi possível ler este PDF. Tenta outro ficheiro.',
     tcSheetTitleNew:'Nova categoria',
     tcSheetTitleEdit:'Editar categoria',
@@ -3544,9 +3605,11 @@ const APP_I18N = {
     memoriesLoadingText:'A carregar fotos…',
     memoriesEmptyText:'Ainda não há fotos partilhadas. Assim que um convidado adicionar uma no link de RSVP, aparece aqui.',
     memoriesIntroText:'Fotos que os teus convidados foram partilhando pelo próprio link de RSVP. Só tu consegues vê-las.',
+    memoriesPrivateTitle:'As tuas memórias são privadas.', memoriesPrivateDesc:'Só tu consegues vê-las.',
     btnRefresh:'Atualizar',
     charsExtractedLabel:(n)=>`${n} caracteres extraídos`,
     docsEmptyText:'Ainda não carregaste nenhum documento.',
+    docsCardTitle:'Mantém os teus documentos organizados', uploadedDocumentsLabel:'Documentos carregados',
     docsIntroText:'Carrega contratos ou documentos em PDF — o Assistente Weddy passa a conseguir procurar e mostrar-te o trecho relevante quando perguntares algo sobre eles (ex: "o que diz o contrato do espaço sobre o pagamento final?"). Tudo processado aqui no telemóvel/computador, sem nenhuma IA nem servidor externo — é só uma pesquisa por palavras-chave, não uma resposta inventada.',
     btnUploadPDF:'Carregar PDF',
 
@@ -3954,6 +4017,13 @@ const APP_I18N = {
     subscriptionPlanLabel:'Plan', subscriptionManageNote:'(Prototype — real billing management is not connected to any payment yet.)',
     subscriptionStartedLabel:'Started', subscriptionExpiresLabel:'Valid until',
     btnCancelSubscription:'Cancel subscription', btnCancelingEllipsis:'Cancelling…',
+    subscriptionSubtitleText:'More features. A more complete wedding.',
+    subscriptionActiveBadge:'Active',
+    subscriptionFeatureGuests:'Unlimited guests', subscriptionFeatureAISeating:'AI Seating', subscriptionFeatureWeddingHealth:'Wedding Health',
+    subscriptionFeatureMemories:'Memories', subscriptionFeatureRSVP:'Advanced RSVP', subscriptionFeatureMore:'And much more…',
+    subscriptionCurrentPlanLabel:'Current plan', subscriptionDefaultPlanName:'Premium — 24 months', subscriptionPriceText:'€29.99 / 24 months',
+    subscriptionRenewsOnLabel:(d)=>`Renews on ${d}`,
+    subscriptionNeedHelpTitle:'Need help?', subscriptionNeedHelpDesc:'Get in touch with our support team.',
     confirmCancelSubscriptionText:'This cancels your Weddy Premium subscription right away — every Premium feature (RSVP, Wedding Health, Memories, Documents, Google Calendar, Assistant) is locked immediately. Confirm?',
     alertSubscriptionCancelError:'Could not cancel the subscription right now — check your connection and try again.',
     homePremiumSectionLabel:'Weddy Premium',
@@ -4346,16 +4416,25 @@ const APP_I18N = {
     labelRSVPDeadline:'Deadline to respond',
     guestInfoLabel:'Information for guests',
     guestInfoSubLabel:'(shown on each guest\'s link, under "FAQ")',
-    phDressCode:'Dress code (e.g. Formal attire, colors to avoid…)',
-    phGuestNotes:'Other notes (how to get there, transport, nearby accommodation…)',
+    phDressCode:'e.g. Formal attire, colors to avoid…',
+    phGuestNotes:'e.g. how to get there, transport, nearby accommodation…',
     btnSaveInfo:'Save information',
     conciergeLabel:'Weddy Concierge (guest chat)',
     conciergeSubLabel:'(what each guest\'s assistant will know how to answer)',
-    phParking:'Parking (e.g. free on-site, parking lot 200m away…)',
-    phTransport:'Transport (e.g. shuttle at 6pm from hotel X…)',
-    phAccommodation:'Accommodation (e.g. recommended hotels, discount code X…)',
-    phGifts:'Gifts / registry (e.g. IBAN, honeymoon fund, no gifts please…)',
-    phContact:'Contact for questions (e.g. couple\'s phone or email)',
+    phParking:'e.g. free on-site, parking lot 200m away…',
+    phTransport:'e.g. shuttle at 6pm from hotel X…',
+    phAccommodation:'e.g. recommended hotels, discount code X…',
+    phGifts:'e.g. IBAN, honeymoon fund, no gifts please…',
+    phContact:'e.g. couple\'s phone or email',
+    labelDressCode:'Dress code',
+    labelGuestNotes:'Other notes',
+    labelParking:'Parking',
+    labelTransport:'Transport',
+    labelAccommodation:'Accommodation',
+    labelGifts:'Gifts / registry',
+    labelContact:'Contact for questions',
+    btnAddInfoField:'+ Add',
+    guestInfoAddSectionLabel:'You can add:',
     conciergeFaqLabel:'Custom questions and answers',
     phConciergeFaq:'Q: Can we bring kids?\nA: Yes, we\'d love to have them there!\n\nQ: Is there a vegetarian option?\nA: Yes, just mention it in your RSVP.',
     conciergeFaqHint:'Write "Q:" (question) and "A:" (answer) pairs, separated by a blank line. The chat only answers based on what you write here.',
@@ -4384,6 +4463,12 @@ const APP_I18N = {
     emptyNoGuestsSaved:'You don\'t have any guests saved in "Guests" yet.',
     rsvpNoteLinkPrivate:'Each link belongs only to that guest — it never shows the full list or the wedding budget.',
     rsvpNoteAutoFree:'When someone answers "Not going", their seat (if already assigned) is automatically freed. Children declared through the link appear in "Guests → Children", already counted and ready to be seated at tables.',
+    rsvpRespostasNotesShort:'Each link is private. Anyone who answers "Not going" frees their seat automatically, and children are counted in "Guests → Children".',
+    rsvpRefreshErrorNote:'Could not update responses right now.',
+    btnReportProblem:'Report a problem',
+    rsvpTabSendInvites:'Send invites', rsvpTabGuestList:'Guest list',
+    rsvpHubSubtitle:'Choose how to set up and track your guests\' invitations.',
+    securityHeroTitle:'Your data is safe with us',
     btnGroupFamily:'Group as family',
     btnCancelGroup:'Cancel',
     groupModeHint:'Select 2 or more guests who should share the same RSVP link (e.g. a couple or a whole family).',
@@ -4400,6 +4485,7 @@ const APP_I18N = {
     relTimeOneDay:'1 day ago',
     relTimeDays: n=>`${n} days ago`,
     confirmRemoveContract:'Remove the saved contract?',
+    confirmRemoveGuestInfoField:'Remove this information? The text already written will also be deleted.',
     confirmDeleteSupplier:'Delete this supplier? This action cannot be undone.',
     confirmDeleteMemory:"Delete this photo? This can't be undone.",
     alertDeleteMemoryError:'Could not delete this photo. Please try again.',
@@ -4419,6 +4505,7 @@ const APP_I18N = {
     btnAddHoneymoonAttachment:'Add attachment (PDF or photo)',
     errAttachmentUnsupportedType:'Unsupported file type. Use a PDF or an image, up to 15MB.',
     errOpenAttachmentFailed:'Could not open this attachment. Please try again.',
+    btnOpenInNewTab:'Open in a new tab',
     confirmDeleteHoneymoonAttachment:'Delete this attachment?',
     confirmSignOut:'Are you sure you want to sign out?',
     alertOnlyCreatorCanRemoveAccess:'Only the person who created the wedding can remove their own access.',
@@ -4450,6 +4537,7 @@ const APP_I18N = {
     statusPdfOnly:'Only PDF files can be uploaded.',
     statusFileTooLarge:'File too large (max 15MB).',
     statusReadingPdf:'Reading the PDF…',
+    statusUploadingFile: (name)=>`Uploading "${name}"…`,
     statusPdfReadError:'Could not read this PDF. Try another file.',
     tcSheetTitleNew:'New category',
     tcSheetTitleEdit:'Edit category',
@@ -4520,9 +4608,11 @@ const APP_I18N = {
     memoriesLoadingText:'Loading photos…',
     memoriesEmptyText:'No photos shared yet. As soon as a guest adds one through the RSVP link, it will appear here.',
     memoriesIntroText:'Photos your guests have shared through their own RSVP link. Only you can see them.',
+    memoriesPrivateTitle:'Your memories are private.', memoriesPrivateDesc:'Only you can see them.',
     btnRefresh:'Refresh',
     charsExtractedLabel:(n)=>`${n} characters extracted`,
     docsEmptyText:'You haven\'t uploaded any documents yet.',
+    docsCardTitle:'Keep your documents organized', uploadedDocumentsLabel:'Uploaded documents',
     docsIntroText:'Upload contracts or PDF documents — the Weddy Assistant will then be able to search and show you the relevant excerpt when you ask about them (e.g. "what does the venue contract say about the final payment?"). Everything is processed here on your phone/computer, with no AI or external server — it\'s just a keyword search, not a made-up answer.',
     btnUploadPDF:'Upload PDF',
 
@@ -6259,15 +6349,16 @@ function viewAISeatingPrefs(){
       </div>
     </div>
   ` : `
-    <div class="visit-detail" style="margin:12px 16px 0; padding:12px 14px; background:var(--card); border:1px solid var(--line); border-radius:12px;">
-      <div style="font-weight:500; margin-bottom:10px;">${ta('aiSeatingNewPreferenceLabel')}</div>
-      <div style="font-size:11.5px; color:var(--ink-soft); margin-bottom:5px;">${ta('priorityNextPrefLabel')}</div>
-      <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
-        ${Object.keys(PRIORITY_LABEL).map(pr=>`
-          <button class="visit-action-btn ${aiSeatingNewPriority===pr?'is-selected':''}" data-aiseatpriority="${pr}">${PRIORITY_LABEL[pr]}</button>
-        `).join('')}
+    <div class="stat-card" style="margin:12px 16px 0;">
+      <div style="font-size:15px; font-weight:600; color:var(--ink); margin-bottom:10px;">${ta('aiSeatingNewPreferenceLabel')}</div>
+      <div style="font-size:11.5px; color:var(--ink-soft); margin-bottom:6px;">${ta('priorityNextPrefLabel')}</div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px;">
+        ${Object.keys(PRIORITY_LABEL).map(pr=>{
+          const dotColor = pr==='HARD' ? '#C0523F' : pr==='STRONG' ? '#D8A657' : '#D9C24B';
+          return `<button class="visit-action-btn ${aiSeatingNewPriority===pr?'is-selected':''}" data-aiseatpriority="${pr}" style="display:flex; align-items:center; gap:6px;"><span style="width:8px; height:8px; border-radius:50%; background:${dotColor}; flex-shrink:0;"></span>${PRIORITY_LABEL[pr]}</button>`;
+        }).join('')}
       </div>
-      <div style="font-size:11.5px; color:var(--ink-soft); margin-bottom:5px;">${ta('aiSeatingTypeStepLabel')}</div>
+      <div style="font-size:11.5px; color:var(--ink-soft); margin-bottom:6px;">${ta('aiSeatingTypeStepLabel')}</div>
       <div style="display:flex; gap:8px; flex-wrap:wrap;">
         ${Object.keys(TYPE_LABEL).map(type=>`
           <button class="visit-action-btn" data-aiseatstart="${type}|${aiSeatingNewPriority}">+ ${TYPE_LABEL[type]}</button>
@@ -6277,25 +6368,35 @@ function viewAISeatingPrefs(){
   `;
 
   return `
-  <div class="navbar">
-    <button class="nav-back" data-aiseatback>${ICONS.chevleft||ICONS.chev}</button>
-    <div class="navbar-titlewrap"><h1>${ta('aiSeatingTitle')}</h1></div>
-  </div>
-  <div class="empty-note" style="margin:0 16px 10px;">${ta('aiSeatingIntroText')}</div>
-  <div class="ring-stat-card" style="margin:0 16px 14px; padding:14px;">
-    <div class="ring-stat-list" style="flex:1; display:flex; justify-content:space-between;">
-      <div class="ring-stat-item"><span class="n">${confirmedGuests.length}</span><span class="l">${ta('aiSeatingConfirmedGuestsLabel')}</span></div>
-      <div class="ring-stat-item"><span class="n">${tableCount}</span><span class="l">${ta('aiSeatingTablesCountLabel')}</span></div>
-      <div class="ring-stat-item"><span class="n" style="${overCapacity?'color:var(--danger,#b3413a);':''}">${totalSeats}</span><span class="l">${ta('aiSeatingSeatsAvailableLabel')}</span></div>
+  ${defSubHeader(ta('aiSeatingTitle'), ta('aiSeatingIntroText'), true, 'data-aiseatback')}
+  <div class="stat-card" style="margin:0 16px 14px; display:flex; align-items:stretch;">
+    <div style="flex:1; text-align:center; padding:0 4px;">
+      <div style="color:var(--rust-dark); display:flex; justify-content:center; width:20px; height:20px; margin:0 auto 6px;">${ICONS.guests}</div>
+      <div class="n">${confirmedGuests.length}</div>
+      <div class="l" style="margin-top:2px;">${ta('aiSeatingConfirmedGuestsLabel')}</div>
+    </div>
+    <div style="width:1px; background:var(--line); margin:2px 0;"></div>
+    <div style="flex:1; text-align:center; padding:0 4px;">
+      <div style="color:var(--rust-dark); display:flex; justify-content:center; width:20px; height:20px; margin:0 auto 6px;">${ICONS.tables}</div>
+      <div class="n">${tableCount}</div>
+      <div class="l" style="margin-top:2px;">${ta('aiSeatingTablesCountLabel')}</div>
+    </div>
+    <div style="width:1px; background:var(--line); margin:2px 0;"></div>
+    <div style="flex:1; text-align:center; padding:0 4px;">
+      <div style="color:var(--rust-dark); display:flex; justify-content:center; width:20px; height:20px; margin:0 auto 6px;">${ICONS.seat}</div>
+      <div class="n" style="${overCapacity?'color:var(--danger,#b3413a);':''}">${totalSeats}</div>
+      <div class="l" style="margin-top:2px;">${ta('aiSeatingSeatsAvailableLabel')}</div>
     </div>
   </div>
 
-  <div class="section-label">${ta('sectionPreferences')}</div>
+  <div class="section-label" style="display:flex; align-items:center; gap:6px;"><span style="width:14px; height:14px; display:inline-flex; color:var(--rust-dark);">${ICONS.sparkle||''}</span> ${ta('sectionPreferences')}</div>
   ${aiSeatingConstraints.length ? `<div class="list-group" style="margin:0 16px 4px;">${constraintsHTML}</div>` : `<div class="empty-note" style="margin:0 16px 4px;">${ta('aiSeatingNoPreferencesText')}</div>`}
   ${pickerHTML}
 
-  <div class="section-label" style="margin-top:18px;">${ta('aiSeatingFreeTextLabel')}</div>
-  <textarea id="ai-seat-freetext" rows="3" placeholder="${escapeHTML(ta('aiSeatingFreeTextPlaceholder'))}" style="all:unset; box-sizing:border-box; width:calc(100% - 32px); margin:0 16px; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:10px 12px; font-family:inherit; font-size:13px; resize:vertical;">${escapeHTML(aiSeatingFreeText)}</textarea>
+  <div class="stat-card" style="margin:16px 16px 0;">
+    <div class="l" style="margin:0 0 12px; font-size:15px; color:var(--ink); font-weight:600;">${ta('aiSeatingFreeTextLabel')}</div>
+    <textarea id="ai-seat-freetext" rows="3" placeholder="${escapeHTML(ta('aiSeatingFreeTextPlaceholder'))}" style="all:unset; box-sizing:border-box; width:100%; background:var(--bg); border:1px solid var(--line); border-radius:12px; padding:10px 12px; font-family:inherit; font-size:13px; resize:vertical;">${escapeHTML(aiSeatingFreeText)}</textarea>
+  </div>
 
   ${overCapacity ? `<div class="empty-note" style="margin:14px 16px 0; color:var(--danger,#b3413a);">⚠️ ${ta('aiSeatingOverCapacityText')(confirmedGuests.length, totalSeats)}</div>` : ''}
   <div style="padding:18px 16px 8px;">
@@ -7305,6 +7406,7 @@ function viewFornecedorDetalhe(){
     </div>
     ${contract? `<button class="remove-x" id="supd-contract-remove">✕</button>` : ICONS.chev}
   </div>
+  <div id="supd-contract-status" class="empty-note" style="margin:-6px 16px 12px;"></div>
   <input type="file" id="supd-contract-input" accept="application/pdf,image/*" style="display:none;">
 
   <div class="section-label">${ta('sectionNotes')}</div>
@@ -7423,6 +7525,12 @@ function bindFornecedorDetalheHandlers(){
   if(contractInput) contractInput.addEventListener('change', async (e)=>{
     const file = e.target.files && e.target.files[0];
     if(!file) return;
+    const contractStatusEl = document.getElementById('supd-contract-status');
+    // Pedido (Set 2026): esta zona não tinha NENHUMA indicação de que o
+    // contrato estava a subir — quem tocasse não sabia se tinha resultado,
+    // e podia tocar outra vez sem querer.
+    if(contractStatusEl) contractStatusEl.innerHTML = `<span class="upload-status-row"><span class="upload-spin"></span>${escapeHTML(ta('statusUploadingFile')(file.name))}</span>`;
+    if(contractRow) contractRow.style.cssText += 'pointer-events:none; opacity:.6;';
     try{
       const doc = await uploadSupplierContract(s.id, file);
       if(!doc){
@@ -7435,11 +7543,16 @@ function bindFornecedorDetalheHandlers(){
         // na prática) — nesse caso, avisa e não guarda nada em vez de usar
         // o fallback inseguro.
         alert(ta('errContractUnsupportedType') || 'Tipo de ficheiro não suportado. Usa um PDF ou uma imagem.');
+        if(contractStatusEl) contractStatusEl.textContent = '';
+        if(contractRow) contractRow.style.cssText = contractRow.style.cssText.replace('pointer-events:none; opacity:.6;','');
         return;
       }
       pushRemote(true);
       _origRender();
-    }catch(err){}
+    }catch(err){
+      if(contractStatusEl) contractStatusEl.textContent = ta('statusPdfReadError');
+      if(contractRow) contractRow.style.cssText = contractRow.style.cssText.replace('pointer-events:none; opacity:.6;','');
+    }
     e.target.value = '';
   });
 
@@ -7532,6 +7645,12 @@ const RSVP_BASE_URL = 'https://ritamatosdoliveira-creator.github.io/weddy-premiu
 let rsvpResponses = {};
 let rsvpResponsesLoaded = false;
 let rsvpLoadingResponses = false;
+// Pedido da Rita (Set 2026): antes, uma falha a atualizar as respostas
+// ficava só na consola (console.error) — a pessoa via o botão voltar ao
+// normal sem perceber que nada tinha mudado. Agora guardamos que houve
+// erro para mostrar um aviso pequeno com um atalho direto para "Reporta um
+// problema" (viewDefReportar), em vez de a app ficar simplesmente calada.
+let rsvpRefreshError = false;
 let weddingMemories = [];
 
 /* ============================================================
@@ -7640,6 +7759,11 @@ let rsvpSearchQuery = '';
 let rsvpStatusFilter = 'all'; // all | yes | pending | no
 let rsvpFilterChipsOpen = false;
 let lastRSVPRefreshAt = null;
+// Separadores do hub do RSVP (Set 2026, pedido da Rita): "send" agrupa a
+// configuração de como convidar (prazo + info para os convidados), "list"
+// agrupa o acompanhamento de quem já respondeu — só organiza a navegação,
+// não é dado gravado, por isso não precisa de ir para o Firestore.
+let rsvpHomeTab = 'send';
 // Modo de agrupar convidados num único link de RSVP de família: enquanto
 // ativo, cada linha ganha uma checkbox; rsvpGroupSelection guarda as chaves
 // "side|catId|idx" dos convidados escolhidos até se criar o link.
@@ -7652,6 +7776,50 @@ let rsvpSubScreen = null; // null | 'deadline' | 'info' | 'faq' | 'respostas'
 // Edição de perguntas frequentes (Concierge): null = nenhuma a editar,
 // 'new' = a criar uma nova, ou o índice (número) da pergunta existente.
 let rsvpFaqEditingIndex = null;
+// Pedido (Set 2026): "Informações para os convidados"/"Weddy Concierge"
+// deixaram de mostrar sempre todos os campos vazios de uma vez — só os que
+// já têm conteúdo guardado, mais os que a pessoa foi decidindo adicionar
+// nesta sessão (guardado aqui, não no state — não é dado do casamento, é só
+// "que caixas estão abertas neste momento no ecrã").
+let rsvpInfoAddedFields = new Set();
+// Definição dos campos de cada uma das duas secções — usada tanto para
+// desenhar as caixas já adicionadas como as sugestões por adicionar.
+const GUEST_INFO_FIELDS = [
+  { key:'dresscode', settingsKey:'guestDressCode', type:'text', labelKey:'labelDressCode', phKey:'phDressCode', inputId:'rsvp-dresscode-input' },
+  { key:'guestnotes', settingsKey:'guestInfoNotes', type:'textarea', labelKey:'labelGuestNotes', phKey:'phGuestNotes', inputId:'rsvp-guestnotes-input' },
+];
+const CONCIERGE_INFO_FIELDS = [
+  { key:'parking', settingsKey:'guestParkingInfo', type:'text', labelKey:'labelParking', phKey:'phParking', inputId:'rsvp-parking-input' },
+  { key:'transport', settingsKey:'guestTransportInfo', type:'text', labelKey:'labelTransport', phKey:'phTransport', inputId:'rsvp-transport-input' },
+  { key:'accommodation', settingsKey:'guestAccommodationInfo', type:'text', labelKey:'labelAccommodation', phKey:'phAccommodation', inputId:'rsvp-accommodation-input' },
+  { key:'gifts', settingsKey:'guestGiftsInfo', type:'text', labelKey:'labelGifts', phKey:'phGifts', inputId:'rsvp-gifts-input' },
+  { key:'contact', settingsKey:'guestContactInfo', type:'text', labelKey:'labelContact', phKey:'phContact', inputId:'rsvp-contact-input' },
+];
+// Desenha uma secção de campos "expansível": só mostra caixa de texto para
+// os campos que já têm conteúdo OU que a pessoa acabou de adicionar; os
+// restantes ficam como botões de sugestão ("+ Estacionamento", etc.),
+// mantendo bem visível o exemplo de sempre (agora no próprio botão), sem
+// obrigar a olhar para várias caixas vazias de uma vez.
+function guestInfoSectionHTML(fields){
+  const visible = fields.filter(f => (weddingSettings[f.settingsKey]||'').trim() || rsvpInfoAddedFields.has(f.key));
+  const hidden = fields.filter(f => !visible.includes(f));
+  const rows = visible.map(f=>{
+    const val = escapeHTML(weddingSettings[f.settingsKey]||'');
+    const ph = escapeHTML(ta(f.phKey));
+    const inputHtml = f.type==='textarea'
+      ? `<textarea id="${f.inputId}" placeholder="${ph}" style="width:100%; min-height:70px; border:1.6px solid var(--line); border-radius:12px; padding:10px 12px; font-size:13.5px; font-family:inherit; color:var(--ink); resize:vertical; box-sizing:border-box;">${val}</textarea>`
+      : `<input class="field-input" id="${f.inputId}" type="text" placeholder="${ph}" value="${val}" style="text-align:left; border:1.6px solid var(--line); border-radius:12px; padding:10px 12px; font-size:13.5px; width:100%; box-sizing:border-box;">`;
+    return `<div class="guestinfo-field">
+      <div class="guestinfo-field-top">
+        <span>${ta(f.labelKey)}</span>
+        <button type="button" class="guestinfo-field-remove" data-guestinforemove="${f.key}">✕</button>
+      </div>
+      ${inputHtml}
+    </div>`;
+  }).join('');
+  const chips = hidden.map(f=>`<button type="button" class="guestinfo-addchip" data-guestinfoadd="${f.key}">${ICONS.plus||'+'} ${ta(f.labelKey)}</button>`).join('');
+  return `${rows}${chips ? `<div style="margin-top:2px;">${hidden.length && visible.length ? `<div style="font-size:11px; color:var(--ink-soft); margin-bottom:6px;">${ta('guestInfoAddSectionLabel')}</div>`:''}${chips}</div>` : ''}`;
+}
 // Fase Feedback (Set 2026): capturas de ecrã escolhidas no ecrã "Reporta um
 // problema", ainda não enviadas — array de { file, dataUrl, name, size }.
 // Vive só em memória (nunca é gravado no state/Firestore antes do envio) e
@@ -8179,12 +8347,14 @@ function loadRSVPResponses(){
     rsvpResponses = next;
     rsvpResponsesLoaded = true;
     rsvpLoadingResponses = false;
+    rsvpRefreshError = false;
     lastRSVPRefreshAt = new Date();
     applyRSVPResponsesToState();
     render();
   }).catch(err=>{
     console.error('Weddy RSVP load error:', err.code, err.message);
     rsvpLoadingResponses = false;
+    rsvpRefreshError = true;
     render();
   });
 }
@@ -8971,7 +9141,9 @@ async function handleDocumentUpload(fileList){
     if(statusEl) statusEl.textContent = ta('statusFileTooLarge');
     return;
   }
-  if(statusEl) statusEl.textContent = ta('statusReadingPdf');
+  const uploadLabel = document.querySelector('label[for="document-file-input"]');
+  if(statusEl) statusEl.innerHTML = `<span class="upload-status-row"><span class="upload-spin"></span>${escapeHTML(ta('statusReadingPdf'))}</span>`;
+  if(uploadLabel) uploadLabel.style.cssText += 'pointer-events:none; opacity:.5;';
   try{
     const text = await extractPdfText(file);
     let storagePath = null;
@@ -8987,6 +9159,7 @@ async function handleDocumentUpload(fileList){
   }catch(err){
     console.error('Weddy PDF extract error:', err);
     if(statusEl) statusEl.textContent = ta('statusPdfReadError');
+    if(uploadLabel) uploadLabel.style.cssText = uploadLabel.style.cssText.replace('pointer-events:none; opacity:.5;','');
   }
   if(input) input.value = '';
 }
@@ -9234,16 +9407,28 @@ function viewRSVPHome(){
   });
   const deadline = weddingSettings.rsvpDeadline || '';
   const deadlineLabel = deadline ? formatDatePT(deadline) : ta('rsvpDeadlineUnset');
+  const sendRowsHtml = rsvpNavRow('deadline', ICONS.calendar, 0, ta('labelRSVPDeadline'), deadlineLabel)
+    + rsvpNavRow('info', ICONS.pencil, 1, ta('guestInfoLabel'), ta('guestInfoSubLabel'));
+  const listRowsHtml = rsvpNavRow('respostas', ICONS.guests, 2, ta('rsvpRespostasNavTitle'), ta('rsvpRespostasNavDesc'));
   return `
   ${defSubHeader(ta('rsvpTitle'))}
+  <div class="stat-card" style="margin:0 16px 14px; display:flex; align-items:center; gap:12px;">
+    <div class="premium-upsell-icon" style="width:40px; height:40px; margin:0; flex-shrink:0;">${ICONS.guests}</div>
+    <div style="flex:1; min-width:0;">
+      <div class="l" style="margin:0; font-size:15px; color:var(--ink); font-weight:600;">${ta('rsvpTitle')}</div>
+      <div class="empty-note" style="margin:2px 0 0; padding:0;">${ta('rsvpHubSubtitle')}</div>
+    </div>
+  </div>
   <div class="stats-row">
     <div class="stat-card"><div class="l" style="margin:0 0 4px;">${ta('tabGuests')}</div><div class="n">${fmtGuestCount(totalGuests)}</div></div>
     <div class="stat-card"><div class="l" style="margin:0 0 4px;">${ta('respondedLabel')}</div><div class="n">${fmtGuestCount(responded)}</div></div>
     <div class="stat-card"><div class="l" style="margin:0 0 4px;">${ta('lblConfirmed')}</div><div class="n">${fmtGuestCount(confirmedYes)}</div></div>
   </div>
-  ${rsvpNavRow('deadline', ICONS.calendar, 0, ta('labelRSVPDeadline'), deadlineLabel)}
-  ${rsvpNavRow('info', ICONS.pencil, 1, ta('guestInfoLabel'), ta('guestInfoSubLabel'))}
-  ${rsvpNavRow('respostas', ICONS.guests, 2, ta('rsvpRespostasNavTitle'), ta('rsvpRespostasNavDesc'))}
+  <div class="segmented">
+    <button type="button" class="${rsvpHomeTab==='send'?'active':''}" data-rsvphometab="send">${ta('rsvpTabSendInvites')}</button>
+    <button type="button" class="${rsvpHomeTab==='list'?'active':''}" data-rsvphometab="list">${ta('rsvpTabGuestList')}</button>
+  </div>
+  <div style="margin-top:10px;">${rsvpHomeTab==='list' ? listRowsHtml : sendRowsHtml}</div>
   <div class="empty-note" style="margin:16px 16px 28px;">${ta('rsvpNoteAutoFree')}</div>
   `;
 }
@@ -9290,17 +9475,12 @@ function viewRSVPInfo(){
   ${defSubHeader(ta('guestInfoLabel'))}
   <div class="stat-card" style="margin:0 16px 12px;">
     <div class="l" style="margin:0 0 8px;">${ta('guestInfoLabel')} <span style="font-weight:400;">${ta('guestInfoSubLabel')}</span></div>
-    <input class="field-input" id="rsvp-dresscode-input" type="text" placeholder="${ta('phDressCode')}" value="${escapeHTML(weddingSettings.guestDressCode||'')}" style="text-align:left; margin-bottom:10px; border:1.6px solid var(--line); border-radius:12px; padding:10px 12px; font-size:13.5px;">
-    <textarea id="rsvp-guestnotes-input" placeholder="${ta('phGuestNotes')}" style="width:100%; min-height:70px; border:1.6px solid var(--line); border-radius:12px; padding:10px 12px; font-size:13.5px; font-family:inherit; color:var(--ink); resize:vertical;">${escapeHTML(weddingSettings.guestInfoNotes||'')}</textarea>
+    ${guestInfoSectionHTML(GUEST_INFO_FIELDS)}
     <button class="rsvp-deadline-save" id="rsvp-guestinfo-save" style="margin-top:10px; width:100%;">${ta('btnSaveInfo')}</button>
   </div>
   <div class="stat-card" style="margin:0 16px 12px;">
     <div class="l" style="margin:0 0 8px;">${ta('conciergeLabel')} <span style="font-weight:400;">${ta('conciergeSubLabel')}</span></div>
-    <input class="field-input" id="rsvp-parking-input" type="text" placeholder="${ta('phParking')}" value="${escapeHTML(weddingSettings.guestParkingInfo||'')}" style="text-align:left; margin-bottom:8px; border:1.6px solid var(--line); border-radius:12px; padding:10px 12px; font-size:13.5px;">
-    <input class="field-input" id="rsvp-transport-input" type="text" placeholder="${ta('phTransport')}" value="${escapeHTML(weddingSettings.guestTransportInfo||'')}" style="text-align:left; margin-bottom:8px; border:1.6px solid var(--line); border-radius:12px; padding:10px 12px; font-size:13.5px;">
-    <input class="field-input" id="rsvp-accommodation-input" type="text" placeholder="${ta('phAccommodation')}" value="${escapeHTML(weddingSettings.guestAccommodationInfo||'')}" style="text-align:left; margin-bottom:8px; border:1.6px solid var(--line); border-radius:12px; padding:10px 12px; font-size:13.5px;">
-    <input class="field-input" id="rsvp-gifts-input" type="text" placeholder="${ta('phGifts')}" value="${escapeHTML(weddingSettings.guestGiftsInfo||'')}" style="text-align:left; margin-bottom:8px; border:1.6px solid var(--line); border-radius:12px; padding:10px 12px; font-size:13.5px;">
-    <input class="field-input" id="rsvp-contact-input" type="text" placeholder="${ta('phContact')}" value="${escapeHTML(weddingSettings.guestContactInfo||'')}" style="text-align:left; margin-bottom:10px; border:1.6px solid var(--line); border-radius:12px; padding:10px 12px; font-size:13.5px;">
+    ${guestInfoSectionHTML(CONCIERGE_INFO_FIELDS)}
     <button class="rsvp-deadline-save" id="rsvp-concierge-save" style="margin-top:10px; width:100%;">${ta('btnSaveInfo')}</button>
   </div>
   ${rsvpNavRow('faq', ICONS.question, 2, ta('rsvpFaqNavTitle'), ta('rsvpFaqNavDesc'))}
@@ -9456,6 +9636,10 @@ function viewRSVPRespostas(){
   }).join('');
   const transporteCount = withStatus.filter(w=>w.status==='yes' && w.resp && w.resp.transporte).length;
   const alojamentoCount = withStatus.filter(w=>w.status==='yes' && w.resp && w.resp.alojamento).length;
+  const summaryLine = [
+    lastRSVPRefreshAt? ta('lastUpdateLabel')(fmtRelativeTime(lastRSVPRefreshAt)) : ta('neverUpdatedLabel'),
+    lastRSVPSyncSummary ? rsvpSyncSummaryText(lastRSVPSyncSummary) : ''
+  ].filter(Boolean).join(' · ');
   return `
   ${defSubHeader(ta('rsvpRespostasNavTitle'))}
   ${(maybeCount || transporteCount || alojamentoCount) ? `<div class="empty-note" style="margin:0 16px 12px; font-style:normal;">${[
@@ -9463,24 +9647,25 @@ function viewRSVPRespostas(){
     transporteCount ? ta('transportCountLabel')(transporteCount) : '',
     alojamentoCount ? ta('accommodationCountLabel')(alojamentoCount) : ''
   ].filter(Boolean).join(' · ')}</div>` : ''}
-  <button class="rsvp-refresh-btn" id="rsvp-refresh-respostas" ${rsvpLoadingResponses?'disabled':''}>${ICONS.refresh} ${rsvpLoadingResponses? ta('updatingLabel') : ta('btnUpdateResponses')}</button>
-  <div class="rsvp-updated-note">${lastRSVPRefreshAt? ta('lastUpdateLabel')(fmtRelativeTime(lastRSVPRefreshAt)) : ta('neverUpdatedLabel')}</div>
-  ${lastRSVPSyncSummary ? `<div class="empty-note" style="margin:0 16px 10px; font-style:normal;">${rsvpSyncSummaryText(lastRSVPSyncSummary)}</div>` : ''}
-  <div class="rsvp-actions-row">
-    <button class="rsvp-copy-btn" id="rsvp-export-csv" ${totalGuests? '':'disabled'}>${ICONS.download} ${ta('btnExportCSV')}</button>
+  <div class="stat-card" style="margin:0 16px 14px;">
+    <button class="rsvp-refresh-btn" id="rsvp-refresh-respostas" style="margin:0; width:100%;" ${rsvpLoadingResponses?'disabled':''}>${ICONS.refresh} ${rsvpLoadingResponses? ta('updatingLabel') : ta('btnUpdateResponses')}</button>
+    <div class="empty-note" style="margin:8px 0 0; font-style:normal; font-size:11.5px; text-align:center;">${summaryLine}</div>
+    ${rsvpRefreshError ? `
+    <div style="display:flex; align-items:center; justify-content:center; gap:6px; margin-top:8px; padding-top:8px; border-top:1px solid var(--line);">
+      <span style="font-size:11.5px; color:var(--rust-dark);">${ta('rsvpRefreshErrorNote')}</span>
+      <button type="button" class="tappable" data-defgoto="reportar" style="all:unset; cursor:pointer; font-size:11.5px; font-weight:600; color:var(--rust-dark); text-decoration:underline;">${ta('btnReportProblem')}</button>
+    </div>` : ''}
   </div>
-  <div class="rsvp-actions-row">
-    <button class="rsvp-copy-btn" id="rsvp-toggle-group" ${totalGuests>=2? '':'disabled'}>${ICONS.mascot||''} ${rsvpGroupMode? ta('btnCancelGroup') : ta('btnGroupFamily')}</button>
-  </div>
-  ${groupBarHtml}
   <div class="search-bar" style="display:flex; gap:8px;">
     ${ICONS.search}<input type="text" id="rsvp-search" placeholder="${ta('phSearchGuestEllipsis')}" value="${escapeHTML(rsvpSearchQuery)}">
     <button id="rsvp-filter-toggle" style="all:unset; box-sizing:border-box; width:26px; height:26px; display:flex; align-items:center; justify-content:center; color:${rsvpStatusFilter!=='all'?'var(--rust)':'var(--ink-soft)'}; cursor:pointer; flex-shrink:0;">${ICONS.filter}</button>
   </div>
   <div class="assist-chips" style="flex-direction:row; flex-wrap:wrap; margin:0 16px 12px;" id="rsvp-filter-chips" ${rsvpFilterChipsOpen? '':'hidden'}>${filterChips}</div>
+  <button class="rsvp-copy-btn" id="rsvp-toggle-group" style="margin:0 16px 12px; width:calc(100% - 32px);" ${totalGuests>=2? '':'disabled'}>${ICONS.mascot||''} ${rsvpGroupMode? ta('btnCancelGroup') : ta('btnGroupFamily')}</button>
+  ${groupBarHtml}
   ${visible.length? `<div class="list-group" style="margin-bottom:16px;">${rows}</div>` : `<div class="empty-note" style="margin:0 16px 24px;">${totalGuests? ta('emptyNoMatchSearch') : ta('emptyNoGuestsSaved')}</div>`}
-  <div class="empty-note" style="margin:0 16px 6px;">${ta('rsvpNoteLinkPrivate')}</div>
-  <div class="empty-note" style="margin:0 16px 28px;">${ta('rsvpNoteAutoFree')}</div>
+  <div class="empty-note" style="margin:0 16px 14px; font-size:11px;">${ta('rsvpRespostasNotesShort')}</div>
+  <button class="rsvp-copy-btn" id="rsvp-export-csv" style="margin:0 16px 28px; width:calc(100% - 32px);" ${totalGuests? '':'disabled'}>${ICONS.download} ${ta('btnExportCSV')}</button>
   `;
 }
 
@@ -9657,39 +9842,64 @@ function viewDefinicoes(){
 // aqui — Definições fica só com esta entrada para gerir a subscrição em si.
 function viewDefSubscricao(){
   if(!hasActiveSubscription()) return viewDefPremiumLocked(ta('subscriptionTitle'));
-  const plan = (currentSubscription && currentSubscription.plan) || '';
-  // Pedido direto da Rita (Fase 4): mostrar a data de início e a data-limite
-  // dos 24 meses (SUBSCRIPTION_MAX_MONTHS), e dar uma forma de cancelar a
-  // subscrição na própria área de gerir subscrição — antes só existia um
-  // texto a dizer que "a gestão de cancelamento real ainda não está ligada
-  // a nenhum pagamento" (que continua a ser verdade para faturação real,
-  // mas o botão abaixo já cancela mesmo o acesso Premium, que é o que a
-  // pessoa quer quando pede para cancelar).
+  const plan = (currentSubscription && currentSubscription.plan) || ta('subscriptionDefaultPlanName');
+  // Pedido direto da Rita (Fase 4, e reestruturação visual pedida em Set
+  // 2026 para ficar igual ao mock "Manage subscription"): mostrar a
+  // data-limite dos 24 meses (SUBSCRIPTION_MAX_MONTHS) como um selo "Renova
+  // a", e dar uma forma de cancelar a subscrição na própria área de gerir
+  // subscrição — o botão cancela mesmo o acesso Premium (que é o que a
+  // pessoa quer quando pede para cancelar); a nota "(Protótipo…)" mantém-se
+  // visível por baixo para não sugerir que existe faturação real por trás.
   const startedAt = currentSubscription && currentSubscription.startedAt;
-  let datesHtml = '';
+  let expiryLabel = '';
   if(startedAt){
     const started = new Date(startedAt);
     if(!isNaN(started.getTime())){
       const expiry = new Date(started);
       expiry.setMonth(expiry.getMonth() + SUBSCRIPTION_MAX_MONTHS);
-      datesHtml = `<div class="empty-note" style="margin:0 16px 4px;">${ta('subscriptionStartedLabel')}: ${formatDatePT(started.toISOString().slice(0,10))}</div>
-  <div class="empty-note" style="margin:0 16px 12px;">${ta('subscriptionExpiresLabel')}: ${formatDatePT(expiry.toISOString().slice(0,10))}</div>`;
+      expiryLabel = formatDatePT(expiry.toISOString().slice(0,10));
     }
   }
+  const features = ['subscriptionFeatureGuests','subscriptionFeatureAISeating','subscriptionFeatureWeddingHealth','subscriptionFeatureMemories','subscriptionFeatureRSVP','subscriptionFeatureMore'];
+  const featuresHtml = features.map(k=>`
+    <div style="display:flex; align-items:center; gap:10px; padding:6px 0;">
+      <div style="width:20px; height:20px; border-radius:50%; background:rgba(193,88,62,0.12); color:var(--rust-dark); display:flex; align-items:center; justify-content:center; flex-shrink:0;">${ICONS.check}</div>
+      <div style="font-size:13.5px; color:var(--ink);">${ta(k)}</div>
+    </div>`).join('');
   return `
   ${defSubHeader(ta('subscriptionTitle'))}
-  <div class="stat-card" style="margin:0 16px 12px; display:flex; align-items:center; gap:12px;">
-    <div class="premium-upsell-icon" style="width:36px; height:36px; margin:0; flex-shrink:0;">${ICONS.sparkle}</div>
-    <div>
-      <div class="l" style="margin:0 0 2px; font-size:15px; color:var(--ink);">${ta('subscriptionActiveStatus')}</div>
-      ${plan? `<div class="l" style="margin:0;">${ta('subscriptionPlanLabel')}: ${escapeHTML(plan)}</div>` : ''}
+  <div class="stat-card" style="margin:0 16px 12px;">
+    <div style="display:flex; align-items:center; gap:12px;">
+      <div class="premium-upsell-icon" style="width:40px; height:40px; margin:0; flex-shrink:0;">${ICONS.sparkle}</div>
+      <div style="flex:1; min-width:0;">
+        <div class="l" style="margin:0; font-size:16px; color:var(--ink); font-weight:600;">Weddy Premium</div>
+        <div class="empty-note" style="margin:2px 0 0; padding:0;">${ta('subscriptionSubtitleText')}</div>
+      </div>
+      <span class="rsvp-pill rsvp-pill-yes">${ta('subscriptionActiveBadge')}</span>
     </div>
+    <div style="border-top:1px solid var(--line); margin-top:10px; padding-top:4px;">${featuresHtml}</div>
   </div>
-  <div class="empty-note" style="margin:0 16px 12px;">${ta('subscriptionActiveText')}</div>
-  ${datesHtml}
-  <div class="empty-note" style="margin:0 16px 20px;">${ta('subscriptionManageNote')}</div>
-  <div style="padding:0 16px 30px;">
-    <button class="login-btn" id="subscription-cancel-btn" style="margin-top:0; background:var(--card); color:var(--rust); border:1px solid var(--rust);">${ta('btnCancelSubscription')}</button>
+  <div class="stat-card" style="margin:0 16px 12px;">
+    <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:8px; margin-bottom:6px;">
+      <div>
+        <div class="l" style="margin:0 0 2px; font-size:12.5px; color:var(--ink-soft);">${ta('subscriptionCurrentPlanLabel')}</div>
+        <div class="l" style="margin:0 0 2px; font-size:15px; color:var(--ink); font-weight:600;">${escapeHTML(plan)}</div>
+        <div class="empty-note" style="margin:0; padding:0;">${ta('subscriptionPriceText')}</div>
+      </div>
+      ${expiryLabel ? `<span class="rsvp-pill" style="background:var(--cream); color:var(--rust-dark); white-space:nowrap;">${ta('subscriptionRenewsOnLabel')(expiryLabel)}</span>` : ''}
+    </div>
+    <button class="login-btn" id="subscription-cancel-btn" style="margin-top:10px;">${ta('btnCancelSubscription')}</button>
+  </div>
+  <div class="empty-note" style="margin:0 16px 16px;">${ta('subscriptionManageNote')}</div>
+  <div class="list-group" style="margin-bottom:30px;">
+    <div class="list-row tappable" data-defgoto="reportar" style="cursor:pointer;">
+      <div class="def-row-icon" style="${chipStyle(2)}">${ICONS.mail}</div>
+      <div class="def-row-mid">
+        <div class="def-row-title">${ta('subscriptionNeedHelpTitle')}</div>
+        <div class="def-row-desc">${ta('subscriptionNeedHelpDesc')}</div>
+      </div>
+      ${ICONS.chev}
+    </div>
   </div>
   `;
 }
@@ -9770,8 +9980,14 @@ function pageHeader(backId, title, subtitle, extraRight){
     ${extraRight||''}
   </div>`;
 }
-function defSubHeader(title){
-  return pageHeader('def-back-inner', title).replace('id="def-back-inner"', 'data-defback');
+function defSubHeader(title, subtitle, botanical, backAttr){
+  // Set 2026 — Rita pediu para alinhar o header destes sub-ecrãs (com
+  // subtítulo + o ramo/flor decorativo) com o resto da app: os parâmetros
+  // extra são todos opcionais, por isso as chamadas antigas (só o título)
+  // continuam a renderizar exatamente como antes.
+  const showBotanical = botanical!==undefined ? botanical : !!subtitle;
+  const extra = showBotanical ? `<div class="navbar-botanical" style="opacity:.55;">${ICONS.botanical}</div>` : '';
+  return pageHeader('def-back-inner', title, subtitle, extra).replace('id="def-back-inner"', backAttr || 'data-defback');
 }
 function defSaveBtn(id, msgId){
   return `
@@ -9894,6 +10110,11 @@ function viewDefSeguranca(){
   }).join('');
   return `
   ${defSubHeader(ta('defSegurancaTitle'))}
+  <div class="stat-card" style="margin:0 16px 16px; text-align:center;">
+    <div class="premium-upsell-icon" style="width:44px; height:44px;">${ICONS.lock}</div>
+    <div class="l" style="margin:0 0 4px; font-size:15px; color:var(--ink); font-weight:600;">${ta('securityHeroTitle')}</div>
+    <div class="empty-note" style="margin:0; padding:0;">${ta('privacySecurityText')}</div>
+  </div>
   <div class="section-label">${ta('whoHasAccessLabel')}</div>
   <div class="list-group" style="margin-bottom:6px;">${owners}</div>
   ${defSaveBtn('def-save-seguranca','def-msg-seguranca')}
@@ -9944,10 +10165,17 @@ function viewDefMemories(){
     <div class="empty-note" style="margin:24px 16px;">${memoriesLoading ? ta('memoriesLoadingText') : ta('memoriesEmptyText')}</div>
   `;
   return `
-  ${defSubHeader(ta('memoriesTitle'))}
-  <p style="font-size:13px; color:var(--ink-soft); margin:0 16px 16px; line-height:1.6;">${ta('memoriesIntroText')}</p>
-  <button class="rsvp-copy-btn" id="memories-refresh" style="margin:0 16px 16px; width:calc(100% - 32px);">${ICONS.refresh} ${ta('btnRefresh')}</button>
+  ${defSubHeader(ta('memoriesTitle'), ta('memoriesIntroText'))}
+  ${weddingMemories.length ? '' : `<div style="display:flex; justify-content:center; margin:6px 0 0;"><div class="premium-upsell-icon" style="width:60px; height:60px; margin:0;">${ICONS.camera}</div></div>`}
   ${gridHtml}
+  <div class="stat-card" style="margin:16px 16px 14px; display:flex; align-items:center; gap:12px;">
+    <div style="color:var(--rust-dark); flex-shrink:0;">${ICONS.lock}</div>
+    <div>
+      <div class="l" style="margin:0 0 2px; font-size:13.5px; color:var(--ink); font-weight:600;">${ta('memoriesPrivateTitle')}</div>
+      <div class="empty-note" style="margin:0; padding:0;">${ta('memoriesPrivateDesc')}</div>
+    </div>
+  </div>
+  <button class="rsvp-copy-btn" id="memories-refresh" style="margin:0 16px 16px; width:calc(100% - 32px);">${ICONS.refresh} ${ta('btnRefresh')}</button>
   `;
 }
 
@@ -9968,7 +10196,7 @@ function viewDefDocumentos(){
   // apagar o documento certo.
   const docs = (state.weddingDocuments || []).map((d,i)=>({d,i})).filter(({d})=>!d.supplierId && !d.honeymoonOptionId);
   const listHtml = docs.length ? docs.map(({d,i})=>`
-    <div class="list-row" style="align-items:center;">
+    <div class="list-row tappable" style="align-items:center; cursor:pointer;" data-openattach="${i}">
       <div class="def-row-icon" style="${chipStyle(4)}">${ICONS.docnote||ICONS.checklist}</div>
       <div class="def-row-mid">
         <div class="def-row-title">${escapeHTML(d.name)}</div>
@@ -9978,11 +10206,18 @@ function viewDefDocumentos(){
     </div>
   `).join('') : `<div class="empty-note" style="margin:16px;">${ta('docsEmptyText')}</div>`;
   return `
-  ${defSubHeader(ta('documentsTitle'))}
-  <p style="font-size:13px; color:var(--ink-soft); margin:0 16px 16px; line-height:1.6;">${ta('docsIntroText')}</p>
-  <label class="rsvp-copy-btn" for="document-file-input" style="margin:0 16px 16px; width:calc(100% - 32px); display:flex;">${ICONS.download} ${ta('btnUploadPDF')}</label>
-  <input type="file" id="document-file-input" accept="application/pdf" style="display:none;">
-  <div id="document-upload-status" class="empty-note" style="margin:0 16px 12px;"></div>
+  ${defSubHeader(ta('documentsTitle'), '', true)}
+  <div class="stat-card" style="margin:0 16px 16px;">
+    <div style="display:flex; align-items:flex-start; gap:12px; margin-bottom:10px;">
+      <div class="def-row-icon" style="${chipStyle(4)} width:44px; height:44px; flex-shrink:0;">${ICONS.docnote||ICONS.checklist}</div>
+      <div class="l" style="margin:6px 0 0; font-size:17px; line-height:1.25; color:var(--heading); font-family:'Cormorant Garamond',serif; font-weight:600;">${ta('docsCardTitle')}</div>
+    </div>
+    <p style="font-size:13px; color:var(--ink-soft); margin:0 0 14px; line-height:1.6;">${ta('docsIntroText')}</p>
+    <label class="login-btn" for="document-file-input" style="margin-top:0; display:flex; align-items:center; justify-content:center; gap:8px;">${ICONS.download} ${ta('btnUploadPDF')}</label>
+    <input type="file" id="document-file-input" accept="application/pdf" style="display:none;">
+    <div id="document-upload-status" class="empty-note" style="margin:10px 0 0; padding:0;"></div>
+  </div>
+  <div class="section-label">${ta('uploadedDocumentsLabel')}</div>
   <div class="list-group" style="margin:0 16px;">${listHtml}</div>
   `;
 }
@@ -10777,21 +11012,30 @@ function bindHandlers(){
     const hmOptForAttach = getCurrentHmOption();
     if(hmOptForAttach && hmOptForAttach.id){
       const hmoAttachInput = document.getElementById('hmo-attach-input');
+      const hmoAttachLabel = document.querySelector('label[for="hmo-attach-input"]');
       if(hmoAttachInput) hmoAttachInput.addEventListener('change', async (e)=>{
         const file = e.target.files && e.target.files[0];
         const statusEl = document.getElementById('hmo-attach-status');
         if(!file) return;
-        if(statusEl) statusEl.textContent = ta('statusReadingPdf');
+        // Pedido (Set 2026): antes, a única pista de que algo estava a
+        // acontecer era este texto pequeno e cinzento — fácil de não
+        // reparar. Agora tem um spinner, e a própria zona de "adicionar" é
+        // desativada enquanto sobe, para não dar para carregar duas vezes
+        // sem querer no mesmo ficheiro.
+        if(statusEl) statusEl.innerHTML = `<span class="upload-status-row"><span class="upload-spin"></span>${escapeHTML(ta('statusUploadingFile')(file.name))}</span>`;
+        if(hmoAttachLabel) hmoAttachLabel.style.cssText += 'pointer-events:none; opacity:.5;';
         try{
           const doc = await uploadHoneymoonAttachment(hmOptForAttach.id, file);
           if(!doc){
             if(statusEl) statusEl.textContent = ta('errAttachmentUnsupportedType');
+            if(hmoAttachLabel) hmoAttachLabel.style.cssText = hmoAttachLabel.style.cssText.replace('pointer-events:none; opacity:.5;','');
           } else {
             pushRemote(true);
             render();
           }
         }catch(err){
           if(statusEl) statusEl.textContent = ta('statusPdfReadError');
+          if(hmoAttachLabel) hmoAttachLabel.style.cssText = hmoAttachLabel.style.cssText.replace('pointer-events:none; opacity:.5;','');
         }
         e.target.value = '';
       });
@@ -10876,6 +11120,9 @@ function bindHandlers(){
   // Reorganização (Set 2026): navegação dentro do "hub" do RSVP (Prazo,
   // Informações, Respostas) — mesmo padrão do data-defgoto, mas para os
   // sub-ecrãs dentro da secção "rsvp".
+  document.querySelectorAll('[data-rsvphometab]').forEach(btn=>{
+    btn.addEventListener('click', e=>{ rsvpHomeTab = e.currentTarget.dataset.rsvphometab; _origRender(); });
+  });
   document.querySelectorAll('[data-rsvpgoto]').forEach(el=>{
     el.addEventListener('click', e=>{
       rsvpSubScreen = e.currentTarget.dataset.rsvpgoto;
@@ -11262,6 +11509,11 @@ function bindHandlers(){
   if(documentFileInput) documentFileInput.addEventListener('change', e=>{ handleDocumentUpload(e.target.files); });
   document.querySelectorAll('[data-docdel]').forEach(btn=>{
     btn.addEventListener('click', e=>{
+      // A linha inteira passou a abrir a pré-visualização ao tocar (ver
+      // data-openattach) — sem isto, tocar no "×" também dispararia esse
+      // clique por propagação, tentando abrir o documento a seguir a
+      // apagá-lo (ou antes, consoante a ordem dos listeners).
+      e.stopPropagation();
       const i = Number(e.currentTarget.dataset.docdel);
       if(!confirm(ta('confirmDeleteDocument'))) return;
       const doc = state.weddingDocuments[i];
@@ -11314,6 +11566,39 @@ function bindHandlers(){
       guestAccommodationInfo: accommodationInput? accommodationInput.value.trim() : '',
       guestGiftsInfo: giftsInput? giftsInput.value.trim() : '',
       guestContactInfo: contactInput? contactInput.value.trim() : ''
+    });
+  });
+  // Adicionar/remover campos das duas secções acima (ver guestInfoSectionHTML).
+  // Adicionar só marca o campo como "aberto" nesta sessão e volta a
+  // desenhar — não escreve nada ainda, só passa a mostrar a caixa (o
+  // "Guardar informações" de cada secção continua a ser o único momento em
+  // que algo é mesmo gravado). Remover, esse sim, já apaga o valor guardado
+  // (e não só esconde a caixa), para não ficar um valor escondido e
+  // esquecido sem se perceber porquê — é sempre pedida confirmação se já
+  // havia texto escrito.
+  document.querySelectorAll('[data-guestinfoadd]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      rsvpInfoAddedFields.add(e.currentTarget.dataset.guestinfoadd);
+      _origRender();
+      const allFields = GUEST_INFO_FIELDS.concat(CONCIERGE_INFO_FIELDS);
+      const added = allFields.find(f=>f.key===e.currentTarget.dataset.guestinfoadd);
+      if(added){ const el = document.getElementById(added.inputId); if(el) el.focus(); }
+    });
+  });
+  document.querySelectorAll('[data-guestinforemove]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      const key = e.currentTarget.dataset.guestinforemove;
+      const allFields = GUEST_INFO_FIELDS.concat(CONCIERGE_INFO_FIELDS);
+      const f = allFields.find(x=>x.key===key);
+      if(!f) return;
+      const hasValue = (weddingSettings[f.settingsKey]||'').trim();
+      if(hasValue && !confirm(ta('confirmRemoveGuestInfoField'))) return;
+      rsvpInfoAddedFields.delete(key);
+      if(hasValue){
+        weddingSettings[f.settingsKey] = '';
+        pushRemote(true);
+      }
+      _origRender();
     });
   });
   // Editor de "Perguntas personalizadas" (Concierge FAQ) — cada pergunta
@@ -13535,18 +13820,59 @@ document.getElementById('img-lightbox-close').addEventListener('click', closeImg
 document.getElementById('img-lightbox').addEventListener('click', e=>{
   if(e.target.id === 'img-lightbox') closeImgLightbox();
 });
-// Pré-visualização de PDFs (Lua de mel / contratos) — mesma ideia do
-// img-lightbox, mas com um <iframe> em vez de <img>, já que a maioria dos
-// browsers (Safari/Chrome, desktop e mobile) sabe mostrar um PDF dentro de
-// um iframe sem precisar de nenhuma biblioteca extra.
-function openDocLightbox(url){
-  const frame = document.getElementById('doc-lightbox-frame');
-  frame.src = url;
+// Pré-visualização de PDFs (Lua de mel / contratos). Primeira versão usava
+// um <iframe src="urlDoPdf">, mas isso deixa o motor de PDF nativo do
+// telemóvel decidir sozinho o zoom inicial — no Safari iOS isso mostrava só
+// um canto ampliado da 1ª página, cortado, sem dar para ver as outras
+// páginas (visto ao vivo, Set 2026). Desenha-se agora o PDF com o pdf.js
+// que a app já usa para ler texto dos PDFs (ver extractPdfText): cada
+// página é desenhada num <canvas> à largura do ecrã (tamanho previsível,
+// "standard", em vez do zoom que o browser decidisse), todas empilhadas
+// com scroll normal — dá sempre para ver o documento inteiro, página a
+// página.
+let docLightboxToken = 0;
+async function openDocLightbox(url){
+  const myToken = ++docLightboxToken;
+  const pagesEl = document.getElementById('doc-lightbox-pages');
+  pagesEl.innerHTML = `<div class="empty-note" style="color:#fff; margin-top:40px;">${ta('loadingLabel')||'A carregar…'}</div>`;
   document.getElementById('doc-lightbox').classList.add('show');
+  try{
+    if(typeof pdfjsLib === 'undefined') throw new Error('pdfjsLib not loaded');
+    const pdf = await pdfjsLib.getDocument(url).promise;
+    if(myToken !== docLightboxToken) return; // entretanto fechou/trocou de documento
+    pagesEl.innerHTML = '';
+    const targetWidth = Math.min(pagesEl.clientWidth || 340, 700);
+    for(let n=1; n<=pdf.numPages; n++){
+      if(myToken !== docLightboxToken) return;
+      const page = await pdf.getPage(n);
+      const baseViewport = page.getViewport({ scale:1 });
+      const scale = targetWidth / baseViewport.width;
+      const viewport = page.getViewport({ scale });
+      const canvas = document.createElement('canvas');
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      canvas.style.cssText = 'max-width:100%; height:auto; border-radius:8px; box-shadow:0 4px 16px rgba(0,0,0,0.3); background:#fff;';
+      pagesEl.appendChild(canvas);
+      await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+    }
+    if(!pdf.numPages && myToken===docLightboxToken){
+      pagesEl.innerHTML = `<div class="empty-note" style="color:#fff; margin-top:40px;">${ta('errOpenAttachmentFailed')}</div>`;
+    }
+  }catch(err){
+    if(myToken !== docLightboxToken) return;
+    console.error('Weddy doc preview error:', err && err.message);
+    // Nunca deixar o ecrã vazio sem explicação — se o pdf.js falhar por
+    // algum motivo (ex.: ficheiro corrompido), ainda se consegue abrir o
+    // PDF fora da app como último recurso.
+    pagesEl.innerHTML = `
+      <div class="empty-note" style="color:#fff; margin-top:40px; text-align:center; padding:0 20px;">${ta('errOpenAttachmentFailed')}</div>
+      <a href="${escapeHTML(url)}" target="_blank" rel="noopener" class="rsvp-copy-btn" style="margin-top:12px;">${ta('btnOpenInNewTab')}</a>`;
+  }
 }
 function closeDocLightbox(){
+  docLightboxToken++; // invalida qualquer renderização de páginas em curso
   document.getElementById('doc-lightbox').classList.remove('show');
-  document.getElementById('doc-lightbox-frame').src = '';
+  document.getElementById('doc-lightbox-pages').innerHTML = '';
 }
 document.getElementById('doc-lightbox-close').addEventListener('click', closeDocLightbox);
 document.getElementById('doc-lightbox').addEventListener('click', e=>{
@@ -13661,7 +13987,7 @@ function renderLoginForm(msg, isError, isSuccess){
     <div class="login-field"><input type="email" id="login-email" placeholder="${ta('emailPlaceholder')}" autocomplete="email" autocapitalize="none" autocorrect="off"></div>
     <div class="login-field" style="margin-top:10px;"><input type="password" id="login-pass" placeholder="${ta('passPlaceholder')}" autocomplete="${isSignup?'new-password':'current-password'}"></div>
     ${isSignup? `<div class="login-field" style="margin-top:10px;"><input type="password" id="login-pass-confirm" placeholder="${ta('passConfirmPlaceholder')}" autocomplete="new-password"></div>` : ''}
-    ${isSignup? `<label style="display:flex; align-items:flex-start; gap:8px; margin-top:12px; text-align:left; font-size:12.5px; color:var(--ink-soft); line-height:1.45; cursor:pointer;">
+    ${isSignup? `<label style="display:flex; align-items:flex-start; gap:8px; margin:12px auto 0; text-align:left; font-size:12.5px; color:var(--ink-soft); line-height:1.45; cursor:pointer; max-width:280px;">
       <input type="checkbox" id="login-consent" style="margin-top:2px; flex-shrink:0;">
       <span>${ta('consentCheckboxHtml')()}</span>
     </label>` : ''}
@@ -14707,11 +15033,11 @@ function renderReconsentGate(user, onAccept){
   document.getElementById('login-inner').innerHTML = `
     <div class="login-tag">${ta('reconsentTitle')}</div>
     <div class="login-msg" style="margin:0 0 14px;">${ta('reconsentIntro')}</div>
-    <div style="display:flex; flex-direction:column; gap:6px; align-items:flex-start; margin-bottom:14px;">
-      <span class="login-note" style="cursor:pointer;" id="reconsent-read-privacy">${ta('btnReadPrivacy')}</span>
-      <span class="login-note" style="cursor:pointer;" id="reconsent-read-terms">${ta('btnReadTerms')}</span>
+    <div style="display:flex; flex-direction:column; gap:6px; align-items:center; max-width:280px; margin:0 auto 14px;">
+      <span class="login-note" style="cursor:pointer; margin:0;" id="reconsent-read-privacy">${ta('btnReadPrivacy')}</span>
+      <span class="login-note" style="cursor:pointer; margin:0;" id="reconsent-read-terms">${ta('btnReadTerms')}</span>
     </div>
-    <label style="display:flex; align-items:flex-start; gap:8px; text-align:left; font-size:12.5px; color:var(--ink-soft); line-height:1.45; cursor:pointer;">
+    <label style="display:flex; align-items:flex-start; gap:8px; text-align:left; font-size:12.5px; color:var(--ink-soft); line-height:1.45; cursor:pointer; max-width:280px; margin:0 auto;">
       <input type="checkbox" id="reconsent-check" style="margin-top:2px; flex-shrink:0;">
       <span>${ta('consentCheckboxHtml')()}</span>
     </label>
