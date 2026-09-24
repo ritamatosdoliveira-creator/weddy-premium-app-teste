@@ -917,6 +917,15 @@ html{
 .timeline-del:active{ background:rgba(20,20,20,0.18); }
 
 .hero-photo-card .hero-scrim{ position:absolute; inset:0; background:linear-gradient(180deg, rgba(24,18,12,0.08) 0%, rgba(24,18,12,0.1) 35%, rgba(24,18,12,0.78) 100%); }
+/* Pedido direto da Rita (Set 2026): um pequeno lápis sobre a própria foto de
+   capa da página Início, para a pessoa perceber logo, ao ver a foto, que dá
+   para a mudar dali — sem ter de já saber que isso vive em Definições >
+   Design. Reaproveita o mesmo mecanismo de navegação data-premiumgoto já
+   usado pelos cartões Premium do Início (ver bindHandlers), por isso não
+   precisou de nenhum handler novo em JS. */
+.hero-edit-photo-btn{ all:unset; box-sizing:border-box; position:absolute; top:12px; right:12px; z-index:2; width:34px; height:34px; border-radius:50%; background:rgba(24,18,12,0.38); backdrop-filter:blur(2px); color:#fff; display:flex; align-items:center; justify-content:center; cursor:pointer; line-height:1; }
+.hero-edit-photo-btn svg{ width:16px; height:16px; }
+.hero-edit-photo-btn:active{ background:rgba(24,18,12,0.55); }
 .hero-photo-card .hero-overlay{ position:absolute; left:0; right:0; bottom:0; padding:18px 20px 20px; color:#fff; text-shadow:0 1px 6px rgba(0,0,0,0.35); }
 .hero-names-row{ font-family:'Cormorant Garamond',serif; font-size:21px; font-weight:600; letter-spacing:.02em; opacity:.98; }
 .hero-date-row{ font-size:10.5px; font-weight:600; letter-spacing:.05em; text-transform:uppercase; opacity:.85; margin-top:4px; }
@@ -3403,6 +3412,7 @@ const APP_I18N = {
     defDesignTitle:'Design',
     weddingColorLabel:'Cor do casamento',
     coverPhotoLabel:'Foto de capa (Início)',
+    editCoverPhotoAlt:'Mudar a foto de capa',
     dragToRecenterHint:'arrasta para recentrar',
     noCoverPhotoNote:'Ainda não escolheste uma foto de capa — fica um gradiente elegante por defeito.',
     btnChangePhoto:'Trocar foto',
@@ -4338,6 +4348,7 @@ const APP_I18N = {
     defDesignTitle:'Design',
     weddingColorLabel:'Wedding color',
     coverPhotoLabel:'Cover photo (Home)',
+    editCoverPhotoAlt:'Change cover photo',
     dragToRecenterHint:'drag to recenter',
     noCoverPhotoNote:'You haven\'t chosen a cover photo yet — a nice gradient is used by default.',
     btnChangePhoto:'Change photo',
@@ -5073,6 +5084,7 @@ function viewInicio(){
   <div class="hero-photo-card">
     <div class="hero-photo" ${weddingSettings.heroPhotoUrl?`style="background-image:url('${weddingSettings.heroPhotoUrl}'); background-position:${weddingSettings.heroPhotoPosX??50}% ${weddingSettings.heroPhotoPosY??50}%; background-size:${weddingSettings.heroPhotoZoom??100}%;"`:''}></div>
     <div class="hero-scrim"></div>
+    <button type="button" class="hero-edit-photo-btn" data-premiumgoto="design" aria-label="${ta('editCoverPhotoAlt')}" title="${ta('editCoverPhotoAlt')}">${ICONS.pencil}</button>
     <div class="hero-overlay">
       <div class="hero-names-row">${name1.toUpperCase()} &amp; ${name2.toUpperCase()}</div>
       <div class="hero-date-row">${formatDatePT(weddingSettings.weddingDate)}</div>
