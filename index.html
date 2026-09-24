@@ -123,6 +123,15 @@ html{
 .section-label-caps{ font-size:10.5px; color:var(--rust-dark); font-weight:600; letter-spacing:.09em; text-transform:uppercase; margin:22px 18px 10px; }
 .def-row-icon{ width:44px; height:44px; border-radius:50%; flex-shrink:0; display:flex; align-items:center; justify-content:center; color:#fff; line-height:1; }
 .def-row-icon svg{ width:19px; height:19px; }
+/* Círculo pequeno com ícone (ex: check de cada feature na página de
+   subscrição) — sem esta regra, o <svg> filho não tem width/height nenhum
+   e o browser usa o tamanho por omissão (300x150), que fica invisível
+   dentro de um círculo de 20px. */
+.icon-circle-sm{ width:20px; height:20px; border-radius:50%; display:flex; align-items:center; justify-content:center; flex-shrink:0; line-height:1; }
+.icon-circle-sm svg{ width:11px; height:11px; }
+/* Utilitário para qualquer ícone solto (sem classe própria) que precise de
+   preencher exatamente a caixa onde está — mesma razão da regra acima. */
+.svg-fill svg{ width:100%; height:100%; display:block; }
 .def-row-mid{ flex:1; min-width:0; }
 .def-row-title{ font-size:14px; color:var(--ink); font-weight:500; }
 .def-row-desc{ font-size:11.5px; color:var(--ink-soft); margin-top:2px; line-height:1.35; }
@@ -9484,13 +9493,13 @@ function viewRSVPHome(){
   </div>
   ${rsvpHomeTab==='list' ? `
   <div class="stats-row" style="margin:0 16px 14px;">
-    <div class="stat-card"><div class="l" style="margin:0 0 4px;">${ta('tabGuests')}</div><div class="n">${fmtGuestCount(totalGuests)}</div></div>
-    <div class="stat-card"><div class="l" style="margin:0 0 4px;">${ta('respondedLabel')}</div><div class="n">${fmtGuestCount(responded)}</div></div>
-    <div class="stat-card"><div class="l" style="margin:0 0 4px;">${ta('lblConfirmed')}</div><div class="n">${fmtGuestCount(confirmedYes)}</div></div>
+    <div class="stat-card" style="text-align:center;"><div class="l" style="margin:0 0 4px;">${ta('tabGuests')}</div><div class="n">${fmtGuestCount(totalGuests)}</div></div>
+    <div class="stat-card" style="text-align:center;"><div class="l" style="margin:0 0 4px;">${ta('respondedLabel')}</div><div class="n">${fmtGuestCount(responded)}</div></div>
+    <div class="stat-card" style="text-align:center;"><div class="l" style="margin:0 0 4px;">${ta('lblConfirmed')}</div><div class="n">${fmtGuestCount(confirmedYes)}</div></div>
   </div>` : ''}
-  <div style="margin:0 16px 28px; padding:16px; border-radius:16px; background:linear-gradient(135deg, rgba(193,88,62,0.1), rgba(216,166,87,0.12));">
-    <div class="l" style="margin:0 0 4px; font-size:14.5px; color:var(--ink); font-weight:600; text-align:left;">${ta('rsvpNoteAutoFreeTitle')}</div>
-    <div style="font-size:12px; color:var(--ink-soft); line-height:1.5; text-align:left;">${ta('rsvpNoteAutoFree')}</div>
+  <div style="margin:0 16px 28px; padding:16px; border-radius:16px; background:linear-gradient(135deg, rgba(193,88,62,0.1), rgba(216,166,87,0.12)); text-align:center;">
+    <div class="l" style="margin:0 0 4px; font-size:14.5px; color:var(--ink); font-weight:600;">${ta('rsvpNoteAutoFreeTitle')}</div>
+    <div style="font-size:12px; color:var(--ink-soft); line-height:1.5;">${ta('rsvpNoteAutoFree')}</div>
   </div>
   `;
 }
@@ -9925,7 +9934,7 @@ function viewDefSubscricao(){
   const features = ['subscriptionFeatureGuests','subscriptionFeatureAISeating','subscriptionFeatureWeddingHealth','subscriptionFeatureMemories','subscriptionFeatureRSVP','subscriptionFeatureMore'];
   const featuresHtml = features.map(k=>`
     <div style="display:flex; align-items:center; gap:10px; padding:6px 0;">
-      <div style="width:20px; height:20px; border-radius:50%; background:rgba(193,88,62,0.12); color:var(--rust-dark); display:flex; align-items:center; justify-content:center; flex-shrink:0;">${ICONS.check}</div>
+      <div class="icon-circle-sm" style="background:rgba(193,88,62,0.12); color:var(--rust-dark);">${ICONS.check}</div>
       <div style="font-size:13.5px; color:var(--ink);">${ta(k)}</div>
     </div>`).join('');
   return `
@@ -10235,15 +10244,15 @@ function viewDefMemories(){
     <div style="position:absolute; left:52px; top:28px; width:94px; height:108px; background:#fff; border:1px solid #E7DCD4; border-radius:6px; box-shadow:0 8px 18px rgba(60,40,30,0.1); transform:rotate(6deg);">
       <div style="position:absolute; inset:7px 7px 22px; background:#E9D9CE; border-radius:2px;"></div>
     </div>
-    <div style="position:absolute; left:10px; top:14px; width:24px; height:24px; color:var(--rust-dark); opacity:.85;">${ICONS.heart}</div>
-    <div style="position:absolute; right:4px; top:0; width:48px; height:72px; color:#8AA07A; opacity:.7; transform:rotate(10deg);">${ICONS.botanical}</div>
+    <div class="svg-fill" style="position:absolute; left:10px; top:14px; width:24px; height:24px; color:var(--rust-dark); opacity:.85;">${ICONS.heart}</div>
+    <div class="svg-fill" style="position:absolute; right:4px; top:0; width:48px; height:72px; color:#8AA07A; opacity:.7; transform:rotate(10deg);">${ICONS.botanical}</div>
   </div>`;
   return `
   ${defSubHeader(ta('memoriesTitle'), ta('memoriesIntroText'))}
   ${weddingMemories.length ? '' : emptyIllustration}
   ${gridHtml}
   <div style="margin:16px 16px 14px; padding:12px 14px; border-radius:14px; background:rgba(193,88,62,0.1); display:flex; align-items:center; gap:12px;">
-    <div style="color:var(--rust-dark); flex-shrink:0;">${ICONS.lock}</div>
+    <div class="svg-fill" style="width:18px; height:18px; color:var(--rust-dark); flex-shrink:0;">${ICONS.lock}</div>
     <div>
       <div class="l" style="margin:0 0 2px; font-size:13.5px; color:var(--ink); font-weight:600;">${ta('memoriesPrivateTitle')}</div>
       <div class="empty-note" style="margin:0; padding:0;">${ta('memoriesPrivateDesc')}</div>
@@ -14082,8 +14091,8 @@ function renderLoginForm(msg, isError, isSuccess){
       <input type="password" class="has-icon has-toggle" id="login-pass-confirm" placeholder="${ta('passConfirmPlaceholder')}" autocomplete="new-password">
       <button type="button" class="login-field-toggle" id="login-pass-confirm-toggle" data-shown="0" aria-label="${ta('btnShowPassword')}">${ICONS.eye}</button>
     </div>` : ''}
-    ${isSignup? `<label style="display:flex; align-items:flex-start; gap:8px; margin:12px auto 0; text-align:left; font-size:12.5px; color:var(--ink-soft); line-height:1.45; cursor:pointer; max-width:280px;">
-      <input type="checkbox" id="login-consent" style="margin-top:2px; flex-shrink:0;">
+    ${isSignup? `<label style="display:block; margin:12px auto 0; text-align:center; font-size:12.5px; color:var(--ink-soft); line-height:1.5; cursor:pointer; max-width:280px;">
+      <input type="checkbox" id="login-consent" style="vertical-align:middle; margin-right:4px;">
       <span>${ta('consentCheckboxHtml')()}</span>
     </label>` : ''}
     <button class="login-btn" id="login-send">${isSignup? ta('btnCreateAccount') : ta('btnEnter')}</button>
@@ -15160,8 +15169,8 @@ function renderReconsentGate(user, onAccept){
         ${ICONS.chev}
       </div>
     </div>
-    <label style="display:flex; align-items:flex-start; gap:8px; text-align:left; font-size:12.5px; color:var(--ink-soft); line-height:1.45; cursor:pointer; max-width:280px; margin:0 auto;">
-      <input type="checkbox" id="reconsent-check" style="margin-top:2px; flex-shrink:0;">
+    <label style="display:block; text-align:center; font-size:12.5px; color:var(--ink-soft); line-height:1.5; cursor:pointer; max-width:280px; margin:0 auto;">
+      <input type="checkbox" id="reconsent-check" style="vertical-align:middle; margin-right:4px;">
       <span>${ta('consentCheckboxHtml')()}</span>
     </label>
     <button class="login-btn" id="reconsent-accept" style="margin-top:14px;">${ta('btnAcceptContinue')}</button>
