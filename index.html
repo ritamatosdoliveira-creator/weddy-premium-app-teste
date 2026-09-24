@@ -3469,6 +3469,7 @@ const APP_I18N = {
     emptyNoGuestsSaved:'Ainda não tens convidados guardados em "Convidados".',
     rsvpNoteLinkPrivate:'Cada link é só desse convidado — nunca mostra a lista toda nem o orçamento do casamento.',
     rsvpNoteAutoFree:'Quando alguém responde "Não vou", o lugar à mesa (se já estivesse atribuído) fica automaticamente livre. As crianças que a pessoa declarar no link aparecem em "Convidados → Crianças", já contadas e prontas a sentar às mesas.',
+    rsvpNoteAutoFreeTitle:'Tudo automático',
     rsvpRespostasNotesShort:'Cada link é privado. Quem responde "Não vou" liberta o lugar automaticamente e as crianças são contadas em "Convidados → Crianças".',
     rsvpRefreshErrorNote:'Não foi possível atualizar as respostas agora.',
     btnReportProblem:'Reportar problema',
@@ -4475,6 +4476,7 @@ const APP_I18N = {
     emptyNoGuestsSaved:'You don\'t have any guests saved in "Guests" yet.',
     rsvpNoteLinkPrivate:'Each link belongs only to that guest — it never shows the full list or the wedding budget.',
     rsvpNoteAutoFree:'When someone answers "Not going", their seat (if already assigned) is automatically freed. Children declared through the link appear in "Guests → Children", already counted and ready to be seated at tables.',
+    rsvpNoteAutoFreeTitle:'All automatic',
     rsvpRespostasNotesShort:'Each link is private. Anyone who answers "Not going" frees their seat automatically, and children are counted in "Guests → Children".',
     rsvpRefreshErrorNote:'Could not update responses right now.',
     btnReportProblem:'Report a problem',
@@ -9437,29 +9439,59 @@ function viewRSVPHome(){
   });
   const deadline = weddingSettings.rsvpDeadline || '';
   const deadlineLabel = deadline ? formatDatePT(deadline) : ta('rsvpDeadlineUnset');
-  const sendRowsHtml = rsvpNavRow('deadline', ICONS.calendar, 0, ta('labelRSVPDeadline'), deadlineLabel)
-    + rsvpNavRow('info', ICONS.pencil, 1, ta('guestInfoLabel'), ta('guestInfoSubLabel'));
-  const listRowsHtml = rsvpNavRow('respostas', ICONS.guests, 2, ta('rsvpRespostasNavTitle'), ta('rsvpRespostasNavDesc'));
+  const rustChip = 'background:rgba(193,88,62,0.12); color:var(--rust-dark);';
+  const sendRowsHtml = `
+    <div class="list-row tappable" data-rsvpgoto="deadline" style="cursor:pointer; padding-left:0; padding-right:0;">
+      <div class="def-row-icon" style="${rustChip} width:38px; height:38px;">${ICONS.calendar}</div>
+      <div class="def-row-mid">
+        <div class="def-row-title">${ta('labelRSVPDeadline')}</div>
+        <div class="def-row-desc">${deadlineLabel}</div>
+      </div>
+      ${ICONS.chev}
+    </div>
+    <div class="list-row tappable" data-rsvpgoto="info" style="cursor:pointer; padding-left:0; padding-right:0;">
+      <div class="def-row-icon" style="${rustChip} width:38px; height:38px;">${ICONS.pencil}</div>
+      <div class="def-row-mid">
+        <div class="def-row-title">${ta('guestInfoLabel')}</div>
+        <div class="def-row-desc">${ta('guestInfoSubLabel')}</div>
+      </div>
+      ${ICONS.chev}
+    </div>`;
+  const listRowsHtml = `
+    <div class="list-row tappable" data-rsvpgoto="respostas" style="cursor:pointer; padding-left:0; padding-right:0;">
+      <div class="def-row-icon" style="${rustChip} width:38px; height:38px;">${ICONS.guests}</div>
+      <div class="def-row-mid">
+        <div class="def-row-title">${ta('rsvpRespostasNavTitle')}</div>
+        <div class="def-row-desc">${ta('rsvpRespostasNavDesc')}</div>
+      </div>
+      ${ICONS.chev}
+    </div>`;
   return `
   ${defSubHeader(ta('rsvpTitle'))}
-  <div class="stat-card" style="margin:0 16px 14px; display:flex; align-items:center; gap:12px;">
-    <div class="premium-upsell-icon" style="width:40px; height:40px; margin:0; flex-shrink:0;">${ICONS.guests}</div>
-    <div style="flex:1; min-width:0;">
-      <div class="l" style="margin:0; font-size:15px; color:var(--ink); font-weight:600;">${ta('rsvpTitle')}</div>
-      <div class="empty-note" style="margin:2px 0 0; padding:0;">${ta('rsvpHubSubtitle')}</div>
-    </div>
-  </div>
-  <div class="stats-row">
-    <div class="stat-card"><div class="l" style="margin:0 0 4px;">${ta('tabGuests')}</div><div class="n">${fmtGuestCount(totalGuests)}</div></div>
-    <div class="stat-card"><div class="l" style="margin:0 0 4px;">${ta('respondedLabel')}</div><div class="n">${fmtGuestCount(responded)}</div></div>
-    <div class="stat-card"><div class="l" style="margin:0 0 4px;">${ta('lblConfirmed')}</div><div class="n">${fmtGuestCount(confirmedYes)}</div></div>
-  </div>
   <div class="segmented">
     <button type="button" class="${rsvpHomeTab==='send'?'active':''}" data-rsvphometab="send">${ta('rsvpTabSendInvites')}</button>
     <button type="button" class="${rsvpHomeTab==='list'?'active':''}" data-rsvphometab="list">${ta('rsvpTabGuestList')}</button>
   </div>
-  <div style="margin-top:10px;">${rsvpHomeTab==='list' ? listRowsHtml : sendRowsHtml}</div>
-  <div class="empty-note" style="margin:16px 16px 28px;">${ta('rsvpNoteAutoFree')}</div>
+  <div class="stat-card" style="margin:10px 16px 12px; padding:16px 16px 2px;">
+    <div style="display:flex; align-items:flex-start; gap:12px; margin-bottom:6px;">
+      <div class="def-row-icon" style="${rustChip} width:40px; height:40px;">${ICONS.mail}</div>
+      <div style="flex:1; min-width:0;">
+        <div class="l" style="margin:0 0 3px; font-size:15px; color:var(--ink); font-weight:600; text-align:left;">${ta('rsvpTabSendInvites')}</div>
+        <div class="empty-note" style="margin:0; padding:0; text-align:left; font-style:normal;">${ta('rsvpHubSubtitle')}</div>
+      </div>
+    </div>
+    ${rsvpHomeTab==='list' ? listRowsHtml : sendRowsHtml}
+  </div>
+  ${rsvpHomeTab==='list' ? `
+  <div class="stats-row" style="margin:0 16px 14px;">
+    <div class="stat-card"><div class="l" style="margin:0 0 4px;">${ta('tabGuests')}</div><div class="n">${fmtGuestCount(totalGuests)}</div></div>
+    <div class="stat-card"><div class="l" style="margin:0 0 4px;">${ta('respondedLabel')}</div><div class="n">${fmtGuestCount(responded)}</div></div>
+    <div class="stat-card"><div class="l" style="margin:0 0 4px;">${ta('lblConfirmed')}</div><div class="n">${fmtGuestCount(confirmedYes)}</div></div>
+  </div>` : ''}
+  <div style="margin:0 16px 28px; padding:16px; border-radius:16px; background:linear-gradient(135deg, rgba(193,88,62,0.1), rgba(216,166,87,0.12));">
+    <div class="l" style="margin:0 0 4px; font-size:14.5px; color:var(--ink); font-weight:600; text-align:left;">${ta('rsvpNoteAutoFreeTitle')}</div>
+    <div style="font-size:12px; color:var(--ink-soft); line-height:1.5; text-align:left;">${ta('rsvpNoteAutoFree')}</div>
+  </div>
   `;
 }
 function viewRSVPDeadline(){
@@ -10194,18 +10226,30 @@ function viewDefMemories(){
   ` : `
     <div class="empty-note" style="margin:24px 16px;">${memoriesLoading ? ta('memoriesLoadingText') : ta('memoriesEmptyText')}</div>
   `;
+  const emptyIllustration = `
+  <div style="position:relative; width:180px; height:150px; margin:10px auto 6px;">
+    <div style="position:absolute; left:20px; top:14px; width:140px; height:120px; border-radius:50%; background:#F1DFDB; opacity:.55;"></div>
+    <div style="position:absolute; left:18px; top:40px; width:86px; height:100px; background:#FBF7F2; border:1px solid #E7DCD4; border-radius:6px; box-shadow:0 6px 14px rgba(60,40,30,0.08); transform:rotate(-8deg);">
+      <div style="position:absolute; inset:7px 7px 20px; background:#EDE0D6; border-radius:2px;"></div>
+    </div>
+    <div style="position:absolute; left:52px; top:28px; width:94px; height:108px; background:#fff; border:1px solid #E7DCD4; border-radius:6px; box-shadow:0 8px 18px rgba(60,40,30,0.1); transform:rotate(6deg);">
+      <div style="position:absolute; inset:7px 7px 22px; background:#E9D9CE; border-radius:2px;"></div>
+    </div>
+    <div style="position:absolute; left:10px; top:14px; width:24px; height:24px; color:var(--rust-dark); opacity:.85;">${ICONS.heart}</div>
+    <div style="position:absolute; right:4px; top:0; width:48px; height:72px; color:#8AA07A; opacity:.7; transform:rotate(10deg);">${ICONS.botanical}</div>
+  </div>`;
   return `
   ${defSubHeader(ta('memoriesTitle'), ta('memoriesIntroText'))}
-  ${weddingMemories.length ? '' : `<div style="display:flex; justify-content:center; margin:6px 0 0;"><div class="premium-upsell-icon" style="width:60px; height:60px; margin:0;">${ICONS.camera}</div></div>`}
+  ${weddingMemories.length ? '' : emptyIllustration}
   ${gridHtml}
-  <div class="stat-card" style="margin:16px 16px 14px; display:flex; align-items:center; gap:12px;">
+  <div style="margin:16px 16px 14px; padding:12px 14px; border-radius:14px; background:rgba(193,88,62,0.1); display:flex; align-items:center; gap:12px;">
     <div style="color:var(--rust-dark); flex-shrink:0;">${ICONS.lock}</div>
     <div>
       <div class="l" style="margin:0 0 2px; font-size:13.5px; color:var(--ink); font-weight:600;">${ta('memoriesPrivateTitle')}</div>
       <div class="empty-note" style="margin:0; padding:0;">${ta('memoriesPrivateDesc')}</div>
     </div>
   </div>
-  <button class="rsvp-copy-btn" id="memories-refresh" style="margin:0 16px 16px; width:calc(100% - 32px);">${ICONS.refresh} ${ta('btnRefresh')}</button>
+  <div style="display:flex; justify-content:center; margin:0 16px 16px;"><button class="rsvp-copy-btn" id="memories-refresh" style="padding:10px 24px; flex:none;">${ICONS.refresh} ${ta('btnRefresh')}</button></div>
   `;
 }
 
@@ -10227,7 +10271,7 @@ function viewDefDocumentos(){
   const docs = (state.weddingDocuments || []).map((d,i)=>({d,i})).filter(({d})=>!d.supplierId && !d.honeymoonOptionId);
   const listHtml = docs.length ? docs.map(({d,i})=>`
     <div class="list-row tappable" style="align-items:center; cursor:pointer;" data-openattach="${i}">
-      <div class="def-row-icon" style="${chipStyle(4)}">${ICONS.docnote||ICONS.checklist}</div>
+      <div class="def-row-icon" style="background:rgba(193,88,62,0.12); color:var(--rust-dark);">${ICONS.docnote||ICONS.checklist}</div>
       <div class="def-row-mid">
         <div class="def-row-title">${escapeHTML(d.name)}</div>
         <div class="def-row-desc">${ta('charsExtractedLabel')((d.text||'').length.toLocaleString(appLang==='en'?'en-US':'pt-PT'))}</div>
@@ -10239,8 +10283,8 @@ function viewDefDocumentos(){
   ${defSubHeader(ta('documentsTitle'), '', true)}
   <div class="stat-card" style="margin:0 16px 16px;">
     <div style="display:flex; align-items:flex-start; gap:12px; margin-bottom:10px;">
-      <div class="def-row-icon" style="${chipStyle(4)} width:44px; height:44px; flex-shrink:0;">${ICONS.docnote||ICONS.checklist}</div>
-      <div class="l" style="margin:6px 0 0; font-size:17px; line-height:1.25; color:var(--heading); font-family:'Cormorant Garamond',serif; font-weight:600;">${ta('docsCardTitle')}</div>
+      <div class="def-row-icon" style="background:rgba(193,88,62,0.12); color:var(--rust-dark); width:44px; height:44px; flex-shrink:0;">${ICONS.docnote||ICONS.checklist}</div>
+      <div class="l" style="margin:4px 0 0; font-size:19px; line-height:1.25; color:var(--heading); font-family:'Cormorant Garamond',serif; font-weight:600;">${ta('docsCardTitle')}</div>
     </div>
     <p style="font-size:13px; color:var(--ink-soft); margin:0 0 14px; line-height:1.6;">${ta('docsIntroText')}</p>
     <label class="login-btn" for="document-file-input" style="margin-top:0; display:flex; align-items:center; justify-content:center; gap:8px;">${ICONS.download} ${ta('btnUploadPDF')}</label>
