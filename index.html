@@ -12,7 +12,6 @@
 <link rel="manifest" href="manifest.json">
 <title>Weddy (TESTES)</title>
 <style>
-#weddy-test-banner{ position:fixed; top:0; left:0; right:0; z-index:99999; background:#B96752; color:#fff; text-align:center; font:700 11px/1 'Manrope',system-ui,sans-serif; letter-spacing:.06em; text-transform:uppercase; padding:6px 8px calc(6px + env(safe-area-inset-top,0px)); padding-top:calc(6px + env(safe-area-inset-top,0px)); }
 </style>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -826,6 +825,17 @@ html{
 .picker-row.is-selected .pname{ color:var(--heading); font-weight:600; }
 .pname-hint{ display:block; font-size:11px; font-weight:500; color:var(--ink-soft); margin-top:1px; }
 .privacy-text{ padding:0 16px 30px; font-size:13px; color:var(--ink); line-height:1.6; }
+/* Pedido direto da Rita (Set 2026): os ecrãs de Termos e Privacidade em
+   Definições mostravam o texto legal "nu" direto sobre o fundo da página —
+   parecia partido, sem nenhuma estrutura visual, ao contrário do resto da
+   app. ".legal-card" dá-lhe a mesma linguagem visual das outras caixas da
+   app (cartão com fundo, borda e sombra suave, como .stat-card/.about-card).
+   Usada só nos ecrãs de página inteira (viewDefTermos/viewDefPrivacidade) —
+   NÃO dentro do overlay de leitura rápida (openLegalOverlay), que já vive
+   dentro da sua própria folha/cartão e ficaria com uma caixa dentro de outra
+   caixa. */
+.legal-card{ margin:0 16px 30px; padding:18px 18px 4px; background:var(--card); border:1px solid var(--line); border-radius:20px; box-shadow:var(--shadow); }
+.legal-card .privacy-text{ padding:0; }
 .about-mono{ width:44px; height:44px; margin:6px auto 22px; color:var(--rust); opacity:.85; }
 .about-mono svg{ width:100%; height:100%; }
 .about-card{ margin:0 16px 14px; padding:20px 18px; border-radius:20px; }
@@ -1124,8 +1134,6 @@ html.rotate-blocked .rotate-lock-overlay{ display:flex; }
 </style>
 </head>
 <body>
-
-<div id="weddy-test-banner">⚠️ App de testes — dados fictícios, weddy-premium-teste</div>
 
 <div class="rotate-lock-overlay" id="rotate-lock-overlay">
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/><path d="M3 9l3-3-3-3" transform="translate(0,3)"/></svg>
@@ -9988,7 +9996,7 @@ function privacyBodyHtml(){
 function viewDefPrivacidade(){
   return `
   ${defSubHeader(ta('privacyTitle'))}
-  <div class="privacy-text">${privacyBodyHtml()}</div>
+  <div class="legal-card"><div class="privacy-text">${privacyBodyHtml()}</div></div>
   `;
 }
 // Fase Consentimento (Set 2026, pedido da Rita): Termos e Condições com o
@@ -10073,7 +10081,7 @@ function termsBodyHtml(){
 function viewDefTermos(){
   return `
   ${defSubHeader(ta('termsTitle'))}
-  <div class="privacy-text">${termsBodyHtml()}</div>
+  <div class="legal-card"><div class="privacy-text">${termsBodyHtml()}</div></div>
   `;
 }
 
