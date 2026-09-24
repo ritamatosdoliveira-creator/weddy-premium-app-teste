@@ -1575,16 +1575,16 @@ const AIService = {
   // "freeText" é opcional, para quem preferir escrever por palavras — é a
   // Cloud Function que interpreta esse texto, nunca o cliente.
   async generateSeatingProposal(constraints, freeText){
-    if(!cloudFunctions) return { ok:false, reason:'NO_BACKEND', message:'Sem ligação à Weddy AI neste momento.' };
+    if(!cloudFunctions) return { ok:false, reason:'NO_BACKEND', message:ta('svcNoConnectionAI') };
     try{
       const call = cloudFunctions.httpsCallable('generateSeatingProposal');
       const res = await call({ constraints, freeText: freeText||'' });
-      return (res && res.data) || { ok:false, reason:'EMPTY', message:'A Weddy não devolveu resposta.' };
+      return (res && res.data) || { ok:false, reason:'EMPTY', message:ta('svcEmptyResponse') };
     }catch(err){
       console.error('Weddy AIService.generateSeatingProposal error:', err.code, err.message);
       const message = err && err.code==='resource-exhausted'
-        ? 'Limite diário de pedidos à Weddy AI atingido para este casamento. Tenta de novo amanhã.'
-        : 'Não foi possível gerar a proposta agora. Tenta novamente.';
+        ? ta('svcAIRateLimited')
+        : ta('svcAIGenericError');
       return { ok:false, reason: err && err.code, message };
     }
   }
@@ -1601,19 +1601,19 @@ const AIService = {
 // ============================================================
 const CalendarService = {
   async startOAuth(){
-    if(!cloudFunctions) return { ok:false, message:'Sem ligação à Weddy neste momento.' };
+    if(!cloudFunctions) return { ok:false, message:ta('svcNoConnection') };
     try{
       const call = cloudFunctions.httpsCallable('googleCalendarStartOAuth');
       const res = await call({});
       const url = res && res.data && res.data.authorizationUrl;
-      return url ? { ok:true, authorizationUrl:url } : { ok:false, message:'A Weddy não devolveu um link de autorização.' };
+      return url ? { ok:true, authorizationUrl:url } : { ok:false, message:ta('gcalErrNoAuthUrl') };
     }catch(err){
       console.error('Weddy CalendarService.startOAuth error:', err.code, err.message);
       return { ok:false, code: err && err.code, message: googleCalendarErrorMessage(err) };
     }
   },
   async listCalendars(){
-    if(!cloudFunctions) return { ok:false, message:'Sem ligação à Weddy neste momento.' };
+    if(!cloudFunctions) return { ok:false, message:ta('svcNoConnection') };
     try{
       const call = cloudFunctions.httpsCallable('googleCalendarListCalendars');
       const res = await call({});
@@ -1624,7 +1624,7 @@ const CalendarService = {
     }
   },
   async connectCalendar(calendarId){
-    if(!cloudFunctions) return { ok:false, message:'Sem ligação à Weddy neste momento.' };
+    if(!cloudFunctions) return { ok:false, message:ta('svcNoConnection') };
     try{
       const call = cloudFunctions.httpsCallable('googleCalendarConnectCalendar');
       await call({ calendarId });
@@ -1635,7 +1635,7 @@ const CalendarService = {
     }
   },
   async sync(){
-    if(!cloudFunctions) return { ok:false, message:'Sem ligação à Weddy neste momento.' };
+    if(!cloudFunctions) return { ok:false, message:ta('svcNoConnection') };
     try{
       const call = cloudFunctions.httpsCallable('googleCalendarSync');
       await call({});
@@ -1646,7 +1646,7 @@ const CalendarService = {
     }
   },
   async disconnect(){
-    if(!cloudFunctions) return { ok:false, message:'Sem ligação à Weddy neste momento.' };
+    if(!cloudFunctions) return { ok:false, message:ta('svcNoConnection') };
     try{
       const call = cloudFunctions.httpsCallable('googleCalendarDisconnect');
       await call({});
@@ -1664,7 +1664,7 @@ const CalendarService = {
 // toda a Weddy e mantém o índice invertido sincronizado.
 const GuestCommsService = {
   async updateGuestPhone(guestId, phone, optedIn){
-    if(!cloudFunctions) return { ok:false, message:'Sem ligação à Weddy neste momento.' };
+    if(!cloudFunctions) return { ok:false, message:ta('svcNoConnection') };
     try{
       const call = cloudFunctions.httpsCallable('updateGuestPhone');
       const payload = { guestId, phone };
@@ -1679,24 +1679,24 @@ const GuestCommsService = {
 };
 function guestPhoneErrorMessage(err){
   const code = err && err.code;
-  if(code==='already-exists') return 'Este número já está associado a outro convidado.';
-  if(code==='invalid-argument') return 'Número inválido — usa o formato internacional, ex: +351912345678.';
-  if(code==='not-found') return 'Não foi possível encontrar este convidado.';
-  return 'Não foi possível guardar. Tenta novamente.';
+  if(code==='already-exists') return ta('gpErrAlreadyExists');
+  if(code==='invalid-argument') return ta('gpErrInvalidArgument');
+  if(code==='not-found') return ta('gpErrNotFound');
+  return ta('gpErrGeneric');
 }
 // Mensagens de erro amigáveis (spec §34) — nunca mostra err.message cru
 // (pode vir em inglês/técnico do lado do Google).
 function googleCalendarErrorMessage(err){
   const code = err && err.code;
   const msg = (err && err.message) || '';
-  if(code==='resource-exhausted' && msg==='SYNC_TOO_SOON') return 'Acabaste de sincronizar — espera um bocadinho antes de tentar outra vez.';
-  if(code==='already-exists' && msg==='SYNC_ALREADY_RUNNING') return 'Já há uma sincronização em curso — aguarda que termine.';
-  if(code==='failed-precondition' && msg==='REAUTH_REQUIRED') return 'A ligação ao Google Calendar expirou. Volta a ligar a tua conta Google.';
-  if(code==='failed-precondition' && msg==='NOT_CONNECTED') return 'Ainda não ligaste o Google Calendar.';
-  if(code==='permission-denied') return 'A Weddy não tem permissão para editar este calendário. Escolhe outro calendário.';
-  if(code==='resource-exhausted') return 'O Google Calendar está temporariamente a limitar pedidos. Tenta novamente dentro de alguns minutos.';
-  if(code==='unauthenticated') return 'A tua sessão expirou — entra novamente.';
-  return 'Não foi possível sincronizar o Google Calendar. Os teus dados na Weddy não foram alterados.';
+  if(code==='resource-exhausted' && msg==='SYNC_TOO_SOON') return ta('gcalErrSyncTooSoon');
+  if(code==='already-exists' && msg==='SYNC_ALREADY_RUNNING') return ta('gcalErrSyncRunning');
+  if(code==='failed-precondition' && msg==='REAUTH_REQUIRED') return ta('gcalErrReauth');
+  if(code==='failed-precondition' && msg==='NOT_CONNECTED') return ta('gcalErrNotConnected');
+  if(code==='permission-denied') return ta('gcalErrPermissionDenied');
+  if(code==='resource-exhausted') return ta('gcalErrRateLimited');
+  if(code==='unauthenticated') return ta('gcalErrSessionExpired');
+  return ta('gcalErrGeneric');
 }
 
 // Fase 9.2 — sincronização automática silenciosa. Pedido explícito: "se
@@ -3627,6 +3627,80 @@ const APP_I18N = {
     checklistPhasesData: CHECKLIST_PHASES_PT,
     weddingDayChecklistData: WEDDING_DAY_CHECKLIST_PT,
     themeRust:'Terracota', themeNavy:'Azul-marinho', themeOlive:'Verde-oliva', themeBlush:'Rosa-antigo', themeGold:'Dourado-clássico',
+    alertSettingsSyncPartialFailure:(failed,total)=>`As definições foram guardadas, mas ${failed} de ${total} convite(s) de convidados não foram atualizados agora (podem ficar com informação desatualizada). Tenta sincronizar de novo daqui a pouco.`,
+    svcNoConnection:'Sem ligação à Weddy neste momento.',
+    svcNoConnectionAI:'Sem ligação à Weddy AI neste momento.',
+    svcEmptyResponse:'A Weddy não devolveu resposta.',
+    svcAIRateLimited:'Limite diário de pedidos à Weddy AI atingido para este casamento. Tenta de novo amanhã.',
+    svcAIGenericError:'Não foi possível gerar a proposta agora. Tenta novamente.',
+    gcalErrNoAuthUrl:'A Weddy não devolveu um link de autorização.',
+    gpErrAlreadyExists:'Este número já está associado a outro convidado.',
+    gpErrInvalidArgument:'Número inválido — usa o formato internacional, ex: +351912345678.',
+    gpErrNotFound:'Não foi possível encontrar este convidado.',
+    gpErrGeneric:'Não foi possível guardar. Tenta novamente.',
+    gcalErrSyncTooSoon:'Acabaste de sincronizar — espera um bocadinho antes de tentar outra vez.',
+    gcalErrSyncRunning:'Já há uma sincronização em curso — aguarda que termine.',
+    gcalErrReauth:'A ligação ao Google Calendar expirou. Volta a ligar a tua conta Google.',
+    gcalErrNotConnected:'Ainda não ligaste o Google Calendar.',
+    gcalErrPermissionDenied:'A Weddy não tem permissão para editar este calendário. Escolhe outro calendário.',
+    gcalErrRateLimited:'O Google Calendar está temporariamente a limitar pedidos. Tenta novamente dentro de alguns minutos.',
+    gcalErrSessionExpired:'A tua sessão expirou — entra novamente.',
+    gcalErrGeneric:'Não foi possível sincronizar o Google Calendar. Os teus dados na Weddy não foram alterados.',
+    notIdentifiedLabel:'não identificado',
+    qrCodeAltText:'Código QR do convite',
+    qrCodeGenErrorText:'Não foi possível gerar o código QR.',
+    btnPrint:'Imprimir',
+    inviteWordLabel:'Convite',
+    deleteAccountSoleOwnerHtml:'Ao eliminar a tua conta, todos os dados deste casamento serão <b>permanentemente apagados</b>, incluindo orçamento, convidados, mesas, fornecedores, documentos e memórias. Esta ação não pode ser desfeita.',
+    deleteAccountSharedHtml:'Ao eliminar a tua conta, deixarás de ter acesso a este casamento. Os dados partilhados mantêm-se para os outros utilizadores com acesso. Esta ação não pode ser desfeita.',
+    toastSaveFailed:'Não foi possível guardar',
+    toastSaved:'Guardado',
+    xlDefaultCoupleTitle:'O nosso casamento',
+    xlSheetBudget:'Orçamento',
+    xlBudgetSubtitle:(subInfo,total)=>`Orçamento · ${subInfo} · Orçamento total: ${total}`,
+    xlColCategory:'Categoria',
+    xlColBudgeted:'Orçamentado',
+    xlSheetExpenses:'Gastos',
+    xlExpensesSubtitle:(subInfo)=>`Gastos · ${subInfo}`,
+    xlColDescription:'Descrição',
+    xlColDate:'Data',
+    xlColTotalValue:'Valor total',
+    xlColValue:'Valor',
+    xlColPaid:'Pago',
+    xlColRemaining:'Falta pagar',
+    xlColDueDate:'Data limite',
+    xlColMethod:'Método',
+    xlSheetGuests:'Convidados',
+    xlGuestsSubtitle:(total,confirmed)=>`Convidados · ${total} convidados · ${confirmed} confirmados`,
+    xlColName:'Nome',
+    xlColSide:'Lado',
+    xlColGroup:'Grupo',
+    xlColStatus:'Estado',
+    xlColAge:'Idade',
+    xlColPaying:'Pagante',
+    xlStatusConfirmed:'Confirmado',
+    xlStatusPending:'Por confirmar',
+    xlSheetTables:'Mesas',
+    xlTablesSubtitle:(n)=>`Mesas e lugares · ${n} mesas`,
+    xlColTable:'Mesa',
+    xlColShape:'Forma',
+    xlColSeat:'Lugar',
+    xlColGuest:'Convidado',
+    xlSheetSuppliers:'Fornecedores',
+    xlSuppliersSubtitle:(n)=>`Fornecedores · ${n} guardados`,
+    xlColContact:'Contacto',
+    xlColPrice:'Preço',
+    xlColNotes:'Notas',
+    xlTotalLabel:'TOTAL',
+    xlLoadExcelError:'Não foi possível carregar o gerador de Excel. Confirma que tens internet e tenta novamente.',
+    xlLoadPdfError:'Não foi possível carregar o gerador de PDF. Confirma que tens internet e tenta novamente.',
+    xlDownloadSuccess:'Descarregado com sucesso!',
+    xlGenericFileError:'Não foi possível gerar o ficheiro. Tenta novamente.',
+    xlDefaultFilenameSlug:'casamento',
+    xlPdfSectionBudget:'Orçamento por categoria',
+    xlEmptyExpenses:'Ainda sem gastos registados.',
+    xlEmptyGuests:'Ainda sem convidados.',
+    xlEmptySuppliers:'Ainda sem fornecedores.',
   },
   en: {
     tabHome:'Home', tabBudget:'Budget', tabGuests:'Guests', tabExpenses:'Expenses', tabTables:'Tables', tabSeating:'Seating',
@@ -4409,6 +4483,80 @@ const APP_I18N = {
     checklistPhasesData: CHECKLIST_PHASES_EN,
     weddingDayChecklistData: WEDDING_DAY_CHECKLIST_EN,
     themeRust:'Terracotta', themeNavy:'Navy blue', themeOlive:'Olive green', themeBlush:'Antique pink', themeGold:'Classic gold',
+    alertSettingsSyncPartialFailure:(failed,total)=>`Settings were saved, but ${failed} of ${total} guest invite(s) weren't updated just now (they may show outdated info). Try syncing again in a bit.`,
+    svcNoConnection:'No connection to Weddy right now.',
+    svcNoConnectionAI:'No connection to Weddy AI right now.',
+    svcEmptyResponse:'Weddy didn\'t return a response.',
+    svcAIRateLimited:'Daily limit of Weddy AI requests reached for this wedding. Try again tomorrow.',
+    svcAIGenericError:'Couldn\'t generate the proposal right now. Try again.',
+    gcalErrNoAuthUrl:'Weddy didn\'t return an authorization link.',
+    gpErrAlreadyExists:'This number is already linked to another guest.',
+    gpErrInvalidArgument:'Invalid number — use the international format, e.g. +351912345678.',
+    gpErrNotFound:'Couldn\'t find this guest.',
+    gpErrGeneric:'Couldn\'t save. Try again.',
+    gcalErrSyncTooSoon:'You just synced — wait a bit before trying again.',
+    gcalErrSyncRunning:'A sync is already running — wait for it to finish.',
+    gcalErrReauth:'The Google Calendar connection expired. Reconnect your Google account.',
+    gcalErrNotConnected:'You haven\'t connected Google Calendar yet.',
+    gcalErrPermissionDenied:'Weddy doesn\'t have permission to edit this calendar. Choose another calendar.',
+    gcalErrRateLimited:'Google Calendar is temporarily rate-limiting requests. Try again in a few minutes.',
+    gcalErrSessionExpired:'Your session expired — sign in again.',
+    gcalErrGeneric:'Couldn\'t sync Google Calendar. Your data in Weddy wasn\'t changed.',
+    notIdentifiedLabel:'not identified',
+    qrCodeAltText:'Invite QR code',
+    qrCodeGenErrorText:'Could not generate the QR code.',
+    btnPrint:'Print',
+    inviteWordLabel:'Invite',
+    deleteAccountSoleOwnerHtml:'Deleting your account will <b>permanently erase</b> all data for this wedding, including budget, guests, tables, suppliers, documents and memories. This action cannot be undone.',
+    deleteAccountSharedHtml:'Deleting your account will remove your access to this wedding. Shared data remains for other users with access. This action cannot be undone.',
+    toastSaveFailed:'Could not save',
+    toastSaved:'Saved',
+    xlDefaultCoupleTitle:'Our wedding',
+    xlSheetBudget:'Budget',
+    xlBudgetSubtitle:(subInfo,total)=>`Budget · ${subInfo} · Total budget: ${total}`,
+    xlColCategory:'Category',
+    xlColBudgeted:'Budgeted',
+    xlSheetExpenses:'Expenses',
+    xlExpensesSubtitle:(subInfo)=>`Expenses · ${subInfo}`,
+    xlColDescription:'Description',
+    xlColDate:'Date',
+    xlColTotalValue:'Total value',
+    xlColValue:'Value',
+    xlColPaid:'Paid',
+    xlColRemaining:'Remaining',
+    xlColDueDate:'Due date',
+    xlColMethod:'Method',
+    xlSheetGuests:'Guests',
+    xlGuestsSubtitle:(total,confirmed)=>`Guests · ${total} guests · ${confirmed} confirmed`,
+    xlColName:'Name',
+    xlColSide:'Side',
+    xlColGroup:'Group',
+    xlColStatus:'Status',
+    xlColAge:'Age',
+    xlColPaying:'Paying',
+    xlStatusConfirmed:'Confirmed',
+    xlStatusPending:'Pending',
+    xlSheetTables:'Tables',
+    xlTablesSubtitle:(n)=>`Tables and seats · ${n} tables`,
+    xlColTable:'Table',
+    xlColShape:'Shape',
+    xlColSeat:'Seat',
+    xlColGuest:'Guest',
+    xlSheetSuppliers:'Suppliers',
+    xlSuppliersSubtitle:(n)=>`Suppliers · ${n} saved`,
+    xlColContact:'Contact',
+    xlColPrice:'Price',
+    xlColNotes:'Notes',
+    xlTotalLabel:'TOTAL',
+    xlLoadExcelError:'Could not load the Excel generator. Check your internet connection and try again.',
+    xlLoadPdfError:'Could not load the PDF generator. Check your internet connection and try again.',
+    xlDownloadSuccess:'Downloaded successfully!',
+    xlGenericFileError:'Could not generate the file. Try again.',
+    xlDefaultFilenameSlug:'wedding',
+    xlPdfSectionBudget:'Budget by category',
+    xlEmptyExpenses:'No expenses recorded yet.',
+    xlEmptyGuests:'No guests yet.',
+    xlEmptySuppliers:'No suppliers yet.',
   }
 };
 function ta(key){
@@ -7552,7 +7700,7 @@ function saveAndSyncWeddingSettingsToGuests(btn, fields){
       logMassPropagationFailures('sync_wedding_settings_to_guests_failed', failedTokens);
       if(failedTokens.length){
         btn.textContent = original;
-        alert(`As definições foram guardadas, mas ${failedTokens.length} de ${tokens.length} convite(s) de convidados não foram atualizados agora (podem ficar com informação desatualizada). Tenta sincronizar de novo daqui a pouco.`);
+        alert(ta('alertSettingsSyncPartialFailure')(failedTokens.length, tokens.length));
       } else {
         btn.textContent = ta('btnSavedCheck');
       }
@@ -10120,7 +10268,7 @@ function bindHandlers(){
     }
     defReportarSend.disabled = true;
     if(msg){ msg.style.color = 'var(--ink-soft)'; msg.textContent = ta('msgSendingEllipsis'); }
-    const contaEmail = (typeof auth !== 'undefined' && auth && auth.currentUser && auth.currentUser.email) ? auth.currentUser.email : 'não identificado';
+    const contaEmail = (typeof auth !== 'undefined' && auth && auth.currentUser && auth.currentUser.email) ? auth.currentUser.email : ta('notIdentifiedLabel');
     emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
       message: txt,
       from_email: contaEmail,
@@ -10904,7 +11052,7 @@ function softUpdateBudget(){
     const elTotal = document.querySelector(`[data-cattotal="${c.id}"]`);
     if(elTotal) elTotal.textContent = fmtEUR(catTotal);
     const elPerGuest = document.querySelector(`[data-catperguest="${c.id}"]`);
-    if(elPerGuest) elPerGuest.textContent = fmtEUR(catPerGuest)+' / convidado';
+    if(elPerGuest) elPerGuest.textContent = fmtEUR(catPerGuest)+ta('perGuestSuffix');
     const elValueInput = document.querySelector(`[data-catvalue="${c.id}"]`);
     if(elValueInput && document.activeElement!==elValueInput) elValueInput.value = Math.round(catTotal);
     const elPct = document.querySelector(`[data-catpctdisplay="${c.id}"]`);
@@ -10982,7 +11130,7 @@ function softUpdateGastos(){
   state.expenses.forEach((e,i)=>{
     const remaining = Math.max(0, Number(e.value)-Number(e.paid||0));
     const remEl = document.querySelector(`[data-dueremaining="${i}"]`);
-    if(remEl) remEl.textContent = `Falta pagar ${fmtEUR(remaining)} — até`;
+    if(remEl) remEl.textContent = ta('remainingToPayLabel')(fmtEUR(remaining));
     const rowEl = document.querySelector(`[data-duerow="${i}"]`);
     if(rowEl) rowEl.style.display = remaining>0 ? '' : 'none';
   });
@@ -11449,9 +11597,9 @@ async function openRSVPQRModal(link, name){
     <div class="rsvp-qr-card">
       <button class="rsvp-qr-close" id="rsvp-qr-close">${ICONS.close||'&times;'}</button>
       <div class="rsvp-qr-name">${escapeHTML(name||'')}</div>
-      ${qrImg ? `<img src="${qrImg}" alt="QR code do convite" width="220" height="220"/>` : `<div class="rsvp-qr-link" style="margin:12px 0;">Não foi possível gerar o QR code agora — usa o link abaixo.</div>`}
+      ${qrImg ? `<img src="${qrImg}" alt="${ta('qrCodeAltText')}" width="220" height="220"/>` : `<div class="rsvp-qr-link" style="margin:12px 0;">${ta('qrCodeGenErrorText')}</div>`}
       <div class="rsvp-qr-link">${escapeHTML(link)}</div>
-      <button class="rsvp-copy-btn" id="rsvp-qr-print">${ICONS.download||''} Imprimir</button>
+      <button class="rsvp-copy-btn" id="rsvp-qr-print">${ICONS.download||''} ${ta('btnPrint')}</button>
     </div>
   `;
   document.body.appendChild(wrap);
@@ -11460,7 +11608,7 @@ async function openRSVPQRModal(link, name){
   document.getElementById('rsvp-qr-print').addEventListener('click', ()=>{
     const w = window.open('', '_blank');
     if(!w) return;
-    w.document.write(`<html><head><title>${escapeHTML(name||'Convite')}</title><style>
+    w.document.write(`<html><head><title>${escapeHTML(name||ta('inviteWordLabel'))}</title><style>
       body{font-family:Georgia,serif; text-align:center; padding:40px;}
       img{margin:24px 0;}
       p{font-size:13px; color:#555; word-break:break-all;}
@@ -12363,8 +12511,8 @@ async function exportMyDataAsJson(btn){
 function openDeleteAccountSheet(){
   const isSoleOwner = currentWeddingOwners.length<=1;
   document.getElementById('delete-account-explain').innerHTML = isSoleOwner
-    ? 'Isto vai apagar <b>definitivamente</b> todos os dados deste casamento — convidados, orçamento, gastos, mesas, tudo — e a tua conta de acesso. <b>Não é possível desfazer.</b>'
-    : 'A tua conta vai deixar de ter acesso a este casamento. Os dados continuam a existir para quem mais tiver acesso — só a tua conta é eliminada.';
+    ? ta('deleteAccountSoleOwnerHtml')
+    : ta('deleteAccountSharedHtml');
   document.getElementById('delete-account-pass').value = '';
   document.getElementById('delete-account-msg').textContent = '';
   document.getElementById('delete-account-msg').className = 'login-msg';
@@ -12785,8 +12933,8 @@ function showSaveToast(isError){
   const el = document.getElementById('save-toast');
   if(!el) return;
   el.innerHTML = isError
-    ? `${ICONS.warn} Não foi possível guardar`
-    : `${ICONS.check} Guardado`;
+    ? `${ICONS.warn} ${ta('toastSaveFailed')}`
+    : `${ICONS.check} ${ta('toastSaved')}`;
   el.className = 'save-toast show' + (isError? ' error' : '');
   clearTimeout(saveToastTimer);
   saveToastTimer = setTimeout(()=>{ el.classList.remove('show'); }, isError ? 2600 : 1500);
@@ -12837,12 +12985,12 @@ function exportToExcel(){
   msgEl.className = 'login-msg';
   try {
     if(typeof XLSX === 'undefined'){
-      msgEl.textContent = 'Não foi possível carregar o gerador de Excel. Confirma que tens internet e tenta novamente.';
+      msgEl.textContent = ta('xlLoadExcelError');
       msgEl.className = 'login-msg error';
       return;
     }
     const wb = XLSX.utils.book_new();
-    const coupleTitle = `${weddingSettings.coupleName1||''} & ${weddingSettings.coupleName2||''}`.trim() || 'O nosso casamento';
+    const coupleTitle = `${weddingSettings.coupleName1||''} & ${weddingSettings.coupleName2||''}`.trim() || ta('xlDefaultCoupleTitle');
     const subInfo = `${formatDatePT(weddingSettings.weddingDate)} · ${weddingSettings.venue||ta('genericVenueTBD')}`;
 
     // Orçamento
@@ -12858,12 +13006,12 @@ function exportToExcel(){
     });
     const orcTotal = state.categories.reduce((s,c)=>s+(Number(c.value)||0),0);
     orcDataRows.push([
-      xlCell('TOTAL', XL_STYLES.total),
+      xlCell(ta('xlTotalLabel'), XL_STYLES.total),
       xlCell(orcTotal, XL_STYLES.totalMoney),
       xlCell(state.budget.total ? orcTotal/state.budget.total : 0, { ...XL_STYLES.total, alignment:{horizontal:'center'}, numFmt:'0.0%' })
     ]);
-    const orcSheet = buildStyledSheet(coupleTitle, `Orçamento · ${subInfo} · Orçamento total: ${fmtEUR(state.budget.total)}`, ['Categoria','Orçamentado','%'], orcDataRows, [30,16,10]);
-    XLSX.utils.book_append_sheet(wb, orcSheet, 'Orçamento');
+    const orcSheet = buildStyledSheet(coupleTitle, ta('xlBudgetSubtitle')(subInfo, fmtEUR(state.budget.total)), [ta('xlColCategory'),ta('xlColBudgeted'),'%'], orcDataRows, [30,16,10]);
+    XLSX.utils.book_append_sheet(wb, orcSheet, ta('xlSheetBudget'));
 
     // Gastos
     const gastosDataRows = state.expenses.map((e,i)=>{
@@ -12887,13 +13035,13 @@ function exportToExcel(){
       const totalValor = state.expenses.reduce((s,e)=>s+(Number(e.value)||0),0);
       const totalPago = state.expenses.reduce((s,e)=>s+(Number(e.paid)||0),0);
       gastosDataRows.push([
-        xlCell('TOTAL', XL_STYLES.total), xlCell('', XL_STYLES.total), xlCell('', XL_STYLES.total),
+        xlCell(ta('xlTotalLabel'), XL_STYLES.total), xlCell('', XL_STYLES.total), xlCell('', XL_STYLES.total),
         xlCell(totalValor, XL_STYLES.totalMoney), xlCell(totalPago, XL_STYLES.totalMoney),
         xlCell(Math.max(0,totalValor-totalPago), XL_STYLES.totalMoney), xlCell('', XL_STYLES.total), xlCell('', XL_STYLES.total)
       ]);
     }
-    const gastosSheet = buildStyledSheet(coupleTitle, `Gastos · ${subInfo}`, ['Descrição','Data','Categoria','Valor total','Pago','Falta pagar','Data limite','Método'], gastosDataRows, [28,12,20,14,14,14,14,16]);
-    XLSX.utils.book_append_sheet(wb, gastosSheet, 'Gastos');
+    const gastosSheet = buildStyledSheet(coupleTitle, ta('xlExpensesSubtitle')(subInfo), [ta('xlColDescription'),ta('xlColDate'),ta('xlColCategory'),ta('xlColTotalValue'),ta('xlColPaid'),ta('xlColRemaining'),ta('xlColDueDate'),ta('xlColMethod')], gastosDataRows, [28,12,20,14,14,14,14,16]);
+    XLSX.utils.book_append_sheet(wb, gastosSheet, ta('xlSheetExpenses'));
 
     // Convidados
     const guestList = [];
@@ -12904,7 +13052,7 @@ function exportToExcel(){
           const hasPay = isPaymentTrackingCat(c.id);
           guestList.push({
             name: isObj ? (n.name||'') : n,
-            side: side==='noiva'?'Noiva':'Noivo',
+            side: side==='noiva'?ta('sideBride'):ta('sideGroom'),
             group: c.label,
             confirmed: isConfirmed(side,c.id,idx),
             age: (isObj && c.id==='criancas') ? (n.age||'') : '',
@@ -12921,14 +13069,14 @@ function exportToExcel(){
         xlCell(g.name, c),
         xlCell(g.side, cc),
         xlCell(g.group, cc),
-        xlCell(g.confirmed?'Confirmado':'Por confirmar', g.confirmed?XL_STYLES.confirmedYes:XL_STYLES.confirmedNo),
+        xlCell(g.confirmed?ta('xlStatusConfirmed'):ta('xlStatusPending'), g.confirmed?XL_STYLES.confirmedYes:XL_STYLES.confirmedNo),
         xlCell(g.age, cc),
         xlCell(g.paying, cc)
       ];
     });
     const nConfirmed = guestList.filter(g=>g.confirmed).length;
-    const guestSheet = buildStyledSheet(coupleTitle, `Convidados · ${guestList.length} convidados · ${nConfirmed} confirmados`, ['Nome','Lado','Grupo','Estado','Idade','Pagante'], guestDataRows, [26,12,16,18,10,12]);
-    XLSX.utils.book_append_sheet(wb, guestSheet, 'Convidados');
+    const guestSheet = buildStyledSheet(coupleTitle, ta('xlGuestsSubtitle')(guestList.length, nConfirmed), [ta('xlColName'),ta('xlColSide'),ta('xlColGroup'),ta('xlColStatus'),ta('xlColAge'),ta('xlColPaying')], guestDataRows, [26,12,16,18,10,12]);
+    XLSX.utils.book_append_sheet(wb, guestSheet, ta('xlSheetGuests'));
 
     // Mesas
     const tableDataRows = [];
@@ -12945,15 +13093,15 @@ function exportToExcel(){
         const seatGuest = state.seating.assignments[key] ? resolveSeatGuest(state.seating.assignments[key]) : null;
         const guestName = seatGuest ? seatGuest.name : '';
         tableDataRows.push([
-          xlCell('Mesa '+t.id, cc),
+          xlCell(ta('tableLabel')(t.id), cc),
           xlCell((TABLE_SHAPES[t.shape]||{}).label || t.shape, cc),
           xlCell(s, cc),
           xlCell(guestName, guestName? c : { ...c, font:{...c.font, color:{rgb:XL_COLORS.tintaSuave}, italic:true} })
         ]);
       }
     });
-    const tableSheet = buildStyledSheet(coupleTitle, `Mesas e lugares · ${state.seating.tables.length} mesas`, ['Mesa','Forma','Lugar','Convidado'], tableDataRows, [14,14,10,26]);
-    XLSX.utils.book_append_sheet(wb, tableSheet, 'Mesas');
+    const tableSheet = buildStyledSheet(coupleTitle, ta('xlTablesSubtitle')(state.seating.tables.length), [ta('xlColTable'),ta('xlColShape'),ta('xlColSeat'),ta('xlColGuest')], tableDataRows, [14,14,10,26]);
+    XLSX.utils.book_append_sheet(wb, tableSheet, ta('xlSheetTables'));
 
     // Fornecedores
     const supDataRows = state.suppliers.map((s,i)=>{
@@ -12970,16 +13118,16 @@ function exportToExcel(){
         xlCell(s.notas||'', c)
       ];
     });
-    const supSheet = buildStyledSheet(coupleTitle, `Fornecedores · ${state.suppliers.length} guardados`, ['Nome','Categoria','Contacto','Preço','Estado','Notas'], supDataRows, [24,18,16,14,16,30]);
-    XLSX.utils.book_append_sheet(wb, supSheet, 'Fornecedores');
+    const supSheet = buildStyledSheet(coupleTitle, ta('xlSuppliersSubtitle')(state.suppliers.length), [ta('xlColName'),ta('xlColCategory'),ta('xlColContact'),ta('xlColPrice'),ta('xlColStatus'),ta('xlColNotes')], supDataRows, [24,18,16,14,16,30]);
+    XLSX.utils.book_append_sheet(wb, supSheet, ta('xlSheetSuppliers'));
 
-    const coupleName = `${weddingSettings.coupleName1||''}-${weddingSettings.coupleName2||''}`.replace(/[^a-zA-Z0-9-]/g,'') || 'casamento';
+    const coupleName = `${weddingSettings.coupleName1||''}-${weddingSettings.coupleName2||''}`.replace(/[^a-zA-Z0-9-]/g,'') || ta('xlDefaultFilenameSlug');
     XLSX.writeFile(wb, `weddy-${coupleName}.xlsx`);
-    msgEl.textContent = 'Descarregado com sucesso!';
+    msgEl.textContent = ta('xlDownloadSuccess');
     msgEl.className = 'login-msg success';
   } catch(err){
     console.error('Weddy export excel error:', err);
-    msgEl.textContent = 'Não foi possível gerar o ficheiro. Tenta novamente.';
+    msgEl.textContent = ta('xlGenericFileError');
     msgEl.className = 'login-msg error';
   }
 }
@@ -12988,7 +13136,7 @@ function exportToPDF(){
   const msgEl = document.getElementById('export-pdf-msg');
   if(msgEl){ msgEl.textContent = ''; msgEl.className = 'login-msg'; }
   if(typeof window.jspdf === 'undefined'){
-    if(msgEl){ msgEl.textContent = 'Não foi possível carregar o gerador de PDF. Confirma que tens internet e tenta novamente.'; msgEl.className = 'login-msg error'; }
+    if(msgEl){ msgEl.textContent = ta('xlLoadPdfError'); msgEl.className = 'login-msg error'; }
     return;
   }
   try {
@@ -13041,13 +13189,13 @@ function exportToPDF(){
     const pct = state.budget.total ? Math.round((val/state.budget.total)*1000)/10 : 0;
     return [c.name, fmtEUR(val), pct+'%'];
   });
-  addSection('Orçamento por categoria', ['Categoria','Orçamentado','%'], orcBody);
+  addSection(ta('xlPdfSectionBudget'), [ta('xlColCategory'),ta('xlColBudgeted'),'%'], orcBody);
 
   const gastosBody = state.expenses.length ? state.expenses.map(e=>{
     const cat = catById(e.category);
     return [e.desc||'', cat?cat.name:'', fmtEUR(Number(e.value)||0), fmtEUR(Number(e.paid)||0), e.method ? (EXPENSE_METHOD_LABELS[e.method]||e.method) : '—'];
-  }) : [['Ainda sem gastos registados.','','','','']];
-  addSection('Gastos', ['Descrição','Categoria','Valor','Pago','Método'], gastosBody);
+  }) : [[ta('xlEmptyExpenses'),'','','','']];
+  addSection(ta('xlSheetExpenses'), [ta('xlColDescription'),ta('xlColCategory'),ta('xlColValue'),ta('xlColPaid'),ta('xlColMethod')], gastosBody);
 
   const guestBody = [];
   ['noiva','noivo'].forEach(side=>{
@@ -13057,27 +13205,27 @@ function exportToPDF(){
         const hasPay = isPaymentTrackingCat(c.id);
         const name = isObj ? (n.name||'') : n;
         const extra = [
-          (isObj && c.id==='criancas' && n.age) ? `${n.age} anos` : '',
+          (isObj && c.id==='criancas' && n.age) ? ta('childAgeYears')(n.age) : '',
           hasPay ? `${fmtGuestCount(guestWeight(n)*100)}%` : ''
         ].filter(Boolean).join(' · ');
-        guestBody.push([name, `${side==='noiva'?'Noiva':'Noivo'} · ${c.label}${extra?' · '+extra:''}`, isConfirmed(side,c.id,idx)?'Confirmado':'—']);
+        guestBody.push([name, `${side==='noiva'?ta('sideBride'):ta('sideGroom')} · ${c.label}${extra?' · '+extra:''}`, isConfirmed(side,c.id,idx)?ta('xlStatusConfirmed'):'—']);
       });
     });
   });
-  addSection('Convidados', ['Nome','Grupo','Estado'], guestBody.length ? guestBody : [['Ainda sem convidados.','','']]);
+  addSection(ta('xlSheetGuests'), [ta('xlColName'),ta('xlColGroup'),ta('xlColStatus')], guestBody.length ? guestBody : [[ta('xlEmptyGuests'),'','']]);
 
   const supBody = state.suppliers.length ? state.suppliers.map(s=>{
     const cat = catById(s.category);
     return [s.name||'', cat?cat.name:'', s.contact||'', (SUPPLIER_STATUS[s.status]||{}).label||''];
-  }) : [['Ainda sem fornecedores.','','','']];
-  addSection('Fornecedores', ['Nome','Categoria','Contacto','Estado'], supBody);
+  }) : [[ta('xlEmptySuppliers'),'','','']];
+  addSection(ta('xlSheetSuppliers'), [ta('xlColName'),ta('xlColCategory'),ta('xlColContact'),ta('xlColStatus')], supBody);
 
-  const coupleName = `${c1}-${c2}`.replace(/[^a-zA-Z0-9-]/g,'') || 'casamento';
+  const coupleName = `${c1}-${c2}`.replace(/[^a-zA-Z0-9-]/g,'') || ta('xlDefaultFilenameSlug');
   doc.save(`weddy-${coupleName}.pdf`);
-  if(msgEl){ msgEl.textContent = 'Descarregado com sucesso!'; msgEl.className = 'login-msg success'; }
+  if(msgEl){ msgEl.textContent = ta('xlDownloadSuccess'); msgEl.className = 'login-msg success'; }
   } catch(err){
     console.error('Weddy export pdf error:', err);
-    if(msgEl){ msgEl.textContent = 'Não foi possível gerar o ficheiro. Tenta novamente.'; msgEl.className = 'login-msg error'; }
+    if(msgEl){ msgEl.textContent = ta('xlGenericFileError'); msgEl.className = 'login-msg error'; }
   }
 }
 
