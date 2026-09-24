@@ -1,489 +1,15450 @@
-/**
- * Weddy — Lembretes automáticos de RSVP (Cloud Function)
- * ========================================================
- *
- * O QUE ISTO FAZ
- * Corre uma vez por dia (agendado) e, para cada convidado com um link de
- * RSVP gerado que AINDA não respondeu (nem "sim" nem "não"), verifica se
- * está a 7, 3 ou 1 dia(s) do prazo definido pelo casal (rsvpDeadline) e,
- * se tiver um email guardado, envia-lhe um email de lembrete simpático com
- * o link para responder. Cada convidado recebe no máximo 3 lembretes.
- *
- * O QUE ISTO NÃO FAZ (limitações importantes, por favor lê)
- * - Só consegue enviar um lembrete a quem tiver um EMAIL guardado. A app
- *   Weddy (index.html) já tem um campo opcional "Email para lembretes
- *   automáticos" em Definições → Convites RSVP, mas o casal tem de o
- *   preencher manualmente por convidado — a app nunca inventa nem
- *   adivinha emails.
- * - Não manda SMS, WhatsApp nem notificações push — só email, através de
- *   um servidor SMTP que tens de configurar (ver abaixo).
- * - Não substitui o link individual de cada convidado — o lembrete é só
- *   um empurrãozinho a apontar para o mesmo link que já existia.
- *
- * PRÉ-REQUISITOS PARA ISTO FUNCIONAR
- * 1) O projeto Firebase (weddy-premium-teste, ou o de produção quando
- *    decidires promover isto) tem de estar no plano Blaze (pay-as-you-go).
- *    Cloud Functions agendadas (pubsub/scheduler) não funcionam no plano
- *    gratuito Spark, mesmo que o custo real fique a zero ou perto disso.
- * 2) Um servidor SMTP para enviar os emails — pode ser uma conta Gmail
- *    com "palavra-passe de aplicação", um serviço como SendGrid, Mailgun,
- *    Amazon SES, etc. Isto tem de ser configurado por ti (ver "Configurar
- *    o SMTP" abaixo) — eu não consigo criar nem gerir essa conta.
- *
- * COMO INSTALAR (passo a passo)
- * 1) Se ainda não tiveres a pasta "functions" no teu projeto:
- *      firebase init functions
- *    (escolhe JavaScript, o projeto weddy-premium-teste, e quando
- *    perguntar se instala dependências, diz que sim)
- * 2) Copia este ficheiro (index.js) e o package.json para dentro dessa
- *    pasta "functions", substituindo o que lá estiver.
- * 3) Dentro da pasta functions, corre:
- *      npm install
- * 4) Configura o SMTP (ver secção abaixo).
- * 5) Faz deploy:
- *      firebase deploy --only functions:sendRsvpReminders
- *
- * CONFIGURAR O SMTP (exemplo com Gmail)
- * Cria uma "palavra-passe de aplicação" na tua conta Google (Definições
- * da conta Google → Segurança → Verificação em 2 passos → Palavras-passe
- * de aplicação). Depois, na pasta functions, cria um ficheiro chamado
- * ".env.weddy-premium-teste" (ajusta ao nome exato do teu projeto) com:
- *
- *   SMTP_HOST=smtp.gmail.com
- *   SMTP_PORT=465
- *   SMTP_USER=oteuemail@gmail.com
- *   SMTP_PASS=a-palavra-passe-de-aplicacao-de-16-letras
- *   SMTP_FROM="Weddy <oteuemail@gmail.com>"
- *
- * (Qualquer outro fornecedor SMTP funciona da mesma forma — só muda o
- * SMTP_HOST/SMTP_PORT.) Este ficheiro NUNCA deve ser enviado para um
- * repositório público — junta-o ao .gitignore.
- *
- * TESTAR SEM ESPERAR PELO AGENDAMENTO
- * Depois do deploy, podes forçar uma execução imediata a partir da
- * Google Cloud Console → Cloud Scheduler → encontra o job
- * "firebase-schedule-sendRsvpReminders-..." → "Executar agora". Ou usa
- * o emulador local (firebase emulators:start) para testar sem gastar
- * nada nem mandar emails a sério (troca o transporter por um "stream"
- * de teste do nodemailer enquanto testas).
- */
+<!DOCTYPE html>
+<html lang="pt-PT" class="login-active">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Weddy">
+<meta name="theme-color" content="#FAF8F5">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="manifest" href="manifest.json">
+<title>Weddy (TESTES)</title>
+<style>
+</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --cream:#FAF8F5;
+  --cream2:#F3EFEA;
+  --card:#FFFDFC;
+  --ink:#302C29;
+  --ink-soft:#8E8780;
+  --rust:#B96752;        /* terracota principal */
+  --rust-dark:#9A4F3D;
+  --heading:#9A4F3D;      /* terracota para títulos e números */
+  --gold:#C9A480;         /* taupe dourado */
+  --gold-soft:#E7C5BB;
+  --blush:#E7C5BB;        /* blush */
+  --blush-dark:#CB9A8C;
+  --dusty:#B8ADA3;        /* taupe */
+  --dusty-dark:#96897D;
+  --sage:#A8B39C;         /* sage */
+  --sage-dark:#7C8A6E;
+  --line:rgba(48,44,41,0.09);
+  --shadow:0 2px 12px rgba(48,44,41,0.055), 0 1px 2px rgba(48,44,41,0.04);
+}
+*{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+b, strong{ font-weight:600; }
+html{background:#FAF8F5;}
+html.login-active{ background:#FBF1E7 url('login-bg.jpg') center/cover no-repeat; }
+html,body{margin:0;padding:0;height:100%;background:#FAF8F5;
+  /* Corrigido (Set 2026): sem isto, o Safari/iOS por vezes "infla" o
+     tamanho do texto sozinho em certos ecrãs (o título aparecia gigante
+     e cortado no topo, sempre nos mesmos sítios, na app instalada no
+     ecrã principal) — comportamento conhecido do WebKit quando esta
+     propriedade não está fixada a 100%. */
+  -webkit-text-size-adjust:100%; text-size-adjust:100%;
+}
+body{
+  background:var(--cream);
+  font-family:'Manrope',-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",Arial,sans-serif;
+  display:flex; flex-direction:column;
+  overflow:hidden;
+  position:fixed;
+  top:0; left:0;
+  /* O tamanho é definido em pixels fixos por JavaScript, uma única vez, e nunca
+     mais é atualizado — por isso rodar o telemóvel não muda literalmente nada
+     aqui, a app fica exatamente com o mesmo aspeto e tamanho de sempre. */
+  /* Impede o gesto nativo de "deslizar da margem para voltar" (o que causava
+     o ecrã a ficar branco a meio da transição). overscroll-behavior é feito
+     especificamente para isto — mais fiável do que só bloquear com JS. */
+  overscroll-behavior-x: none;
+  touch-action: pan-y;
+}
+html{
+  overscroll-behavior-x: none;
+}
+.screen{ flex:1; min-height:0; min-width:0; display:flex; flex-direction:column; position:relative; overflow:hidden; }
+.statusbar-spacer{ height:calc(env(safe-area-inset-top) + 4px); flex-shrink:0; }
 
-const { onSchedule } = require('firebase-functions/v2/scheduler');
-const { onCall, HttpsError } = require('firebase-functions/v2/https');
-const { defineString } = require('firebase-functions/params');
-const logger = require('firebase-functions/logger');
-const admin = require('firebase-admin');
-const nodemailer = require('nodemailer');
+/* ===================== PC / ECRÃS LARGOS ===================== */
+/* A partir daqui a app fica dentro de uma "moldura" de telemóvel,
+   centrada no ecrã — quase tudo dentro de .screen já usa
+   position:absolute relativo a .screen, por isso basta dar-lhe um
+   tamanho e cantos arredondados para os ecrãs, sheets, tabbar, etc.
+   ficarem automaticamente dentro da moldura. */
+@media (min-width:760px){
+  body{
+    align-items:center;
+    justify-content:center;
+    background:
+      radial-gradient(circle at 18% 15%, rgba(185,103,82,0.16), transparent 55%),
+      radial-gradient(circle at 82% 88%, rgba(168,179,156,0.16), transparent 55%),
+      var(--cream2);
+  }
+  .screen{
+    flex:none;
+    width:430px;
+    height:min(920px, 94vh);
+    border-radius:44px;
+    box-shadow:0 40px 90px rgba(48,44,41,0.32), 0 0 0 10px #fff, 0 0 0 11px rgba(48,44,41,0.08);
+  }
+}
 
-admin.initializeApp();
-const db = admin.firestore();
+/* ===================== NAV / CONTENT ===================== */
+.app-body{ flex:1; min-height:0; display:flex; flex-direction:column; position:relative; }
+.tabpanel{ display:none; flex-direction:column; flex:1; min-height:0; }
+.tabpanel.active{ display:flex; }
+.scroll{ flex:1; overflow-y:auto; padding-bottom:90px; -webkit-overflow-scrolling:touch; overscroll-behavior-x:none; touch-action:pan-y; }
+.scroll::-webkit-scrollbar{ display:none; }
 
-// Lidos de variáveis de ambiente (.env.<project-id> — ver instruções acima).
-const SMTP_HOST = defineString('SMTP_HOST');
-const SMTP_PORT = defineString('SMTP_PORT', { default: '465' });
-const SMTP_USER = defineString('SMTP_USER');
-const SMTP_PASS = defineString('SMTP_PASS');
-const SMTP_FROM = defineString('SMTP_FROM');
-// Só é preciso se ligares o classificador de IA (ver classifyWeddyIntent,
-// mais abaixo) — não tem nada a ver com os lembretes de RSVP acima.
-const OPENAI_API_KEY = defineString('OPENAI_API_KEY', { default: '' });
+.navbar{ padding:4px 18px 10px; flex-shrink:0; position:sticky; top:0; z-index:15; background:var(--cream); display:flex; align-items:center; gap:12px; }
+.navbar-titlewrap{ flex:1; min-width:0; }
+.navbar-botanical{ position:absolute; top:8px; right:16px; width:30px; height:auto; color:var(--dusty); opacity:.6; pointer-events:none; }
+.navbar .eyebrow{ font-size:12.5px; color:var(--rust); font-weight:600; margin-bottom:7px; }
+.navbar h1{ font-family:'Cormorant Garamond',serif; font-weight:500; font-size:29px; color:var(--heading); margin:0; letter-spacing:.002em; overflow-wrap:anywhere; }
+.hm-header h1{ font-family:'Cormorant Garamond',serif; font-weight:500; font-size:29px; color:var(--heading); margin:0; letter-spacing:.002em; }
+.navbar-row{ display:flex; align-items:flex-end; justify-content:space-between; }
+.nav-back{ all:unset; cursor:pointer; width:30px; height:30px; display:flex; align-items:center; justify-content:center; color:var(--ink); flex-shrink:0; line-height:1; margin-left:-6px; }
+.nav-back svg{ width:22px; height:22px; }
+.nav-back:active{ opacity:.5; }
+.nav-action{
+  all:unset; cursor:pointer; width:32px; height:32px; border-radius:50%;
+  background:var(--rust); color:#fff; display:flex; align-items:center; justify-content:center;
+  box-shadow:var(--shadow);
+ line-height:1;}
+.nav-action:active{ transform:scale(0.9); background:var(--rust-dark); }
+.nav-action svg{ width:16px; height:16px; }
 
-const RSVP_BASE_URL = 'https://ritamatosdoliveira-creator.github.io/weddy-premium-app-teste/rsvp.html';
+.section-label{ font-size:12.5px; color:var(--ink-soft); margin:20px 18px 10px; letter-spacing:.01em; }
+.section-label-caps{ font-size:10.5px; color:var(--rust-dark); font-weight:600; letter-spacing:.09em; text-transform:uppercase; margin:22px 18px 10px; }
+.def-row-icon{ width:44px; height:44px; border-radius:50%; flex-shrink:0; display:flex; align-items:center; justify-content:center; color:#fff; line-height:1; }
+.def-row-icon svg{ width:19px; height:19px; }
+/* Círculo pequeno com ícone (ex: check de cada feature na página de
+   subscrição) — sem esta regra, o <svg> filho não tem width/height nenhum
+   e o browser usa o tamanho por omissão (300x150), que fica invisível
+   dentro de um círculo de 20px. */
+.icon-circle-sm{ width:20px; height:20px; border-radius:50%; display:flex; align-items:center; justify-content:center; flex-shrink:0; line-height:1; }
+.icon-circle-sm svg{ width:11px; height:11px; }
+/* Utilitário para qualquer ícone solto (sem classe própria) que precise de
+   preencher exatamente a caixa onde está — mesma razão da regra acima. */
+.svg-fill svg{ width:100%; height:100%; display:block; }
+.def-row-mid{ flex:1; min-width:0; }
+.def-row-title{ font-size:14px; color:var(--ink); font-weight:500; }
+.def-row-desc{ font-size:11.5px; color:var(--ink-soft); margin-top:2px; line-height:1.35; }
+.def-row-badge{ flex-shrink:0; min-width:19px; height:19px; padding:0 6px; border-radius:10px; background:var(--rust); color:#fff; font-size:11px; font-weight:700; display:flex; align-items:center; justify-content:center; }
+.def-signout-btn{ all:unset; box-sizing:border-box; display:flex; align-items:center; justify-content:center; gap:9px; width:calc(100% - 32px); margin:22px 16px 30px; padding:15px 0; border-radius:16px; background:#F3E2DC; color:var(--rust-dark); font-size:14.5px; font-weight:600; cursor:pointer; }
+.def-signout-btn svg{ width:16px; height:16px; }
+/* Corrigido (Set 2026): esta classe era usada em "Desligar Google
+   Calendar" sem nenhuma regra CSS a defini-la em lado nenhum do
+   ficheiro — o botão caía no estilo nativo do browser (cinzento,
+   estreito, alinhado à esquerda), em vez de seguir o resto da app.
+   Este estilo alinha-o com os outros botões do mesmo ecrã: largura
+   total, texto centrado, tom "de aviso" mais discreto que um botão
+   principal. */
+.delete-response-link{ all:unset; box-sizing:border-box; display:block; width:100%; text-align:center; padding:11px 0; font-size:14px; font-weight:600; color:var(--rust-dark); cursor:pointer; }
+.delete-response-link:active{ opacity:.6; }
+.lang-switch-row{ display:flex; align-items:center; justify-content:space-between; margin:0 16px 18px; padding:12px 14px; background:#F7F1EC; border-radius:14px; }
+.lang-switch-label{ font-size:13.5px; font-weight:600; color:var(--rust-dark); }
+.lang-switch-pills{ display:flex; background:#fff; border-radius:10px; padding:3px; gap:2px; }
+.lang-switch-pills button{ all:unset; box-sizing:border-box; padding:5px 12px; font-size:12.5px; font-weight:700; border-radius:8px; cursor:pointer; color:#9a8b83; }
+.lang-switch-pills button.active{ background:var(--rust-dark); color:#fff; }
+.def-header-botanical{ position:relative; width:54px; height:74px; flex-shrink:0; }
+.def-header-botanical::before{ content:''; position:absolute; right:0; bottom:0; width:44px; height:44px; border-radius:50%; background:#F1DFDB; z-index:0; }
+.def-header-botanical svg{ position:relative; z-index:1; width:54px; height:74px; color:var(--rust-dark); opacity:.85; }
+.section-label:first-child{ margin-top:4px; }
 
-// Dias antes do prazo em que se tenta um lembrete (ajusta à vontade).
-const REMINDER_DAYS_BEFORE = [7, 3, 1];
-// Nunca manda mais do que isto à mesma pessoa, mesmo que o prazo demore.
-const MAX_REMINDERS = 3;
+/* Segmented control */
+.segmented{ display:flex; background:rgba(20,20,20,0.08); border-radius:9px; padding:2px; margin:2px 16px 4px; }
+.segmented button{ all:unset; cursor:pointer; flex:1; text-align:center; padding:7px 2px; font-size:12.8px; border-radius:7px; color:var(--ink-soft); font-weight:500; }
+.segmented button.active{ background:#fff; color:var(--ink); font-weight:600; box-shadow:0 1px 3px rgba(0,0,0,0.18); }
+.segmented button:active{ opacity:0.7; }
 
-function buildTransporter() {
-  return nodemailer.createTransport({
-    host: SMTP_HOST.value(),
-    port: Number(SMTP_PORT.value()) || 465,
-    secure: Number(SMTP_PORT.value()) !== 587, // 465 = SSL direto, 587 = STARTTLS
-    auth: { user: SMTP_USER.value(), pass: SMTP_PASS.value() },
+/* Search bar */
+.search-bar{ margin:2px 16px 6px; background:rgba(20,20,20,0.08); border-radius:10px; padding:8px 10px; display:flex; align-items:center; gap:6px; }
+.sup-filter-toggle{ all:unset; display:flex; align-items:center; justify-content:center; width:26px; height:26px; color:var(--ink-soft); cursor:pointer; flex-shrink:0; }
+.sup-filter-toggle svg{ width:19px; height:19px; }
+.search-bar svg{ width:15px; height:15px; color:var(--ink-soft); flex-shrink:0; }
+.search-bar input{ border:none; background:transparent; flex:1; font-size:14.5px; color:var(--ink); outline:none; font-family:inherit; }
+.search-bar input::placeholder{ color:#ABA7A0; }
+
+/* Stat cards row */
+.stats-row{ display:flex; gap:10px; margin:0 16px 8px; }
+.stat-card{ flex:1; background:var(--card); border:1px solid var(--line); border-radius:16px; padding:12px 12px 11px; box-shadow:var(--shadow); position:relative; }
+.stat-card-icon{ margin-top:8px; color:var(--heading); opacity:.55; }
+.stat-card-icon svg{ width:15px; height:15px; }
+.cat-row-v2{ background:var(--card); border:1px solid var(--line); border-radius:14px; margin:0 16px 9px; overflow:hidden; }
+.cat-row-head{ display:flex; align-items:center; gap:11px; padding:12px 13px; cursor:pointer; }
+.cat-row-mid{ flex:1; min-width:0; }
+.cat-row-name{ font-size:13.5px; font-weight:600; color:var(--ink); margin-bottom:6px; }
+.cat-row-bar-track{ height:4px; border-radius:3px; background:var(--cream2); overflow:hidden; }
+.cat-row-bar-fill{ height:100%; border-radius:3px; }
+.cat-row-vals{ text-align:right; flex-shrink:0; }
+.cat-row-total{ font-size:13px; font-weight:600; color:var(--ink); white-space:nowrap; }
+.cat-row-pct{ font-size:10.5px; color:var(--ink-soft); margin-top:2px; }
+.cat-row-expand{ padding:0 13px 12px; border-top:1px solid var(--line); margin-top:2px; }
+.cat-row-perguest{ font-size:11.5px; color:var(--ink-soft); padding-top:10px; }
+.ring-row{ display:flex; gap:10px; margin:4px 16px 8px; }
+.ring-card{ flex:1; background:var(--card); border:1px solid var(--line); border-radius:20px; padding:16px 10px 14px; box-shadow:var(--shadow); display:flex; flex-direction:column; align-items:center; }
+.ring-label{ font-size:11.5px; color:var(--ink-soft); font-weight:600; margin-bottom:10px; display:flex; align-items:center; gap:5px; }
+.ring-label-arrow{ display:inline-flex; color:var(--ink-soft); }
+.ring-label-arrow svg{ width:10px; height:10px; }
+.ring-wrap{ position:relative; width:92px; height:92px; }
+.ring-wrap svg{ width:100%; height:100%; }
+.ring-center{ position:absolute; inset:6px; display:flex; flex-direction:column; align-items:center; justify-content:center; overflow:hidden; text-align:center; }
+.ring-center .num{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:21px; color:var(--ink); line-height:1; }
+.ring-center .sub{ font-size:8.8px; color:var(--ink-soft); margin-top:2px; overflow-wrap:anywhere; }
+.ring-breakdown{ display:flex; gap:14px; margin-top:11px; }
+.ring-breakdown .n{ font-size:13px; font-weight:600; color:var(--ink); text-align:center; }
+.ring-breakdown .l{ font-size:8.5px; color:var(--ink-soft); text-align:center; margin-top:1px; }
+
+/* Reorganização (Set 2026): áreas Premium (RSVP, Assistente, Wedding
+   Health, Memórias, Documentos, Google Calendar) passaram de linhas
+   escondidas em Definições para um único cartão "hub" na página principal
+   — mockup da Rita: cartão rosado com cabeçalho + selo "Weddy Premium",
+   grelha de azulejos com cadeado por cima de quem ainda não é Premium, e
+   uma faixa "Tornar Premium" por baixo que desaparece assim que a
+   subscrição fica ativa. */
+.premium-hub-card{ margin:0 16px 20px; padding:16px; border-radius:24px; background:linear-gradient(165deg, rgba(231,197,187,0.55) 0%, rgba(243,239,234,0.6) 100%); border:1px solid rgba(185,103,82,0.12); }
+.premium-hub-header{ all:unset; box-sizing:border-box; display:flex; align-items:center; gap:12px; width:100%; cursor:pointer; margin-bottom:14px; }
+.premium-hub-header-icon{ flex-shrink:0; width:46px; height:46px; border-radius:50%; background:rgba(255,255,255,0.65); display:flex; align-items:center; justify-content:center; color:var(--rust-dark); }
+.premium-hub-header-icon svg{ width:21px; height:21px; }
+.premium-hub-header-mid{ flex:1; min-width:0; text-align:left; }
+.premium-hub-header-title{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:19px; color:var(--ink); }
+.premium-hub-header-desc{ font-size:11.5px; color:var(--ink-soft); margin-top:2px; line-height:1.3; }
+.premium-hub-badge{ flex-shrink:0; display:flex; align-items:center; gap:5px; background:rgba(255,255,255,0.75); color:var(--rust-dark); font-size:11px; font-weight:700; padding:6px 11px; border-radius:20px; }
+.premium-hub-badge svg{ width:12px; height:12px; }
+.premium-hub-header-chev{ flex-shrink:0; color:var(--ink-soft); opacity:.6; }
+.premium-hub-grid{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:9px; }
+.premium-hub-tile{ all:unset; box-sizing:border-box; position:relative; display:block; background:rgba(255,255,255,0.55); border-radius:16px; padding:12px 10px; cursor:pointer; overflow:hidden; min-height:96px; }
+.premium-hub-tile:active{ opacity:.8; }
+.premium-hub-tile-top{ display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:16px; }
+.premium-hub-tile-icon{ width:26px; height:26px; color:var(--rust-dark); }
+.premium-hub-tile-icon svg{ width:20px; height:20px; }
+.premium-hub-tile-lock{ color:var(--ink-soft); opacity:.65; }
+.premium-hub-tile-lock svg{ width:13px; height:13px; }
+.premium-hub-tile-title{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:14.5px; color:var(--ink); }
+.premium-hub-tile-desc{ font-size:10.3px; color:var(--ink-soft); margin-top:3px; line-height:1.3; }
+.premium-hub-tile.locked .premium-hub-tile-title, .premium-hub-tile.locked .premium-hub-tile-desc{ opacity:.55; }
+.premium-hub-cta{ margin-top:12px; padding:13px 14px; border-radius:16px; background:rgba(255,255,255,0.55); display:flex; align-items:center; gap:10px; }
+.premium-hub-cta-icon{ flex-shrink:0; width:32px; height:32px; border-radius:50%; background:rgba(255,255,255,0.8); display:flex; align-items:center; justify-content:center; color:var(--rust-dark); }
+.premium-hub-cta-icon svg{ width:15px; height:15px; }
+.premium-hub-cta-text{ flex:1; min-width:0; }
+.premium-hub-cta-title{ font-size:12.5px; font-weight:700; color:var(--ink); }
+.premium-hub-cta-desc{ font-size:10.5px; color:var(--ink-soft); margin-top:1px; }
+.premium-hub-cta-btn{ all:unset; box-sizing:border-box; flex-shrink:0; display:flex; align-items:center; gap:4px; background:var(--rust); color:#fff; font-size:11.5px; font-weight:700; padding:9px 13px; border-radius:20px; cursor:pointer; }
+.premium-hub-cta-btn svg{ width:11px; height:11px; }
+.premium-hub-cta-btn:active{ opacity:.85; }
+
+/* Inspiração */
+.insp-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; padding:4px 16px 24px; }
+.insp-tile{ position:relative; border-radius:16px; overflow:hidden; aspect-ratio:1/1; background:var(--card); box-shadow:var(--shadow); }
+.insp-tile img{ width:100%; height:100%; object-fit:cover; display:block; }
+.insp-remove{ all:unset; box-sizing:border-box; position:absolute; top:7px; right:7px; width:22px; height:22px; border-radius:50%; background:rgba(20,18,14,0.55); color:#fff; display:flex; align-items:center; justify-content:center; font-size:11px; cursor:pointer;  line-height:1;}
+.insp-remove:active{ background:rgba(20,18,14,0.8); }
+.insp-add-tile{ all:unset; box-sizing:border-box; aspect-ratio:1/1; border-radius:16px; border:1.6px dashed #D8D4CC; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:5px; cursor:pointer; color:var(--ink-soft); background:rgba(20,20,20,0.03); }
+.insp-add-tile:active{ background:rgba(20,20,20,0.07); }
+.insp-add-icon{ font-size:26px; font-weight:300; line-height:1; color:var(--rust); }
+.insp-add-label{ font-size:10.5px; font-weight:600; }
+
+/* Pré-visualização de imagem (Inspiração) */
+.img-lightbox{ position:absolute; inset:0; z-index:200; background:rgba(10,8,6,0.94); display:none; align-items:center; justify-content:center; padding:24px; }
+.img-lightbox.show{ display:flex; }
+.img-lightbox img{ max-width:100%; max-height:100%; border-radius:12px; object-fit:contain; box-shadow:0 10px 40px rgba(0,0,0,0.4); touch-action:none; transition:transform .05s linear; }
+.img-lightbox-close{ all:unset; box-sizing:border-box; position:absolute; top:calc(env(safe-area-inset-top) + 14px); right:16px; display:flex; align-items:center; gap:6px; padding:9px 16px; border-radius:20px; background:rgba(20,18,14,0.75); border:1px solid rgba(255,255,255,0.25); color:#fff; font-size:13px; font-weight:600; cursor:pointer; z-index:2; line-height:1;}
+.img-lightbox-close svg{ width:13px; height:13px; }
+.img-lightbox-close:active{ background:rgba(20,18,14,0.9); }
+.save-toast{ position:absolute; left:50%; top:calc(env(safe-area-inset-top) + 10px); transform:translateX(-50%) translateY(-8px); z-index:300; display:flex; align-items:center; gap:7px; padding:9px 16px; border-radius:20px; background:rgba(30,28,24,0.92); color:#fff; font-size:12.5px; font-weight:600; box-shadow:0 6px 18px rgba(0,0,0,0.25); opacity:0; pointer-events:none; transition:opacity .22s ease, transform .22s ease; }
+#update-banner{ position:absolute; left:16px; right:16px; bottom:calc(env(safe-area-inset-bottom) + 76px); z-index:400; display:flex; align-items:center; justify-content:space-between; gap:10px; padding:12px 14px; border-radius:16px; background:var(--rust-dark); color:#fff; font-size:13px; font-weight:600; box-shadow:0 10px 26px rgba(0,0,0,0.25); animation:updateBannerIn .3s ease; }
+#update-banner button{ all:unset; box-sizing:border-box; background:#fff; color:var(--rust-dark); font-size:12px; font-weight:700; padding:8px 14px; border-radius:20px; cursor:pointer; flex-shrink:0; }
+@keyframes updateBannerIn{ from{ opacity:0; transform:translateY(14px); } to{ opacity:1; transform:translateY(0); } }
+.save-toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+.save-toast.error{ background:rgba(154,69,48,0.95); }
+.save-toast svg{ width:14px; height:14px; flex-shrink:0; }
+.iab-warning{ display:none; position:absolute; inset:0; z-index:500; background:rgba(30,26,22,0.92); align-items:center; justify-content:center; padding:28px; }
+.iab-warning.show{ display:flex; }
+.iab-warning-card{ background:var(--cream); border-radius:22px; padding:28px 24px; text-align:center; max-width:340px; }
+.iab-warning-icon{ width:44px; height:44px; margin:0 auto 14px; color:var(--rust); }
+.iab-warning-icon svg{ width:100%; height:100%; }
+.iab-warning-title{ font-family:'Cormorant Garamond',serif; font-size:22px; font-weight:500; color:var(--heading); margin-bottom:12px; }
+.iab-warning-card p{ font-size:13.5px; color:var(--ink); line-height:1.6; margin:0 0 12px; }
+.iab-warning-card b{ color:var(--rust-dark); }
+.iab-warning-note{ font-size:12px !important; color:var(--ink-soft) !important; }
+.insp-tile img{ cursor:pointer; }
+.stat-card .n{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:22px; color:var(--heading); line-height:1; }
+.stat-card .l{ font-size:10.8px; color:var(--ink-soft); margin-top:4px; line-height:1.25; min-height:27px; }
+
+/* List group (grouped iOS list) */
+.list-group{ background:var(--card); border:1px solid var(--line); border-radius:18px; margin:0 16px 18px; box-shadow:var(--shadow); overflow:hidden; }
+.list-row{ display:flex; align-items:center; gap:11px; padding:11px 14px; border-bottom:1px solid var(--line); position:relative; min-height:24px; }
+.list-row:last-child{ border-bottom:none; }
+.list-row:active{ background:rgba(20,20,20,0.035); }
+.icon-chip{ width:30px; height:30px; border-radius:50%; flex-shrink:0; display:flex; align-items:center; justify-content:center; color:#fff;  line-height:1;}
+.icon-chip svg{ width:15px; height:15px; }
+.icon-chip svg{ width:15px; height:15px; }
+.list-row .title{ flex:1; font-size:15px; color:var(--ink); min-width:0; overflow-wrap:anywhere; }
+.list-row .title .sub{ display:block; font-size:11.5px; color:var(--ink-soft); margin-top:1px; }
+.list-row .value{ font-size:14.5px; color:var(--ink-soft); flex-shrink:0; }
+.chev{ width:7px; height:12px; opacity:.32; flex-shrink:0; }
+.list-row.tappable{ cursor:pointer; }
+
+/* Editable value fields (iOS-style inline inputs in a row) */
+.field-input{ border:none; background:transparent; font-size:15px; color:var(--ink); text-align:right; width:100%; font-family:inherit; outline:none; }
+.field-input.big{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:21px; color:var(--heading); }
+.field-input:focus{ color:var(--rust); }
+
+/* Budget bar */
+.split-bar{ height:10px; border-radius:5px; overflow:hidden; display:flex; margin:2px 16px 8px; box-shadow:inset 0 0 0 1px rgba(20,20,20,0.06); }
+.split-seg{ height:100%; }
+.legend-wrap{ display:flex; flex-wrap:wrap; gap:6px 12px; margin:0 16px 16px; }
+.legend-item{ display:flex; align-items:center; gap:5px; font-size:11px; color:var(--ink-soft); }
+.legend-dot{ width:7px; height:7px; border-radius:2px; flex-shrink:0; }
+.donut-chart-card{ display:flex; align-items:center; gap:14px; background:var(--card); border:1px solid var(--line); border-radius:20px; margin:0 16px 12px; padding:16px; box-shadow:var(--shadow); }
+.donut-chart-card .legend-wrap{ flex-direction:column; flex-wrap:nowrap; gap:6px; }
+.ring-stat-card{ display:flex; align-items:center; gap:16px; background:var(--card); border:1px solid var(--line); border-radius:20px; margin:0 16px 16px; padding:16px; box-shadow:var(--shadow); }
+.ring-stat-list{ display:flex; flex-direction:column; gap:10px; flex:1; min-width:0; }
+.ring-stat-item .n{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:18px; color:var(--ink); line-height:1; display:block; }
+.ring-stat-item .l{ font-size:10.5px; color:var(--ink-soft); margin-top:2px; display:block; }
+.pct-note{ margin:0 16px 18px; font-size:12px; padding:9px 12px; border-radius:10px; }
+.pct-note.ok{ background:rgba(92,107,71,0.13); color:var(--sage-dark); }
+.pct-note.warn{ background:rgba(168,72,46,0.13); color:var(--rust-dark); }
+
+.cat-desc{ padding:0 14px 12px 53px; font-size:12px; color:var(--ink-soft); line-height:1.55; }
+.cat-desc ul{ margin:4px 0 0; padding-left:16px; }
+.cat-desc li{ margin-bottom:2px; display:flex; align-items:center; justify-content:space-between; gap:8px; padding-right:2px; }
+.cat-desc .desc-del{ all:unset; cursor:pointer; color:#C7C2B8; font-size:12px; flex-shrink:0; }
+.cat-desc .add-row{ margin-left:0; }
+.chev-toggle{ transition:transform .2s ease; }
+.chev-toggle.open{ transform:rotate(90deg); }
+
+/* pct stepper */
+.pct-stepper{ display:flex; align-items:center; gap:6px; flex-shrink:0; }
+.pct-stepper button{ all:unset; cursor:pointer; width:22px; height:22px; border-radius:50%; background:rgba(20,20,20,0.07); color:var(--ink); display:flex; align-items:center; justify-content:center; font-size:14px; line-height:1; }
+.pct-stepper button:active{ background:rgba(20,20,20,0.15); }
+.pct-stepper .pctval{ width:38px; text-align:center; font-size:14px; color:var(--ink); font-variant-numeric:tabular-nums; }
+
+/* Guest rows */
+.guest-row.child-row{ flex-wrap:wrap; row-gap:8px; }
+.child-extra-row{ flex-basis:100%; display:flex; align-items:center; gap:8px; padding-left:32px; }
+.child-age-input{ width:100px; border:1px solid var(--line); background:#fff; border-radius:8px; padding:5px 8px; font-size:12.5px; color:var(--ink); font-family:inherit; outline:none; }
+.payment-pct-select{ border:1px solid var(--line); background:#fff; border-radius:8px; padding:5px 8px; font-size:12.5px; color:var(--ink); font-family:inherit; outline:none; }
+.child-age-input::placeholder{ color:#ABA7A0; }
+.guest-row .check{ width:22px; height:22px; border-radius:50%; border:1.6px solid #D6D2C9; flex-shrink:0; display:flex; align-items:center; justify-content:center; }
+.guest-row.confirmed .check{ background:var(--sage); border-color:var(--sage); }
+.guest-row.confirmed .title{ color:var(--sage-dark); font-weight:600; }
+.guest-row .check svg{ width:12px; height:12px; color:#fff; opacity:0; }
+.guest-row.confirmed .check svg{ opacity:1; }
+.remove-x{ all:unset; cursor:pointer; color:#B4AFA6; font-size:15px; width:22px; height:22px; display:flex; align-items:center; justify-content:center; flex-shrink:0;  line-height:1;}
+/* Corrigido (Set 2026): mesmo problema do .delete-response-link acima —
+   este "×" de remover documento não tinha nenhuma regra CSS a defini-lo,
+   por isso ficava com o botão nativo do browser em vez do "x" pequeno e
+   cinzento usado em todos os outros sítios da app. Mesmo estilo do
+   .remove-x, que já é usado exatamente para este tipo de botão. */
+.child-remove{ all:unset; cursor:pointer; color:#B4AFA6; font-size:15px; width:22px; height:22px; display:flex; align-items:center; justify-content:center; flex-shrink:0; line-height:1; }
+.reorder-btn{ all:unset; cursor:pointer; color:#B4AFA6; width:20px; height:20px; display:flex; align-items:center; justify-content:center; flex-shrink:0; line-height:1; }
+.drag-handle{ all:unset; cursor:grab; color:#C7C2B8; width:20px; height:26px; display:flex; align-items:center; justify-content:center; flex-shrink:0; line-height:1; touch-action:none; }
+.drag-handle svg{ width:11px; height:18px; }
+.drag-handle:active{ color:var(--rust); cursor:grabbing; }
+.guest-row.dragging{ position:relative; z-index:30; background:var(--card); box-shadow:0 10px 24px rgba(48,44,41,0.18); border-radius:12px; }
+.guest-row.drag-target-above{ box-shadow:inset 0 2px 0 var(--rust); }
+.guest-row.drag-target-below{ box-shadow:inset 0 -2px 0 var(--rust); }
+.reorder-btn svg{ width:13px; height:13px; }
+.reorder-btn:active{ color:var(--rust); }
+.reorder-btn:disabled{ opacity:.25; pointer-events:none; }
+.cat-edit-btn{ all:unset; cursor:pointer; color:var(--ink-soft); width:22px; height:22px; display:flex; align-items:center; justify-content:center; flex-shrink:0;  line-height:1;}
+.cat-edit-btn svg{ width:15px; height:15px; }
+.theme-swatch-row{ display:flex; gap:14px; padding:2px 16px 20px; }
+.theme-swatch{ all:unset; box-sizing:border-box; width:38px; height:38px; border-radius:50%; box-shadow:0 0 0 2px #fff, 0 0 0 3px var(--line); cursor:pointer; }
+.theme-swatch.active{ box-shadow:0 0 0 2px #fff, 0 0 0 3px var(--ink); }
+.hero-preview{ width:100%; height:110px; border-radius:14px; background-size:cover; background-position:center; margin-bottom:12px; }
+.crop-viewport{ width:100%; max-width:220px; height:96px; border-radius:13px; background-repeat:no-repeat; margin:0 auto 10px; position:relative; overflow:hidden; touch-action:none; cursor:grab; box-shadow:0 3px 10px rgba(20,20,20,0.12), inset 0 0 0 1px rgba(255,255,255,0.4); border:1px solid var(--line); }
+.crop-viewport.dragging{ cursor:grabbing; }
+.crop-hint{ position:absolute; left:0; right:0; bottom:0; padding:4px 8px; font-size:8.5px; color:#fff; background:linear-gradient(transparent, rgba(0,0,0,0.4)); text-align:center; pointer-events:none; }
+.crop-zoom-row{ display:flex; align-items:center; gap:10px; margin:0 auto 14px; max-width:220px; color:var(--ink-soft); }
+.crop-zoom-row svg{ width:16px; height:16px; flex-shrink:0; }
+.crop-zoom-row input[type="range"]{ flex:1; accent-color:var(--rust); }
+.remove-x:active{ color:var(--rust); }
+
+.add-row{ display:flex; align-items:center; gap:8px; padding:10px 14px; }
+.add-row input{ flex:1; border:none; background:rgba(20,20,20,0.06); border-radius:9px; padding:8px 10px; font-size:14px; font-family:inherit; color:var(--ink); outline:none; }
+.add-row input::placeholder{ color:#ABA7A0; }
+.add-circle{ all:unset; cursor:pointer; width:28px; height:28px; border-radius:50%; background:var(--rust); color:#fff; flex-shrink:0; display:flex; align-items:center; justify-content:center;  line-height:1;}
+.add-circle:active{ transform:scale(0.9); background:var(--rust-dark); }
+.add-circle svg{ width:14px; height:14px; }
+
+/* Expense row */
+.exp-row{ padding:11px 14px; border-bottom:1px solid var(--line); }
+.exp-row:last-child{ border-bottom:none; }
+.exp-top{ display:flex; justify-content:space-between; align-items:baseline; gap:8px; }
+.exp-desc-input{ border:none; background:transparent; font-size:14.5px; color:var(--ink); font-family:inherit; outline:none; flex:1; min-width:0; }
+.title-input-inline{ border:none; background:transparent; font-size:14.5px; color:var(--ink); font-family:inherit; outline:none; }
+.task-status-dot{ width:9px; height:9px; border-radius:50%; flex-shrink:0; }
+.status-select{ border:none; background:rgba(43,40,30,0.07); border-radius:8px; padding:6px 8px; font-size:12px; font-weight:600; color:var(--ink); font-family:inherit; }
+.exp-val{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:17px; color:var(--heading); flex-shrink:0; }
+.exp-meta{ display:flex; flex-direction:column; align-items:flex-start; gap:6px; margin-top:5px; }
+.exp-date-input{ border:none; background:transparent; font-size:11.5px; color:var(--ink-soft); font-family:inherit; outline:none; }
+.tag-pill{ font-size:10.5px; padding:2px 8px; border-radius:20px; font-weight:600; }
+.exp-paid-row{ display:flex; align-items:center; gap:6px; margin-top:6px; font-size:11.5px; color:var(--ink-soft); }
+.exp-method-row{ display:flex; align-items:center; gap:6px; margin-top:6px; font-size:11.5px; color:var(--ink-soft); }
+.exp-method-row select{ border:none; background:rgba(43,40,30,0.07); border-radius:6px; padding:3px 6px; font-size:11.5px; color:var(--ink); font-family:inherit; }
+.exp-due-row{ display:flex; align-items:center; gap:6px; margin-top:6px; padding-top:6px; border-top:1px dashed var(--line); font-size:11.5px; color:var(--ink-soft); }
+.exp-due-row.soon{ color:var(--gold); }
+.exp-due-row.soon .exp-due-input{ color:var(--gold); font-weight:600; }
+.exp-due-row.overdue{ color:var(--rust-dark); }
+.exp-due-row.overdue .exp-due-input{ color:var(--rust-dark); font-weight:600; }
+.exp-adddue-row{ cursor:pointer; }
+.exp-adddue-row:active{ opacity:.6; }
+.exp-adddue-input{ position:absolute; width:1px; height:1px; opacity:0; overflow:hidden; pointer-events:none; }
+.exp-due-input{ all:unset; font-size:11.5px; color:inherit; }
+.todo-item-due{ display:flex; flex-wrap:wrap; align-items:center; gap:5px; width:100%; padding-left:33px; margin-top:-2px; font-size:11px; color:var(--ink-soft); }
+.todo-item-due input[type=time]{ width:76px; }
+.todo-item-due.nodate{ color:var(--rust-dark); font-weight:600; }
+.todo-item-due input[type=date]{ all:unset; font-size:11px; color:inherit; }
+.todo-item-due.soon{ color:var(--gold); }
+.todo-item-due.soon input{ color:var(--gold); font-weight:600; }
+.todo-item-due.overdue{ color:var(--rust-dark); }
+.todo-item-due.overdue input{ color:var(--rust-dark); font-weight:600; }
+.todo-item-due-clear{ all:unset; cursor:pointer; color:inherit; opacity:.6; font-size:11px; line-height:1; padding:0 2px; }
+.todo-item-time{ all:unset; font-size:11px; color:inherit; }
+.add-catitem-due-label{ font-size:10px; color:var(--ink-soft); flex-shrink:0; align-self:center; }
+.exp-date-label{ font-size:10px; color:var(--ink-soft); flex-shrink:0; }
+.supd-pay-date-label{ font-size:10px; color:var(--ink-soft); flex-shrink:0; align-self:center; }
+.todo-cat-due-pill{ font-size:10px; font-weight:600; padding:2px 7px; border-radius:20px; background:rgba(20,20,20,0.06); color:var(--ink-soft); white-space:nowrap; }
+.todo-cat-due-pill.soon{ background:rgba(201,164,128,0.18); color:var(--gold); }
+.todo-cat-due-pill.overdue{ background:rgba(154,79,61,0.12); color:var(--rust-dark); }
+.exp-paid-row input{ width:64px; border:none; background:rgba(20,20,20,0.06); border-radius:6px; padding:3px 6px; font-size:12px; font-family:inherit; color:var(--ink); outline:none; text-align:right; }
+.exp-del{ all:unset; cursor:pointer; color:#B4AFA6; font-size:14px; padding:2px 4px; flex-shrink:0; }
+.exp-del:active{ color:var(--rust); }
+
+.cat-progress{ padding:10px 14px; border-bottom:1px solid var(--line); }
+.cat-progress:last-child{ border-bottom:none; }
+.cp-row{ display:flex; justify-content:space-between; font-size:12.5px; margin-bottom:5px; color:var(--ink); }
+.cp-row .over{ color:var(--rust); font-weight:600; }
+.cp-row .complete{ color:var(--sage-dark); font-weight:600; }
+.cp-track{ height:6px; background:rgba(20,20,20,0.09); border-radius:3px; overflow:hidden; }
+.cp-fill{ height:100%; background:var(--sage); border-radius:3px; }
+.cp-fill.over{ background:var(--rust); }
+.cp-fill.complete{ background:var(--sage-dark) !important; }
+
+.phase-ring-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:10px 6px; margin:0 16px 22px; }
+.phase-ring-card{ all:unset; box-sizing:border-box; display:flex; flex-direction:column; align-items:center; gap:6px; cursor:pointer; text-align:center; }
+.phase-num{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:19px; color:var(--heading); }
+.phase-ring-label{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:13.5px; color:var(--ink); line-height:1.1; }
+.phase-ring-count{ font-size:9.5px; color:var(--ink-soft); font-weight:600; letter-spacing:.01em; }
+.phase-num-chip{ background:var(--rust); font-family:'Cormorant Garamond',serif; font-weight:600; font-size:17px; color:#fff;  line-height:1;}
+.show-more-btn{ all:unset; box-sizing:border-box; display:block; width:calc(100% - 32px); margin:0 16px 20px; padding:10px 0; text-align:center; border-radius:11px; background:rgba(20,20,20,0.06); color:var(--ink-soft); font-size:12.5px; font-weight:600; cursor:pointer; }
+
+/* Checklist v2 */
+.check-progress-card{ display:flex; align-items:center; gap:12px; margin:4px 16px 18px; padding:14px 15px; background:#F1E7DC; border-radius:18px; }
+.check-progress-text{ display:flex; flex-direction:column; }
+.check-progress-text b{ font-family:'Cormorant Garamond',serif; font-size:15px; color:var(--ink); font-weight:600; }
+.check-progress-text span{ font-size:10.5px; color:var(--ink-soft); margin-top:1px; }
+.check-progress-divider{ width:1px; align-self:stretch; background:rgba(48,44,41,0.14); flex-shrink:0; }
+.check-progress-icon{ color:var(--rust-dark); flex-shrink:0; }
+.check-progress-icon svg{ width:20px; height:20px; }
+.phase-selector-row{ display:flex; gap:16px; overflow-x:auto; padding:2px 16px 20px; -webkit-overflow-scrolling:touch; scrollbar-width:none; }
+.phase-selector-row::-webkit-scrollbar{ display:none; }
+.phase-dot-btn{ all:unset; box-sizing:border-box; flex-shrink:0; display:flex; flex-direction:column; align-items:center; gap:6px; cursor:pointer; }
+.phase-dot-num{ width:38px; height:38px; border-radius:50%; border:1px solid var(--line); background:var(--card); display:flex; align-items:center; justify-content:center; font-family:'Cormorant Garamond',serif; font-weight:600; font-size:15px; color:var(--ink); }
+.phase-dot-btn.active .phase-dot-num{ background:var(--rust); border-color:var(--rust); color:#fff; }
+.phase-dot-label{ font-size:9.5px; color:var(--ink-soft); }
+.phase-dot-btn.active .phase-dot-label{ color:var(--rust-dark); font-weight:600; }
+.phase-card-v2{ background:var(--card); border:1px solid var(--line); border-radius:16px; margin:0 16px 12px; overflow:hidden; box-shadow:var(--shadow); }
+.phase-card-head{ display:flex; align-items:center; gap:12px; padding:14px; cursor:pointer; }
+.phase-roman{ width:36px; height:36px; border-radius:50%; background:#F0DFCE; color:var(--rust-dark); display:flex; align-items:center; justify-content:center; font-family:'Cormorant Garamond',serif; font-weight:600; font-size:14px; flex-shrink:0; }
+.phase-card-mid{ flex:1; min-width:0; }
+.phase-card-title{ font-family:'Cormorant Garamond',serif; font-weight:500; font-size:17px; color:var(--ink); }
+.phase-card-desc{ font-size:11.5px; color:var(--ink-soft); margin-top:2px; line-height:1.4; }
+.phase-card-right{ display:flex; align-items:center; gap:8px; flex-shrink:0; }
+.phase-card-count{ font-size:12px; font-weight:600; color:var(--ink-soft); }
+.phase-card-tasks{ border-top:1px solid var(--line); }
+.task-row-v2{ display:flex; align-items:center; gap:10px; padding:12px 14px; border-bottom:1px solid var(--line); cursor:pointer; }
+.task-row-v2:last-child{ border-bottom:none; }
+.task-row-v2 .check{ width:20px; height:20px; border-radius:50%; border:1.4px solid #D8D2C8; flex-shrink:0; display:flex; align-items:center; justify-content:center; color:transparent; }
+.task-row-v2.done .check{ background:var(--sage-dark); border-color:var(--sage-dark); color:#fff; }
+.task-row-v2.done .task-row-text{ text-decoration:line-through; color:var(--ink-soft); }
+.task-row-v2 .check svg{ width:11px; height:11px; }
+.task-row-text{ flex:1; min-width:0; font-size:13px; color:var(--ink); line-height:1.35; }
+.task-tag-pill{ flex-shrink:0; font-size:9.5px; font-weight:600; color:var(--rust-dark); background:#F3E2D6; padding:3px 9px; border-radius:20px; }
+.task-row-chev{ display:flex; color:var(--ink-soft); flex-shrink:0; }
+.task-row-chev svg{ width:13px; height:13px; }
+.show-more-btn:active{ background:rgba(20,20,20,0.12); }
+.table-config-row{ display:flex; align-items:center; gap:10px; padding:8px 14px; }
+.shape-picker{ display:flex; gap:6px; }
+.shape-btn{ all:unset; box-sizing:border-box; width:34px; height:34px; border-radius:10px; border:1.4px solid var(--line); display:flex; align-items:center; justify-content:center; color:var(--ink-soft); cursor:pointer;  line-height:1;}
+.shape-btn svg{ width:18px; height:18px; }
+.shape-btn.active{ border-color:var(--rust); color:var(--rust); background:rgba(193,88,62,0.08); }
+.del-table-btn{ all:unset; box-sizing:border-box; width:100%; display:flex; align-items:center; justify-content:center; gap:7px; padding:11px 0; border-radius:12px; background:rgba(193,88,62,0.09); color:var(--rust-dark); font-size:13px; font-weight:600; cursor:pointer;  line-height:1;}
+.del-table-btn svg{ width:15px; height:15px; }
+.del-table-btn:active{ background:rgba(193,88,62,0.18); }
+
+/* Stepper full row */
+.stepper-row{ display:flex; align-items:center; justify-content:space-between; padding:11px 14px; border-bottom:1px solid var(--line); }
+.stepper-row:last-child{ border-bottom:none; }
+.stepper{ display:flex; align-items:center; background:rgba(20,20,20,0.07); border-radius:8px; overflow:hidden; }
+.stepper button{ all:unset; cursor:pointer; width:30px; height:28px; display:flex; align-items:center; justify-content:center; font-size:16px; color:var(--rust); }
+.stepper button:active{ background:rgba(168,72,46,0.15); }
+.stepper .sval{ width:32px; text-align:center; font-size:14.5px; color:var(--ink); font-variant-numeric:tabular-nums; }
+
+/* Table cards (Mesas) */
+.table-group{ background:var(--card); border:1px solid var(--line); border-radius:18px; margin:0 16px 12px; box-shadow:var(--shadow); overflow:hidden; }
+.table-head{ display:flex; align-items:center; gap:11px; padding:12px 14px; cursor:pointer; }
+.guest-group-card{ background:var(--card); border:1px solid var(--line); border-radius:18px; margin:0 16px 12px; box-shadow:var(--shadow); overflow:hidden; }
+.guest-group-head{ display:flex; align-items:center; gap:11px; padding:13px 14px; cursor:pointer; }
+.ggtitle{ font-size:14.5px; font-weight:600; color:var(--ink); flex:1; min-width:0; overflow-wrap:anywhere; }
+.ggcount{ font-size:12px; color:var(--ink-soft); font-weight:600; margin-right:2px; }
+.guest-group-body{ border-top:1px solid var(--line); }
+.guest-group-body .list-row:last-of-type{ border-bottom:none; }
+.add-guest-cta{ all:unset; box-sizing:border-box; display:flex; align-items:center; justify-content:center; gap:8px; width:calc(100% - 32px); margin:0 16px 16px; padding:14px 0; border-radius:16px; background:var(--rust); color:#fff; font-size:14.5px; font-weight:600; cursor:pointer; box-shadow:0 4px 14px rgba(193,88,62,0.28); }
+.add-guest-cta svg{ width:15px; height:15px; }
+.add-guest-cta:active{ opacity:.85; }
+.task-note{ font-weight:400; color:var(--ink-soft); font-size:12.5px; }
+.phase-desc{ display:block; font-size:11.5px; font-weight:500; color:var(--ink-soft); margin-top:1px; }
+.visit-detail{ font-size:12.5px; color:var(--ink-soft); line-height:1.6; }
+.visit-detail b{ color:var(--ink); font-weight:600; }
+.status-dot{ width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+
+/* --- Fornecedores --- */
+.sup-header{ display:flex; align-items:flex-start; gap:10px; padding:10px 18px 14px; position:sticky; top:0; z-index:15; background:var(--cream); }
+.sup-header-text{ flex:1; min-width:0; }
+.sup-header-text h1{ margin:0 0 5px; font-family:'Cormorant Garamond',serif; font-weight:600; font-size:31px; color:var(--ink); letter-spacing:.01em; }
+.sup-header-text p{ margin:0; font-size:12.5px; line-height:1.5; color:var(--ink-soft); }
+.sup-add-btn{ all:unset; box-sizing:border-box; width:34px; height:34px; border-radius:50%; background:#C3A092; color:#fff; display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; line-height:1; }
+.sup-add-btn svg{ width:15px; height:15px; }
+.sup-add-btn svg{ width:17px; height:17px; }
+.sup-chip-row{ display:flex; gap:8px; overflow-x:auto; padding:0 18px 14px; -webkit-overflow-scrolling:touch; scrollbar-width:none; }
+.sup-chip-row::-webkit-scrollbar{ display:none; }
+.sup-chip{ all:unset; box-sizing:border-box; flex-shrink:0; padding:8px 16px; border-radius:20px; border:1px solid #E5DDD6; background:#FFFDFB; color:var(--ink); font-size:12.5px; font-weight:500; cursor:pointer; line-height:1; }
+.sup-chip.active{ background:#C3A092; border-color:#C3A092; color:#fff; font-weight:600; }
+/* Pedido (Set 2026): "Informações para os convidados"/"Weddy Concierge"
+   mostravam sempre TODOS os campos vazios de uma vez, sem dar a escolher —
+   passa a ser o próprio casal a decidir quais quer preencher, um a um,
+   ficando os restantes como sugestões por adicionar (com o exemplo de
+   sempre, só que agora no rótulo do botão em vez de dentro de uma caixa
+   vazia). */
+.guestinfo-addchip{ all:unset; box-sizing:border-box; display:inline-flex; align-items:center; gap:5px; padding:8px 14px; border-radius:20px; border:1.4px dashed var(--line); color:var(--ink-soft); font-size:12.5px; font-weight:500; cursor:pointer; line-height:1; margin:0 8px 8px 0; }
+.guestinfo-addchip:active{ background:rgba(20,20,20,0.05); }
+.guestinfo-field{ margin-bottom:12px; }
+.guestinfo-field-top{ display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:4px; }
+.guestinfo-field-top span{ font-size:11px; color:var(--ink-soft); }
+.guestinfo-field-remove{ all:unset; box-sizing:border-box; width:20px; height:20px; border-radius:50%; display:flex; align-items:center; justify-content:center; background:rgba(20,20,20,0.06); color:var(--ink-soft); font-size:12px; cursor:pointer; line-height:1; flex-shrink:0; }
+.sup-banner{ display:flex; gap:12px; align-items:stretch; margin:0 18px 18px; padding:18px; border-radius:16px; background:#EADFD6; }
+.sup-banner-text{ flex:1; min-width:0; }
+.sup-banner-eyebrow{ font-size:9.5px; font-weight:600; letter-spacing:.08em; color:#A9705C; text-transform:uppercase; margin-bottom:7px; }
+.sup-banner-title{ font-family:'Cormorant Garamond',serif; font-size:22px; font-weight:600; line-height:1.2; color:#3B332C; margin-bottom:7px; }
+.sup-banner-sub{ font-size:11.5px; line-height:1.5; color:#6E6259; margin-bottom:13px; }
+.sup-banner-btn{ all:unset; box-sizing:border-box; display:inline-flex; align-items:center; gap:7px; padding:9px 16px; border-radius:20px; background:#A9705C; color:#fff; font-size:12.5px; font-weight:600; cursor:pointer; line-height:1; }
+.sup-banner-btn svg{ width:14px; height:14px; }
+.sup-banner-art{ width:64px; flex-shrink:0; display:flex; align-items:center; justify-content:center; color:#B99C86; opacity:.85; }
+.sup-banner-art svg{ width:52px; height:auto; }
+.sup-notice{ display:flex; align-items:flex-start; gap:11px; margin:0 18px 14px; padding:13px 14px; border-radius:14px; background:var(--card); border:1px solid var(--line); }
+.sup-notice-icon{ width:30px; height:30px; border-radius:9px; background:#EFE3DA; color:#B08D77; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.sup-notice-icon svg{ width:14px; height:14px; }
+.sup-notice-text{ flex:1; min-width:0; font-size:12px; line-height:1.5; color:var(--ink-soft); }
+.sup-notice-text b{ color:var(--ink); }
+.sup-section-head{ display:flex; align-items:center; justify-content:space-between; margin:0 18px 10px; font-family:'Cormorant Garamond',serif; font-size:20px; font-weight:600; color:var(--ink); }
+.sup-list{ margin:0 18px 18px; display:flex; flex-direction:column; gap:9px; }
+.hm-list{ margin:0 16px 8px; display:flex; flex-direction:column; gap:10px; }
+.hm-card{ position:relative; background:var(--card); border:1px solid var(--line); border-radius:16px; padding:13px 14px; box-shadow:var(--shadow); }
+.hm-card.chosen{ border-color:var(--rust); box-shadow:0 0 0 1.5px var(--rust); }
+.hm-card-top{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.hm-card-name{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:17px; color:var(--ink); overflow-wrap:anywhere; }
+.hm-heart{ all:unset; box-sizing:border-box; width:26px; height:26px; display:flex; align-items:center; justify-content:center; color:#D9D4C7; cursor:pointer; flex-shrink:0; }
+.hm-heart svg{ width:17px; height:17px; }
+.hm-heart.active{ color:var(--rust); }
+.hm-heart.active svg{ fill:var(--rust); }
+.hm-card-meta{ display:flex; gap:14px; margin-top:6px; }
+.hm-card-meta span{ display:inline-flex; align-items:center; gap:5px; font-size:12px; color:var(--ink-soft); }
+.hm-card-meta svg{ width:13px; height:13px; }
+.hm-card-itin{ font-size:12px; color:var(--ink-soft); margin-top:8px; line-height:1.5; }
+.hm-header{ display:flex; align-items:flex-start; gap:12px; padding:10px 16px 14px; }
+.hm-header-photo{ width:38px; height:38px; border-radius:11px; background:linear-gradient(135deg,#8FC1D4,#C9A480); display:flex; align-items:center; justify-content:center; color:#fff; flex-shrink:0; box-shadow:var(--shadow); }
+.hm-header-photo svg{ width:17px; height:17px; }
+.hm-banner{ display:flex; align-items:center; gap:12px; margin:0 16px 16px; padding:14px; background:#F1DFDB; border-radius:16px; }
+.hm-banner-icon{ width:38px; height:38px; border-radius:50%; background:var(--rust); color:#fff; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.hm-banner-icon svg{ width:17px; height:17px; }
+.hm-banner b{ display:block; font-size:13.5px; color:var(--ink); }
+.hm-banner span{ display:block; font-size:11.5px; color:var(--ink-soft); margin-top:2px; line-height:1.4; }
+.hm-cat-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin:0 16px 18px; }
+.hm-cat-chip{ all:unset; box-sizing:border-box; background:var(--card); border:1px solid var(--line); border-radius:14px; padding:12px 10px; display:flex; flex-direction:column; gap:10px; cursor:pointer; }
+.hm-cat-chip.active{ border-color:var(--rust); background:#F8EEE9; }
+.hm-cat-chip-top{ display:flex; align-items:center; justify-content:space-between; color:var(--heading); }
+.hm-cat-chip-top svg{ width:18px; height:18px; }
+.hm-cat-chip-heart{ color:#D9D4C7; }
+.hm-cat-chip-heart svg{ width:13px; height:13px; }
+.hm-cat-chip.active .hm-cat-chip-heart{ color:var(--rust); }
+.hm-cat-chip-label{ font-size:11px; color:var(--ink); line-height:1.25; text-align:left; }
+.section-add-link{ all:unset; box-sizing:border-box; display:flex; align-items:center; gap:4px; font-size:12px; font-weight:600; color:var(--rust-dark); cursor:pointer; }
+.section-add-link svg{ width:13px; height:13px; }
+.hm-idea-list{ margin:0 16px 18px; display:flex; flex-direction:column; gap:9px; }
+.hm-idea-card{ display:flex; align-items:center; gap:11px; background:var(--card); border:1px solid var(--line); border-radius:14px; padding:10px; cursor:pointer; }
+.hm-idea-photo{ width:52px; height:52px; border-radius:11px; flex-shrink:0; display:flex; align-items:center; justify-content:center; color:#fff; }
+.hm-idea-photo svg{ width:20px; height:20px; }
+.hm-idea-mid{ flex:1; min-width:0; }
+.hm-idea-name{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:16px; color:var(--ink); overflow-wrap:anywhere; }
+.hm-idea-type{ overflow-wrap:anywhere; }
+.hm-idea-type{ font-size:11px; color:var(--ink-soft); margin-top:1px; }
+.hm-idea-hearts{ all:unset; box-sizing:border-box; display:flex; align-items:center; gap:4px; margin-top:5px; font-size:11.5px; font-weight:600; color:var(--rust); cursor:pointer; }
+.hm-idea-hearts svg{ width:13px; height:13px; fill:var(--rust); }
+.hm-idea-right{ display:flex; align-items:center; gap:8px; flex-shrink:0; }
+.hm-idea-price{ font-size:11px; font-weight:600; color:var(--ink-soft); white-space:nowrap; }
+.hm-idea-chev{ display:flex; color:var(--ink-soft); }
+.hm-idea-chev svg{ width:14px; height:14px; }
+.hm-theme-picker{ display:flex; gap:8px; }
+.hm-theme-btn{ all:unset; box-sizing:border-box; flex:1; min-width:0; display:flex; flex-direction:column; align-items:center; gap:6px; padding:12px 6px; border:1.4px solid var(--line); border-radius:12px; color:var(--ink-soft); cursor:pointer; font-size:11px; }
+.hm-theme-btn span{ text-align:center; }
+.hm-theme-btn svg{ width:19px; height:19px; }
+.hm-theme-btn.active{ border-color:var(--rust); color:var(--rust); background:rgba(193,88,62,0.06); }
+.page-subtitle{ font-size:12px; color:var(--ink-soft); margin-top:2px; }
+.todo-cat-list{ margin:0 16px 8px; display:flex; flex-direction:column; gap:10px; }
+.todo-cat-card{ display:flex; gap:12px; background:var(--card); border:1px solid var(--line); border-radius:16px; padding:13px 14px; box-shadow:var(--shadow); cursor:pointer; }
+.todo-cat-icon{ width:44px; height:44px; border-radius:50%; background:#F0E6DC; color:var(--rust-dark); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.todo-cat-icon svg{ width:19px; height:19px; }
+.todo-cat-mid{ flex:1; min-width:0; }
+.todo-cat-toprow{ display:flex; align-items:center; justify-content:space-between; }
+.todo-cat-label{ font-size:9.5px; font-weight:600; letter-spacing:.07em; text-transform:uppercase; color:var(--ink-soft); }
+.todo-cat-count{ font-size:11.5px; font-weight:600; color:var(--ink-soft); }
+.todo-cat-title{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:18px; color:var(--ink); margin-top:2px; }
+.todo-cat-desc{ font-size:11.5px; color:var(--ink-soft); margin-top:3px; line-height:1.4; display:flex; align-items:flex-end; justify-content:space-between; gap:8px; }
+.todo-cat-desc svg{ width:13px; height:13px; flex-shrink:0; color:var(--ink-soft); }
+.todo-notes-card{ display:flex; align-items:center; gap:11px; margin:0 16px 16px; padding:13px 14px; background:var(--card); border:1px dashed var(--line); border-radius:16px; cursor:pointer; }
+.todo-notes-icon{ width:38px; height:38px; border-radius:50%; background:#F0E6DC; color:var(--rust-dark); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.todo-notes-icon svg{ width:16px; height:16px; }
+.todo-notes-text{ flex:1; font-size:12.5px; color:var(--ink-soft); }
+.todo-notes-card svg:last-child{ width:14px; height:14px; color:var(--ink-soft); flex-shrink:0; }
+.sup-card{ display:flex; align-items:center; gap:11px; padding:11px; border-radius:14px; background:#FFFDFB; border:1px solid #EFE7E0; cursor:pointer; position:relative; }
+.sup-card-static{ cursor:default; }
+.sup-card-static:active{ background:#FFFDFB; opacity:1; }
+.sup-card:active{ background:#FBF6F2; }
+.sup-thumb{ width:52px; height:52px; border-radius:11px; background:#EFE3DA; flex-shrink:0; display:flex; align-items:center; justify-content:center; color:#B08D77; overflow:hidden; }
+.sup-thumb-logo{ width:100%; height:100%; object-fit:cover; }
+.sup-thumb svg{ width:20px; height:20px; }
+.sup-thumb.is-add{ background:#F4EBE4; color:#B4A296; }
+.sup-info{ flex:1; min-width:0; }
+.sup-cat{ font-size:8.5px; font-weight:600; letter-spacing:.09em; color:#A79485; text-transform:uppercase; margin-bottom:3px; }
+.sup-name{ font-family:'Cormorant Garamond',serif; font-size:17px; font-weight:600; color:#33302B; line-height:1.2; margin-bottom:5px; overflow-wrap:anywhere; }
+.sup-meta{ display:flex; flex-wrap:wrap; gap:4px 11px; }
+.sup-meta-item{ display:inline-flex; align-items:center; gap:4px; font-size:10.5px; color:#7C7268; max-width:100%; overflow-wrap:anywhere; }
+.sup-meta-item svg{ width:11px; height:11px; flex-shrink:0; color:#9C8F84; }
+.sup-meta-line{ font-size:10.5px; color:#8A8076; }
+.sup-badge{ position:absolute; top:10px; right:30px; padding:4px 9px; border-radius:12px; background:#F3E4DC; color:#A0705E; font-size:9px; font-weight:600; }
+.sup-chev{ display:inline-flex; color:#C6BCB2; flex-shrink:0; }
+.sup-chev svg{ width:15px; height:15px; }
+.visit-fav-btn{ all:unset; box-sizing:border-box; width:30px; height:30px; display:flex; align-items:center; justify-content:center; color:#D9D4C7; flex-shrink:0; cursor:pointer;  line-height:1;}
+.visit-fav-btn svg{ width:18px; height:18px; }
+.visit-fav-btn.active{ color:var(--rust); }
+.visit-fav-btn.active svg{ fill:var(--rust); }
+.visit-action-btn{ all:unset; box-sizing:border-box; flex:1; display:flex; align-items:center; justify-content:center; gap:6px; padding:10px 0; border-radius:11px; background:rgba(20,20,20,0.07); color:var(--ink); font-size:13px; font-weight:600; cursor:pointer;  line-height:1;}
+.visit-action-btn svg{ width:14px; height:14px; }
+.visit-action-btn.danger{ background:rgba(193,88,62,0.1); color:var(--rust-dark); }
+.visit-action-btn:active{ opacity:.75; }
+/* Bug encontrado ao rever a área de "Preferências" do AI Seating (Set 2026):
+   o botão de prioridade selecionado tentava mostrar-se "escolhido" só com um
+   estilo inline "border-color:var(--ink)" — mas esta classe usa "all:unset",
+   que remove também o border-style/border-width por omissão; sem esses dois,
+   "border-color" sozinho não desenha nada, por isso a seleção nunca era
+   visível. Em vez de reintroduzir bordas (frágil, fácil de voltar a partir-se
+   com outro "all:unset"), usamos o mesmo padrão já usado nos outros "chips"
+   selecionáveis da app (ex.: .sup-chip.active) — fundo preenchido a cor +
+   texto branco, sempre visível independentemente de "all:unset". */
+.visit-action-btn.is-selected{ background:var(--rust); color:#fff; }
+/* --- Weddy Premium: página para subscrever --- */
+.premium-upsell{ margin:20px 16px 32px; text-align:center; }
+.premium-upsell-icon{ width:44px; height:44px; margin:0 auto 12px; color:var(--rust); }
+.premium-upsell-icon svg{ width:100%; height:100%; }
+.premium-upsell-title{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:24px; color:var(--heading); margin-bottom:8px; }
+.premium-upsell-text{ font-size:13px; color:var(--ink-soft); line-height:1.5; margin-bottom:18px; }
+.premium-upsell-list{ list-style:none; margin:0 0 22px; padding:0; text-align:left; display:flex; flex-direction:column; gap:10px; }
+.premium-upsell-list li{ display:flex; align-items:center; gap:10px; font-size:13.5px; color:var(--ink); background:var(--card); border:1px solid var(--line); border-radius:12px; padding:10px 12px; }
+.premium-upsell-list li svg{ width:17px; height:17px; color:var(--rust); flex-shrink:0; }
+/* --- Weddy Premium: RSVP --- */
+.rsvp-pill{ font-size:11px; font-weight:600; padding:4px 10px; border-radius:20px; white-space:nowrap; flex-shrink:0; }
+.rsvp-pill-pending{ background:rgba(20,20,20,0.07); color:var(--ink-soft); }
+.rsvp-pill-yes{ background:rgba(122,150,105,0.18); color:var(--sage-dark); }
+.rsvp-pill-no{ background:rgba(193,88,62,0.12); color:var(--rust-dark); }
+.rsvp-pill-maybe{ background:rgba(199,155,45,0.18); color:#8a6a1c; }
+.rsvp-pill-opened{ background:rgba(122,150,105,0.1); color:var(--ink-soft); font-style:italic; }
+/* --- Weddy Premium: Assistente --- */
+.assist-hero{ text-align:center; padding:18px 20px 20px; margin:0 0 14px; background:linear-gradient(180deg, rgba(185,103,82,0.10), rgba(185,103,82,0) 85%); border-radius:0 0 26px 26px; }
+.assist-hero-icon{ width:52px; height:52px; margin:0 auto 10px; color:var(--rust-dark); }
+.assist-hero-icon svg{ width:100%; height:100%; }
+.assist-hero-eyebrow{ font-size:10.5px; color:var(--rust-dark); font-weight:600; letter-spacing:.14em; text-transform:uppercase; margin-bottom:8px; }
+.assist-hero-title{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:21px; line-height:1.2; color:var(--heading); margin-bottom:8px; }
+.assist-hero-text{ font-size:12.5px; color:var(--ink-soft); line-height:1.5; }
+.assist-chat-log{ margin:0 16px 12px; min-height:120px; max-height:44vh; overflow-y:auto; display:flex; flex-direction:column; gap:10px; padding:4px 2px; }
+.assist-msg-row{ display:flex; align-items:flex-end; gap:8px; }
+.assist-msg-row.assist-msg-row-user{ flex-direction:row-reverse; }
+.assist-msg-avatar{ width:26px; height:26px; border-radius:50%; background:#F3E2DC; color:var(--rust-dark); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.assist-msg-avatar svg{ width:15px; height:15px; }
+.assist-msg{ max-width:78%; padding:10px 13px; border-radius:16px; font-size:13.5px; line-height:1.45; }
+.assist-msg-user{ background:var(--rust); color:#fff; border-bottom-right-radius:4px; }
+.assist-msg-bot{ background:var(--card); border:1px solid var(--line); color:var(--ink); border-bottom-left-radius:4px; }
+.assist-msg-time{ font-size:10px; color:var(--ink-soft); text-align:right; margin-top:4px; }
+.assist-chips{ display:flex; flex-direction:column; gap:8px; margin:0 16px 14px; }
+.assist-chips[hidden]{ display:none; }
+.assist-suggestions{ display:flex; flex-direction:column; gap:8px; margin:0 16px 14px; }
+.assist-suggestion{ all:unset; box-sizing:border-box; display:flex; align-items:center; gap:9px; padding:11px 13px; background:rgba(185,103,82,0.08); border:1px solid rgba(185,103,82,0.18); border-radius:14px; font-size:12.5px; color:var(--rust-dark); font-weight:600; cursor:pointer; }
+.assist-suggestion svg:first-child{ width:16px; height:16px; flex-shrink:0; }
+.assist-suggestion span{ flex:1; text-align:left; font-weight:500; color:var(--ink); }
+.assist-suggestion .chev{ color:var(--ink-soft); opacity:.6; flex-shrink:0; width:8px; }
+.assist-suggestion:active{ opacity:.75; }
+.assist-chip{ all:unset; box-sizing:border-box; display:flex; align-items:center; justify-content:space-between; gap:8px; padding:11px 15px; background:var(--card); border:1px solid var(--line); border-radius:14px; font-size:13px; color:var(--ink); cursor:pointer; }
+.assist-chip svg{ width:13px; height:13px; color:var(--rust); flex-shrink:0; }
+.assist-chip:active{ background:rgba(20,20,20,0.035); }
+.assist-input-row{ display:flex; align-items:center; gap:8px; margin:0 16px 28px; padding:6px 6px 6px 14px; background:var(--card); border:1px solid var(--line); border-radius:22px; }
+.assist-input-row input{ flex:1; border:none; outline:none; background:transparent; font-size:14px; color:var(--ink); font-family:inherit; }
+.assist-input-row button{ all:unset; box-sizing:border-box; width:34px; height:34px; border-radius:50%; background:var(--rust); color:#fff; display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; }
+.assist-input-row button svg{ width:15px; height:15px; }
+.assist-input-row button:active{ opacity:.8; }
+/* --- Weddy Premium: RSVP (linhas de convidado) --- */
+.rsvp-refresh-btn{ all:unset; box-sizing:border-box; display:flex; align-items:center; justify-content:center; gap:8px; width:calc(100% - 32px); margin:0 16px 6px; padding:13px 0; border-radius:14px; background:#F3E2DC; color:var(--rust-dark); font-size:13.5px; font-weight:600; cursor:pointer; }
+.rsvp-refresh-btn svg{ width:15px; height:15px; }
+.rsvp-refresh-btn:active{ opacity:.8; }
+.rsvp-refresh-btn[disabled]{ opacity:.6; }
+.rsvp-updated-note{ font-size:11.5px; color:var(--ink-soft); margin:0 16px 14px; }
+.rsvp-row-top{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.rsvp-row-name{ font-size:15px; color:var(--ink); font-weight:600; min-width:0; overflow-wrap:anywhere; }
+.rsvp-row-meta{ font-size:11.5px; color:var(--ink-soft); margin-top:1px; }
+.rsvp-row-actions{ display:flex; align-items:center; gap:8px; }
+.rsvp-copy-btn{ all:unset; box-sizing:border-box; flex:1; display:flex; align-items:center; justify-content:center; gap:7px; padding:10px 0; border-radius:12px; border:1px solid var(--line); background:var(--cream); color:var(--rust-dark); font-size:12.5px; font-weight:600; cursor:pointer; }
+.rsvp-copy-btn svg{ width:13px; height:13px; }
+.rsvp-copy-btn:active{ opacity:.75; }
+.rsvp-row-chev{ color:var(--ink-soft); flex-shrink:0; opacity:.6; }
+.rsvp-deadline-card{ margin:0 16px 12px; padding:12px 14px; display:flex; align-items:center; gap:10px; background:var(--card); border:1px solid var(--line); border-radius:16px; box-shadow:var(--shadow); }
+.rsvp-deadline-card .l{ font-size:10.8px; color:var(--ink-soft); margin:0 0 4px; }
+.rsvp-deadline-card input[type="date"]{ border:none; outline:none; background:transparent; font-size:14.5px; color:var(--ink); font-family:inherit; padding:0; width:100%; }
+.rsvp-deadline-save{ all:unset; box-sizing:border-box; flex-shrink:0; display:inline-flex; align-items:center; justify-content:center; gap:6px; text-align:center; padding:9px 14px; border-radius:11px; background:var(--rust); color:#fff; font-size:12.5px; font-weight:600; cursor:pointer; }
+/* Corrigido (Set 2026): este botão é reutilizado com um ícone à frente do
+   texto (ex: "Preparar lembrete" no RSVP Autopilot) — sem "display:flex"
+   nem um tamanho fixo para o svg, o ícone ficava ao tamanho nativo do
+   browser (enorme, a ocupar o cartão todo) em vez de um sino pequeno ao
+   lado do texto. */
+.rsvp-deadline-save svg{ width:15px; height:15px; flex-shrink:0; }
+.rsvp-deadline-save:active{ opacity:.8; }
+.rsvp-deadline-warn{ margin:0 16px 12px; padding:11px 14px; border-radius:14px; background:rgba(193,88,62,0.1); color:var(--rust-dark); font-size:12.5px; line-height:1.45; display:flex; align-items:flex-start; gap:8px; }
+.rsvp-deadline-warn svg{ width:15px; height:15px; flex-shrink:0; margin-top:1px; }
+/* Reorganização (Set 2026): linhas de navegação do "hub" de RSVP
+   (Prazo/Informações/Respostas) — mesmo padrão visual do defMenuRow de
+   Definições, com ícone à esquerda, título+descrição ao centro e chevron. */
+.rsvp-nav-row{ display:flex; align-items:center; gap:12px; padding:13px 14px; background:var(--card); border:1px solid var(--line); border-radius:16px; box-shadow:var(--shadow); margin:0 16px 10px; cursor:pointer; }
+.rsvp-nav-row:active{ opacity:.7; }
+.rsvp-nav-row-icon{ flex-shrink:0; width:38px; height:38px; border-radius:12px; display:flex; align-items:center; justify-content:center; }
+.rsvp-nav-row-icon svg{ width:18px; height:18px; }
+.rsvp-nav-row-mid{ flex:1; min-width:0; }
+.rsvp-nav-row-title{ font-size:14.5px; font-weight:600; color:var(--ink); }
+.rsvp-nav-row-desc{ font-size:12px; color:var(--ink-soft); margin-top:2px; }
+.rsvp-nav-row-chev{ color:var(--ink-soft); flex-shrink:0; opacity:.6; }
+.rsvp-nav-row-chev svg{ width:16px; height:16px; }
+/* Editor de "Perguntas personalizadas" (Concierge FAQ) — lista de cartões
+   com interruptor on/off por pergunta. */
+.faq-card{ margin:0 16px 10px; padding:12px 14px; background:var(--card); border:1px solid var(--line); border-radius:14px; box-shadow:var(--shadow); }
+.faq-card-top{ display:flex; align-items:flex-start; gap:10px; }
+.faq-card-q{ flex:1; min-width:0; font-size:13.5px; font-weight:600; color:var(--ink); }
+.faq-card-a{ font-size:12.5px; color:var(--ink-soft); margin-top:4px; line-height:1.4; }
+.faq-card.off .faq-card-q, .faq-card.off .faq-card-a{ opacity:.45; }
+.faq-toggle{ all:unset; box-sizing:border-box; position:relative; width:38px; height:22px; border-radius:12px; background:var(--line); cursor:pointer; flex-shrink:0; transition:background .15s; }
+.faq-toggle.on{ background:var(--rust); }
+.faq-toggle .faq-toggle-knob{ position:absolute; top:2px; left:2px; width:18px; height:18px; border-radius:50%; background:#fff; transition:left .15s; box-shadow:0 1px 2px rgba(0,0,0,.2); }
+.faq-toggle.on .faq-toggle-knob{ left:18px; }
+.faq-card-actions{ display:flex; gap:14px; margin-top:9px; }
+.faq-card-action{ all:unset; box-sizing:border-box; display:flex; align-items:center; gap:5px; font-size:12px; font-weight:600; color:var(--ink-soft); cursor:pointer; }
+.faq-card-action svg{ width:13px; height:13px; }
+.faq-card-action.danger{ color:var(--rust-dark); }
+.faq-edit-field{ width:100%; border:1.6px solid var(--line); border-radius:12px; padding:9px 11px; font-size:13.5px; font-family:inherit; color:var(--ink); resize:vertical; box-sizing:border-box; margin-bottom:8px; }
+.faq-add-btn{ all:unset; box-sizing:border-box; display:flex; align-items:center; justify-content:center; gap:7px; width:calc(100% - 32px); margin:4px 16px 14px; padding:12px 0; border-radius:14px; border:1.6px dashed var(--line); color:var(--rust-dark); font-size:13px; font-weight:600; cursor:pointer; }
+.faq-add-btn svg{ width:14px; height:14px; }
+.faq-add-btn:active{ opacity:.7; }
+.rsvp-actions-row{ display:flex; gap:8px; margin:0 16px 10px; }
+.rsvp-actions-row .rsvp-copy-btn{ background:var(--card); }
+.rsvp-actions-inline{ display:flex; gap:8px; width:100%; }
+.rsvp-actions-inline .rsvp-copy-btn{ flex:1; }
+.rsvp-qr-btn{ all:unset; box-sizing:border-box; display:flex; align-items:center; justify-content:center; gap:5px; padding:10px 14px; border-radius:12px; border:1px solid var(--line); background:var(--cream); color:var(--rust-dark); font-size:12.5px; font-weight:600; cursor:pointer; }
+.rsvp-qr-btn svg{ width:14px; height:14px; }
+.rsvp-qr-btn:active{ opacity:.75; }
+.rsvp-revoke-btn{ flex:0 0 auto; width:38px; padding:10px 0; color:var(--rust-dark); }
+.rsvp-revoke-btn svg{ width:14px; height:14px; }
+.rsvp-qr-modal{ position:fixed; inset:0; background:rgba(20,15,10,.55); z-index:900; display:flex; align-items:center; justify-content:center; padding:24px; }
+.rsvp-qr-card{ background:var(--card); border-radius:20px; padding:26px 22px; max-width:320px; width:100%; text-align:center; position:relative; box-shadow:0 20px 50px rgba(0,0,0,.25); }
+.rsvp-qr-close{ all:unset; position:absolute; top:10px; right:14px; font-size:22px; line-height:1; color:var(--ink-soft); cursor:pointer; }
+.rsvp-qr-name{ font-family:Georgia,serif; font-size:17px; margin-bottom:10px; color:var(--ink); }
+.rsvp-qr-card img{ border-radius:10px; }
+.rsvp-qr-link{ font-size:11px; color:var(--ink-soft); word-break:break-all; margin:12px 0 16px; }
+/* Reorganização (Set 2026): folha "Enviar lembretes" — ícone+título,
+   canal cosmético (Email/SMS — não muda o envio, que continua a ser
+   "copiar mensagem"), mensagem editável com contador de caracteres. */
+.reminder-modal-icon{ width:44px; height:44px; border-radius:14px; background:var(--cream); color:var(--rust-dark); display:flex; align-items:center; justify-content:center; margin:0 auto 12px; }
+.reminder-modal-icon svg{ width:21px; height:21px; }
+.reminder-field-label{ text-align:left; font-size:10.8px; font-weight:700; letter-spacing:.03em; text-transform:uppercase; color:var(--ink-soft); margin:14px 0 6px; }
+.reminder-msg-textarea{ width:100%; min-height:110px; border:1.6px solid var(--line); border-radius:14px; padding:11px 13px; font-size:13.5px; font-family:inherit; color:var(--ink); resize:vertical; box-sizing:border-box; text-align:left; }
+.reminder-char-count{ text-align:right; font-size:11px; color:var(--ink-soft); margin-top:5px; }
+.reminder-recipients-note{ text-align:left; font-size:12px; color:var(--ink-soft); margin-top:2px; }
+/* --- Ficha completa do fornecedor --- */
+.supd-card{ display:flex; align-items:center; gap:13px; margin:2px 16px 16px; padding:16px; background:var(--card); border:1px solid var(--line); border-radius:18px; box-shadow:var(--shadow); }
+.supd-photo-wrap{ position:relative; width:64px; height:64px; border-radius:16px; flex-shrink:0; cursor:pointer; }
+.supd-photo, .supd-photo-fallback{ width:64px; height:64px; border-radius:16px; object-fit:cover; }
+.supd-photo-fallback{ background:#EFE3DA; color:#B08D77; display:flex; align-items:center; justify-content:center; }
+.supd-photo-fallback svg{ width:24px; height:24px; }
+.supd-photo-edit{ position:absolute; bottom:-4px; right:-4px; width:22px; height:22px; border-radius:50%; background:#C3A092; color:#fff; display:flex; align-items:center; justify-content:center; border:2px solid var(--card); }
+.supd-photo-edit svg{ width:10px; height:10px; }
+.supd-info{ flex:1; min-width:0; }
+.supd-name{ font-family:'Cormorant Garamond',serif; font-size:20px; font-weight:600; color:var(--ink); line-height:1.2; margin-bottom:4px; overflow-wrap:anywhere; }
+.supd-name-input{ all:unset; box-sizing:border-box; display:block; width:100%; font-family:'Cormorant Garamond',serif; font-size:20px; font-weight:600; color:var(--ink); line-height:1.2; margin-bottom:4px; padding-bottom:2px; border-bottom:1px solid transparent; }
+.supd-name-input:focus{ border-bottom:1px solid var(--line); }
+.supd-cat{ font-size:11px; color:var(--ink-soft); }
+.supd-cat-select{ all:unset; box-sizing:border-box; font-size:11px; color:var(--ink-soft); cursor:pointer; }
+.supd-status-badge{ flex-shrink:0; padding:5px 11px; border-radius:12px; font-size:10.5px; font-weight:600; align-self:flex-start; }
+.supd-status-select{ flex-shrink:0; padding:5px 9px; border-radius:12px; font-size:10.5px; font-weight:600; align-self:flex-start; border:none; font-family:inherit; cursor:pointer; }
+.supd-contact-row{ display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin:0 16px 20px; }
+.supd-contact-btn{ all:unset; box-sizing:border-box; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; padding:12px 4px; border-radius:14px; background:var(--card); border:1px solid var(--line); color:var(--ink); cursor:pointer; text-align:center; }
+.supd-contact-btn:active{ background:#FBF6F2; }
+.supd-contact-btn.disabled{ opacity:.4; cursor:default; }
+.supd-contact-btn svg{ width:18px; height:18px; color:var(--rust-dark); }
+.supd-contact-btn span{ font-size:10px; font-weight:500; }
+.supd-pay-card{ margin:0 16px 12px; padding:16px; background:var(--card); border:1px solid var(--line); border-radius:16px; box-shadow:var(--shadow); }
+.supd-pay-top{ display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:9px; }
+.supd-pay-paid{ font-family:'Cormorant Garamond',serif; font-size:21px; font-weight:600; color:var(--ink); }
+.supd-pay-rest{ font-size:12px; color:var(--ink-soft); text-align:right; }
+.supd-pay-bar-track{ height:6px; border-radius:4px; background:var(--cream2); overflow:hidden; margin-bottom:6px; }
+.supd-pay-bar-fill{ height:100%; border-radius:4px; background:var(--sage-dark); }
+.supd-pay-pct{ font-size:10.5px; color:var(--ink-soft); }
+.supd-pay-list{ margin-top:12px; border-top:1px solid var(--line); }
+.supd-pay-row{ display:flex; align-items:center; gap:10px; padding:9px 0; border-bottom:1px solid var(--line); }
+.supd-pay-row:last-child{ border-bottom:none; }
+.supd-pay-row .amount{ font-weight:600; color:var(--ink); font-size:14px; }
+.supd-pay-addrow{ display:flex; gap:8px; margin-top:10px; align-items:center; }
+.supd-pay-addrow input{ border:1px solid var(--line); background:#fff; border-radius:9px; padding:8px 9px; font-size:13px; font-family:inherit; color:var(--ink); outline:none; }
+.supd-pay-addrow input[type="date"]{ flex:1.2; min-width:0; }
+.supd-pay-addrow input[type="number"]{ flex:1; min-width:0; }
+.supd-field-card{ margin:0 16px 12px; padding:14px 16px; background:var(--card); border:1px solid var(--line); border-radius:16px; box-shadow:var(--shadow); }
+.supd-field-card label{ display:block; font-size:11px; color:var(--ink-soft); margin-bottom:6px; }
+.supd-field-card input, .supd-field-card textarea{ width:100%; border:none; background:transparent; padding:0; font-size:14.5px; font-family:inherit; color:var(--ink); outline:none; resize:none; }
+.supd-field-card textarea{ min-height:44px; }
+.supd-field-2col{ display:flex; gap:12px; }
+.supd-field-2col > div{ flex:1; min-width:0; }
+.supd-contract-row{ display:flex; align-items:center; gap:11px; margin:0 16px 12px; padding:13px 16px; background:var(--card); border:1px solid var(--line); border-radius:16px; box-shadow:var(--shadow); cursor:pointer; }
+.supd-contract-icon{ width:36px; height:36px; border-radius:10px; background:#EFE3DA; color:#B08D77; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.supd-contract-icon svg{ width:16px; height:16px; }
+.supd-contract-text{ flex:1; min-width:0; }
+.supd-contract-name{ font-size:13.5px; color:var(--ink); font-weight:500; overflow-wrap:anywhere; }
+.supd-contract-sub{ font-size:11px; color:var(--ink-soft); margin-top:1px; }
+.table-head:active{ background:rgba(20,20,20,0.035); }
+.table-head .icon-chip{ width:28px; height:28px; }
+.table-head .ttitle{ flex:1; font-family:'Cormorant Garamond',serif; font-weight:600; font-size:17px; color:var(--heading); }
+.table-head .fillcount{ font-size:11.5px; color:var(--ink-soft); font-weight:500; margin-right:2px; }
+.seat-list{ border-top:1px solid var(--line); }
+.seat-row{ display:flex; align-items:center; gap:10px; padding:10px 14px 10px 16px; border-bottom:1px solid var(--line); cursor:pointer; }
+.seat-row:last-child{ border-bottom:none; }
+.seat-row:active{ background:rgba(20,20,20,0.035); }
+.seat-row .seat-n{ width:20px; height:20px; border-radius:50%; background:rgba(20,20,20,0.07); color:var(--ink-soft); font-size:10.5px; font-weight:600; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.seat-row .seat-name{ flex:1; font-size:14px; color:var(--ink-soft); min-width:0; }
+.seat-row.filled .seat-name{ color:var(--ink); font-weight:600; }
+.seat-row.filled .seat-n{ background:var(--sage); color:#fff; }
+
+/* Sheet: lista de seleção de convidado (mesas) */
+.picker-search{ margin:0 0 10px; background:rgba(20,20,20,0.07); border-radius:10px; padding:8px 10px; display:flex; align-items:center; gap:6px; }
+.picker-search svg{ width:14px; height:14px; color:var(--ink-soft); flex-shrink:0; }
+.picker-search input{ border:none; background:transparent; flex:1; font-size:14px; color:var(--ink); outline:none; font-family:inherit; }
+.picker-list{ max-height:270px; overflow-y:auto; margin:0 -18px; padding:0 18px; }
+.picker-row{ display:flex; align-items:center; gap:10px; padding:10px 4px; border-bottom:1px solid var(--line); cursor:pointer; }
+.picker-row:last-child{ border-bottom:none; }
+.picker-row:active{ background:rgba(20,20,20,0.04); }
+.picker-row .side-tag{ font-size:10px; color:#fff; padding:2px 7px; border-radius:20px; font-weight:600; flex-shrink:0; }
+.picker-row .pname{ flex:1; min-width:0; overflow-wrap:anywhere; font-size:14.5px; color:var(--ink); }
+.picker-row.is-selected .pname{ color:var(--heading); font-weight:600; }
+.pname-hint{ display:block; font-size:11px; font-weight:500; color:var(--ink-soft); margin-top:1px; }
+.privacy-text{ padding:0 16px 30px; font-size:13px; color:var(--ink); line-height:1.6; }
+/* Pedido direto da Rita (Set 2026): os ecrãs de Termos e Privacidade em
+   Definições mostravam o texto legal "nu" direto sobre o fundo da página —
+   parecia partido, sem nenhuma estrutura visual, ao contrário do resto da
+   app. ".legal-card" dá-lhe a mesma linguagem visual das outras caixas da
+   app (cartão com fundo, borda e sombra suave, como .stat-card/.about-card).
+   Usada só nos ecrãs de página inteira (viewDefTermos/viewDefPrivacidade) —
+   NÃO dentro do overlay de leitura rápida (openLegalOverlay), que já vive
+   dentro da sua própria folha/cartão e ficaria com uma caixa dentro de outra
+   caixa. */
+.legal-card{ margin:0 16px 30px; padding:18px 18px 4px; background:var(--card); border:1px solid var(--line); border-radius:20px; box-shadow:var(--shadow); }
+.legal-card .privacy-text{ padding:0; }
+.about-mono{ width:44px; height:44px; margin:6px auto 22px; color:var(--rust); opacity:.85; }
+.about-mono svg{ width:100%; height:100%; }
+.about-card{ margin:0 16px 14px; padding:20px 18px; border-radius:20px; }
+.about-card-icon{ width:38px; height:38px; border-radius:50%; display:flex; align-items:center; justify-content:center; margin-bottom:12px; }
+.about-card-icon svg{ width:16px; height:16px; }
+.about-card-title{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:18px; color:var(--ink); margin-bottom:6px; }
+.about-card-text{ font-size:12.5px; color:#5b544c; line-height:1.55; }
+.about-version{ text-align:center; font-size:11px; color:var(--ink-soft); margin:10px 0 30px; }
+.privacy-text p{ margin:0 0 16px; }
+.privacy-text b{ color:var(--heading); font-weight:600; }
+.privacy-note{ font-size:11.5px; color:var(--ink-soft); font-style:italic; }
+
+/* Home hero */
+.hero-card{ margin:4px 16px 20px; background:var(--card); border:1px solid var(--line); border-radius:16px; padding:30px 24px 26px; text-align:center; box-shadow:var(--shadow); }
+.hero-names{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:32px; color:var(--heading); letter-spacing:.01em; }
+.hero-names .amp{ color:var(--gold); font-style:italic; padding:0 5px; }
+.hero-rule{ width:34px; height:1px; background:var(--gold); opacity:.55; margin:16px auto; }
+.hero-sub{ color:var(--ink-soft); font-size:11.5px; letter-spacing:.02em; }
+.hero-count{ margin-top:20px; display:flex; flex-direction:column; align-items:center; gap:1px; }
+.hero-count .num{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:36px; color:var(--heading); line-height:1; }
+.hero-count .lbl{ color:var(--ink-soft); font-size:11.5px; margin-top:6px; }
+
+/* Início — cabeçalho v2 */
+.due-alert{ display:flex; align-items:flex-start; gap:10px; margin:8px 16px 0; padding:11px 13px; background:rgba(193,88,62,0.09); border:1px solid rgba(193,88,62,0.25); border-radius:14px; }
+.due-alert-icon{ color:var(--rust-dark); flex-shrink:0; margin-top:1px; }
+.due-alert-icon svg{ width:17px; height:17px; }
+.due-alert-text{ flex:1; min-width:0; }
+.due-alert-text b{ display:block; font-size:12.5px; color:var(--rust-dark); }
+.due-alert-text span{ display:block; font-size:11px; color:var(--ink-soft); margin-top:2px; line-height:1.5; }
+.home-header-v2{ display:flex; align-items:flex-start; justify-content:space-between; padding:2px 18px 14px; }
+.weddy-wordmark{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:26px; color:var(--rust); display:flex; align-items:flex-start; gap:2px; }
+.wm-heart{ display:inline-flex; color:var(--rust); opacity:.8; margin-top:1px; }
+.wm-heart svg{ width:11px; height:11px; }
+.weddy-subtitle{ font-size:9.5px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-soft); margin-top:5px; line-height:1.5; }
+.home-header{ display:flex; align-items:center; gap:12px; padding:8px 18px 16px; }
+.home-avatar{ width:44px; height:44px; border-radius:50%; background:linear-gradient(150deg,var(--rust),var(--heading)); display:flex; align-items:center; justify-content:center; color:#fff; font-family:'Cormorant Garamond',serif; font-weight:600; font-size:15px; flex-shrink:0; box-shadow:var(--shadow); }
+.home-header-text{ flex:1; min-width:0; }
+.home-header-text .names{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:19px; color:var(--ink); line-height:1.15; }
+.home-header-text .date{ font-size:11.5px; color:var(--ink-soft); margin-top:1px; }
+.home-icon-btn{ all:unset; box-sizing:border-box; width:34px; height:34px; border-radius:50%; background:var(--card); border:1px solid var(--line); display:flex; align-items:center; justify-content:center; color:var(--rust); cursor:pointer; flex-shrink:0;  line-height:1;}
+.home-icon-btn svg{ width:15px; height:15px; }
+.home-icon-btn:active{ background:var(--line); }
+/* Botão redondo do Assistente Weddy — só aparece no Início. A 50% de opacidade
+   enquanto não há subscrição ativa (continua a poder tocar-se, mas abre a
+   página para subscrever em vez do chat). */
+.chat-fab{ all:unset; box-sizing:border-box; position:fixed; right:16px; bottom:calc(78px + env(safe-area-inset-bottom,0px)); width:52px; height:52px; border-radius:50%; background:var(--rust); color:#fff; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 14px rgba(154,79,61,0.35); cursor:pointer; z-index:25; }
+.chat-fab svg{ width:23px; height:23px; }
+.chat-fab.locked{ opacity:.5; }
+.chat-fab:active{ transform:scale(0.93); }
+/* Janela flutuante do Assistente (pequena, por cima do ecrã atual — nunca
+   ocupa a página toda, e o fundo continua visível por trás). */
+.chat-panel-backdrop{ position:fixed; inset:0; background:rgba(48,44,41,0.14); z-index:26; }
+.chat-panel{ position:fixed; right:16px; bottom:calc(78px + env(safe-area-inset-bottom,0px) + 62px); left:16px; max-width:360px; margin-left:auto; max-height:min(72vh, 560px); background:var(--card); border-radius:20px; box-shadow:0 12px 32px rgba(48,44,41,0.22); z-index:27; display:flex; flex-direction:column; overflow:hidden; }
+.chat-panel[hidden]{ display:none; }
+.chat-panel-header{ display:flex; align-items:center; justify-content:space-between; padding:14px 8px 14px 16px; border-bottom:1px solid var(--line); font-family:'Cormorant Garamond',serif; font-weight:600; font-size:17px; color:var(--heading); flex-shrink:0; }
+.chat-panel-close{ all:unset; box-sizing:border-box; width:30px; height:30px; border-radius:50%; display:flex; align-items:center; justify-content:center; color:var(--ink-soft); cursor:pointer; font-size:13px; }
+.chat-panel-close:active{ background:var(--line); }
+.chat-panel-body{ flex:1; min-height:0; overflow-y:auto; padding:0 0 10px; }
+.chat-panel-body .assist-hero{ padding:16px 18px 16px; border-radius:0; }
+.chat-panel-body .assist-hero-icon{ width:38px; height:38px; }
+.chat-panel-body .assist-hero-title{ font-size:17px; }
+.chat-panel-body .assist-chat-log{ margin:0 14px 10px; max-height:none; }
+.chat-panel-body .assist-chips{ margin:0 14px 12px; }
+.chat-panel-body .assist-input-row{ margin:0 14px; position:sticky; bottom:0; }
+
+/* Início — cartão herói com fotografia */
+.hero-photo-card{ position:relative; margin:2px 16px 20px; border-radius:22px; overflow:hidden; box-shadow:var(--shadow); height:230px; }
+.hero-photo-card .hero-photo{ position:absolute; inset:0; background-size:cover; background-position:52% 42%; background-color:var(--blush); background-image:linear-gradient(135deg, #EFE0D2 0%, var(--blush) 40%, var(--gold) 75%, var(--heading) 100%); }
+.icon-real{ width:34px; height:34px; flex-shrink:0; background-size:contain; background-repeat:no-repeat; background-position:center; }
+
+/* Linha do tempo horizontal — O grande dia */
+.timeline-card{ margin:0 0 18px; overflow:hidden; }
+.timeline-scroll{ display:flex; overflow-x:auto; padding:6px 16px 4px; min-width:0; -webkit-overflow-scrolling:touch; }
+.timeline-scroll::-webkit-scrollbar{ display:none; }
+.timeline-item{ flex:0 0 108px; display:flex; flex-direction:column; align-items:center; position:relative; }
+.timeline-item::before{ content:''; position:absolute; left:0; right:0; top:21px; height:14px; z-index:1; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='36' height='14' viewBox='0 0 36 14'%3E%3Cpath d='M0,7 Q9,1 18,7 T36,7' stroke='%23C9A480' stroke-width='1.1' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat:repeat-x; background-size:36px 14px; opacity:.85; }
+.timeline-item:first-child::before{ left:50%; }
+.timeline-item:last-child::before{ right:50%; }
+.timeline-time{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:15px; color:var(--ink); margin-bottom:8px; }
+.timeline-dot{ width:11px; height:11px; border-radius:50%; border:1.6px solid var(--gold); background:var(--card); position:relative; z-index:2; flex-shrink:0; }
+.timeline-stem{ width:1px; height:13px; background:var(--line); }
+.timeline-item .icon-real{ margin-top:5px; }
+.timeline-label{ margin-top:9px; text-align:center; font-size:11px; font-weight:600; color:var(--ink); line-height:1.3; }
+.timeline-label span{ display:block; font-size:9px; font-weight:500; color:var(--ink-soft); margin-top:2px; }
+.section-label-row{ display:flex; align-items:center; justify-content:space-between; margin:20px 16px 10px; }
+.section-label-row-v2{ display:flex; align-items:center; justify-content:space-between; margin:22px 16px 12px; }
+.timeline-item{ cursor:pointer; }
+.timeline-del{ all:unset; box-sizing:border-box; position:absolute; top:-4px; right:14px; width:18px; height:18px; border-radius:50%; background:rgba(20,20,20,0.08); color:var(--ink-soft); font-size:10px; display:flex; align-items:center; justify-content:center; cursor:pointer; z-index:3; }
+.timeline-del:active{ background:rgba(20,20,20,0.18); }
+
+.hero-photo-card .hero-scrim{ position:absolute; inset:0; background:linear-gradient(180deg, rgba(24,18,12,0.08) 0%, rgba(24,18,12,0.1) 35%, rgba(24,18,12,0.78) 100%); }
+/* Pedido direto da Rita (Set 2026): um pequeno lápis sobre a própria foto de
+   capa da página Início, para a pessoa perceber logo, ao ver a foto, que dá
+   para a mudar dali — sem ter de já saber que isso vive em Definições >
+   Design. Reaproveita o mesmo mecanismo de navegação data-premiumgoto já
+   usado pelos cartões Premium do Início (ver bindHandlers), por isso não
+   precisou de nenhum handler novo em JS. */
+.hero-edit-photo-btn{ all:unset; box-sizing:border-box; position:absolute; top:12px; right:12px; z-index:2; width:34px; height:34px; border-radius:50%; background:rgba(24,18,12,0.38); backdrop-filter:blur(2px); color:#fff; display:flex; align-items:center; justify-content:center; cursor:pointer; line-height:1; }
+.hero-edit-photo-btn svg{ width:16px; height:16px; }
+.hero-edit-photo-btn:active{ background:rgba(24,18,12,0.55); }
+.hero-photo-card .hero-overlay{ position:absolute; left:0; right:0; bottom:0; padding:18px 20px 20px; color:#fff; text-shadow:0 1px 6px rgba(0,0,0,0.35); }
+.hero-names-row{ font-family:'Cormorant Garamond',serif; font-size:21px; font-weight:600; letter-spacing:.02em; opacity:.98; }
+.hero-date-row{ font-size:10.5px; font-weight:600; letter-spacing:.05em; text-transform:uppercase; opacity:.85; margin-top:4px; }
+.hero-thin-divider{ width:30px; height:1px; background:rgba(255,255,255,0.6); margin:8px 0; }
+.hero-thin-divider + .hero-thin-divider{ margin-top:6px; }
+.hero-photo-card .hero-eyebrow{ font-size:12px; font-family:'Cormorant Garamond',serif; opacity:.95; margin-top:6px; }
+.hero-photo-card .hero-heading{ font-family:'Cormorant Garamond',serif; font-weight:500; font-size:42px; line-height:1; margin-top:0; }
+.hero-photo-card .hero-venue{ font-family:'Cormorant Garamond',serif; font-size:14px; opacity:.9; margin-top:6px; }
+.hero-cta{ all:unset; box-sizing:border-box; display:inline-block; margin-top:12px; padding:9px 18px; border-radius:20px; background:#fff; color:var(--heading); font-size:12px; font-weight:600; cursor:pointer; }
+.hero-cta:active{ opacity:.82; }
+
+/* Início — atalhos em grelha */
+.quicklink-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin:0 16px 8px; }
+.quicklink-grid-bottom{ grid-template-columns:repeat(2,1fr); }
+.quicklink-card{ all:unset; box-sizing:border-box; width:100%; aspect-ratio:1/0.82; position:relative; background:var(--cream2); border:1px solid var(--line); border-radius:14px; padding:10px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; cursor:pointer; text-align:center; }
+.quicklink-card-lg{ aspect-ratio:1.45/1; padding:16px; }
+.quicklink-card.ql-sage{ background:#E7EBE1; border-color:#DCE2D3; }
+.quicklink-card.ql-taupe{ background:#EAE6E0; border-color:#DFD9D0; }
+.quicklink-card.ql-peach{ background:#F3E2D6; border-color:#EAD3C2; }
+.quicklink-card.ql-peach2{ background:#F0E2D3; border-color:#E6D2BC; }
+.quicklink-card.ql-blush{ background:#F1DFDB; border-color:#E6CAC3; }
+.quicklink-card:active{ transform:scale(0.96); }
+.quicklink-icon{ width:23px; height:23px; display:flex; align-items:center; justify-content:center; color:var(--heading); flex-shrink:0; }
+.quicklink-icon svg{ width:23px; height:23px; }
+.quicklink-bottom{ display:flex; align-items:center; justify-content:center; width:100%; }
+.quicklink-label{ font-size:11.5px; font-weight:400; color:var(--ink); line-height:1.2; text-align:left; }
+.quicklink-arrow{ width:16px; height:16px; display:flex; align-items:center; justify-content:center; color:var(--ink-soft); flex-shrink:0; }
+.quicklink-arrow svg{ width:100%; height:100%; }
+.section-label-v2{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:19px; color:var(--ink); margin:22px 16px 12px; display:flex; align-items:center; gap:12px; }
+.section-label-v2::after{ content:''; flex:1; height:1px; background:var(--line); }
+.day-card{ display:flex; align-items:center; gap:12px; margin:0 16px 18px; padding:14px 16px; background:var(--card); border:1px solid var(--line); border-radius:16px; position:relative; overflow:hidden; box-shadow:var(--shadow); }
+.day-card-text{ flex:1; min-width:0; }
+.day-card-date{ font-size:13.5px; font-weight:600; color:var(--ink); }
+.day-card-venue{ font-size:11.5px; color:var(--ink-soft); margin-top:1px; }
+.day-card-botanical{ width:36px; height:auto; color:var(--dusty); opacity:.55; flex-shrink:0; }
+
+/* Início — "Calendário da semana" (mini calendário + agenda do dia) */
+.week-agenda{ margin:0 16px 20px; background:var(--card); border:1px solid var(--line); border-radius:18px; padding:14px 14px 8px; box-shadow:var(--shadow); }
+.week-agenda-head{ display:flex; align-items:center; justify-content:space-between; margin:0 2px 12px; }
+.week-agenda-title{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:17px; color:var(--ink); display:flex; align-items:center; gap:8px; }
+.week-agenda-icon{ width:18px; height:18px; color:var(--ink); flex-shrink:0; }
+.week-agenda-icon svg{ width:18px; height:18px; }
+.week-agenda-link{ all:unset; cursor:pointer; font-size:12.5px; font-weight:600; color:var(--rust-dark); display:flex; align-items:center; gap:2px; }
+.week-agenda-link svg{ width:13px; height:13px; }
+.week-strip{ display:flex; gap:4px; margin-bottom:10px; }
+.week-day{ flex:1; display:flex; flex-direction:column; align-items:center; gap:5px; padding:7px 0 8px; border-radius:12px; cursor:pointer; }
+.week-day.today{ background:var(--cream2); }
+.week-day-name{ font-size:9.5px; font-weight:600; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.02em; }
+.week-day-num{ font-size:13.5px; font-weight:600; color:var(--ink); }
+.week-day.today .week-day-num{ color:var(--rust-dark); }
+.week-day-dot{ width:5px; height:5px; border-radius:50%; background:var(--rust); }
+.week-day-dot.none{ background:transparent; }
+.agenda-overdue{ font-size:11.5px; color:var(--rust-dark); font-weight:600; margin:0 2px 10px; }
+.agenda-list{ border-top:1px solid var(--line); }
+.agenda-item{ display:flex; align-items:center; gap:10px; padding:11px 2px; border-bottom:1px solid var(--line); cursor:pointer; }
+.agenda-item:last-child{ border-bottom:none; }
+.agenda-item:active{ opacity:.7; }
+.agenda-check{ all:unset; width:18px; height:18px; border-radius:50%; border:1.5px solid var(--line); flex-shrink:0; display:flex; align-items:center; justify-content:center; color:transparent; cursor:pointer; }
+.agenda-check:active{ background:var(--cream2); }
+.agenda-check svg{ width:11px; height:11px; }
+.agenda-mid{ flex:1; min-width:0; }
+.agenda-text{ font-size:13px; color:var(--ink); font-weight:500; line-height:1.3; overflow-wrap:anywhere; }
+.agenda-cat-row{ margin-top:4px; display:flex; align-items:center; gap:7px; }
+.agenda-cat-chip{ font-size:10px; font-weight:600; padding:2px 8px; border-radius:20px; }
+.agenda-time{ font-size:10.5px; font-weight:600; color:var(--ink-soft); }
+.agenda-chevron{ width:15px; height:15px; color:var(--ink-soft); flex-shrink:0; opacity:.6; }
+.agenda-chevron svg{ width:15px; height:15px; }
+.agenda-empty{ padding:16px 2px 10px; font-size:12px; color:var(--ink-soft); text-align:center; }
+
+/* Sheet (add expense) */
+.sheet-backdrop{ position:absolute; inset:0; background:rgba(20,18,14,0.42); z-index:50; opacity:0; pointer-events:none; transition:opacity .2s ease; }
+.sheet-backdrop.show{ opacity:1; pointer-events:auto; }
+.sheet{ position:absolute; left:0; right:0; bottom:0; background:var(--cream); border-radius:24px 24px 0 0; z-index:51; transform:translateY(100%); transition:transform .28s cubic-bezier(.32,.72,0,1); padding:10px 18px 28px; }
+.sheet.show{ transform:translateY(0); box-shadow:0 -10px 30px rgba(0,0,0,0.2); }
+.sheet-handle{ width:36px; height:4px; border-radius:2px; background:rgba(20,20,20,0.25); margin:4px auto 12px; }
+.sheet-title{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:20px; color:var(--heading); margin:0 0 12px; text-align:center; }
+.sheet-field{ margin-bottom:10px; }
+.sheet-field label{ display:block; font-size:11.5px; color:var(--ink-soft); margin-bottom:4px; }
+.sheet-field input, .sheet-field select{ width:100%; border:1px solid var(--line); background:#fff; border-radius:9px; padding:9px 10px; font-size:14.5px; color:var(--ink); font-family:inherit; outline:none; }
+.sheet-field input.field-error, .sheet-field select.field-error{ border-color:var(--rust-dark); box-shadow:0 0 0 3px rgba(193,88,62,0.13); }
+.title-input-inline.field-error{ border-radius:8px; box-shadow:0 0 0 2px var(--rust-dark); }
+.sheet-btns{ display:flex; gap:10px; margin-top:14px; }
+.btn-cancel, .btn-save{ all:unset; box-sizing:border-box; cursor:pointer; flex:1; text-align:center; padding:11px 0; border-radius:11px; font-size:14.5px; font-weight:600; }
+.btn-cancel{ background:rgba(20,20,20,0.07); color:var(--rust-dark); }
+.btn-save{ background:var(--rust); color:#fff; }
+.btn-cancel:active, .btn-save:active{ opacity:.75; }
+.btn-save:disabled, .btn-cancel:disabled{ opacity:.4; pointer-events:none; }
+.sheet-toggle-row{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:11px 2px; margin-bottom:6px; }
+.sheet-toggle-row .toggle-label{ font-size:13px; font-weight:600; color:var(--ink); }
+.sheet-toggle-row .toggle-label small{ display:block; font-weight:400; color:var(--ink-soft); font-size:11px; margin-top:2px; }
+.mini-toggle{ all:unset; box-sizing:border-box; width:42px; height:25px; border-radius:13px; background:var(--line); position:relative; flex-shrink:0; cursor:pointer; transition:background .15s; }
+.mini-toggle.on{ background:var(--sage); }
+.mini-toggle .knob{ position:absolute; top:2.5px; left:2.5px; width:20px; height:20px; border-radius:50%; background:#fff; transition:left .15s; box-shadow:0 1px 3px rgba(0,0,0,0.2); }
+.mini-toggle.on .knob{ left:19.5px; }
+.memories-grid{ display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; padding:0 16px 20px; }
+.memory-tile{ position:relative; aspect-ratio:1; border-radius:12px; overflow:hidden; background:var(--line); }
+.memory-tile img{ width:100%; height:100%; object-fit:cover; display:block; }
+.memory-del{ all:unset; box-sizing:border-box; position:absolute; top:5px; right:5px; width:26px; height:26px; display:flex; align-items:center; justify-content:center; border-radius:50%; background:rgba(0,0,0,0.55); color:#fff; cursor:pointer; }
+.memory-del svg{ width:13px; height:13px; }
+.memory-caption{ position:absolute; left:0; right:0; bottom:0; padding:4px 7px; font-size:10.5px; color:#fff; background:linear-gradient(transparent, rgba(0,0,0,0.65)); }
+
+.empty-note{ padding:14px; font-size:12.5px; color:var(--ink-soft); font-style:italic; text-align:center; }
+.empty-note svg{ width:14px; height:14px; vertical-align:-2px; }
+
+/* Tab bar */
+.tabbar{ position:absolute; left:0; right:0; bottom:0; z-index:20; display:flex; padding:8px 0 calc(env(safe-area-inset-bottom) + 6px); background:rgba(250,248,245,0.92); backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px); border-top:1px solid var(--line); }
+.tabbar button{ all:unset; cursor:pointer; flex:1; min-width:0; display:flex; flex-direction:column; align-items:center; gap:4px; color:#ABA7A0; padding-bottom:6px; position:relative; }
+.tabbar button svg{ width:19px; height:19px; }
+.tabbar button span{ font-size:9px; font-weight:600; letter-spacing:-.01em; }
+.tab-icon-wrap{ display:flex; align-items:center; justify-content:center; width:34px; height:24px; }
+.tabbar button.active{ color:var(--rust); }
+.tabbar button.active::after{ content:''; position:absolute; bottom:0; left:50%; transform:translateX(-50%); width:22px; height:2.5px; border-radius:2px; background:var(--rust); }
+.tabbar button:active .tab-icon-wrap{ transform:scale(0.88); }
+
+/* Mesa 3D */
+.mesa3d-panel{ display:none; flex-direction:column; flex:1; min-height:0; min-width:0; overflow-x:hidden; }
+.mesa3d-panel.active{ display:flex; }
+.mesa3d-view{ display:none; flex-direction:column; flex:1; min-height:0; min-width:0; overflow-x:hidden; }
+.mesa3d-view.active{ display:flex; }
+.table-chip-row{ display:flex; gap:8px; overflow-x:auto; padding:2px 16px 14px; width:100%; min-width:0; box-sizing:border-box; -webkit-overflow-scrolling:touch; }
+.table-chip-row::-webkit-scrollbar{ display:none; }
+.table-chip{ all:unset; box-sizing:border-box; cursor:pointer; flex-shrink:0; width:34px; height:34px; border-radius:50%; background:var(--card); box-shadow:var(--shadow); display:flex; align-items:center; justify-content:center; font-size:13px; color:var(--ink-soft); font-weight:600; }
+.table-chip.active{ background:var(--rust); color:#fff; }
+.table-chip:active{ transform:scale(0.92); }
+.mesa3d-canvas-wrap{ position:relative; margin:0 16px 16px; border-radius:20px; overflow:hidden; background:radial-gradient(ellipse at 50% 26%, #FFF9EE, #F0DFC8 82%); box-shadow:var(--shadow); flex:1; min-height:0; }
+#mesa3d-canvas{ width:100%; height:100%; display:block; touch-action:none; }
+.mesa3d-labels{ position:absolute; inset:0; overflow:hidden; pointer-events:none; }
+.mesa3d-label{ position:absolute; transform:translate(-50%,-100%); font-size:10px; font-weight:600; padding:3px 8px; border-radius:20px; background:rgba(255,253,248,0.96); box-shadow:0 1px 4px rgba(20,20,20,0.2); color:var(--ink-soft); white-space:nowrap; }
+.mesa3d-label::after{ content:''; position:absolute; left:50%; bottom:-4px; width:7px; height:7px; background:inherit; box-shadow:inherit; transform:translateX(-50%) rotate(45deg); border-radius:0 0 3px 0; z-index:-1; }
+.mesa3d-label.assigned.noiva{ background:var(--blush-dark); color:#fff; }
+.mesa3d-label.assigned.noivo{ background:var(--dusty-dark); color:#fff; }
+.mesa3d-hint{ position:absolute; left:0; right:0; bottom:11px; text-align:center; font-size:10.5px; color:var(--ink-soft); opacity:.85; pointer-events:none; }
+.mesa3d-fillcount{ font-size:11.5px; color:var(--ink-soft); font-weight:500; margin-left:auto; }
+.mini-ring{ position:relative; width:34px; height:34px; margin-left:auto; flex-shrink:0; }
+.mini-ring svg{ width:100%; height:100%; }
+.mini-ring-txt{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:7.5px; font-weight:600; color:var(--ink); }
+/* Pedido (Set 2026): "sincronizar lugares" deixa de ser um botão com caixa à
+   volta — passa a ser só uma zona de texto/ícone clicável, centrada, sem
+   fundo nem borda, mantendo a mesma posição de sempre. */
+.mesa3d-sync-btn{ all:unset; box-sizing:border-box; width:100%; display:flex; align-items:center; justify-content:center; gap:6px; margin-top:10px; padding:10px 14px; color:var(--rust-dark); font-size:13px; font-weight:600; font-family:inherit; cursor:pointer; text-align:center; }
+.mesa3d-sync-btn svg{ width:15px; height:15px; }
+.mesa3d-sync-btn:active{ opacity:.6; }
+.mesa3d-sync-btn:disabled{ opacity:.5; pointer-events:none; }
+
+/* Visão da sala */
+.sala-scroll{ flex:1; min-height:0; overflow:auto; padding:2px 0 24px; -webkit-overflow-scrolling:touch; }
+.sala-legend{ display:flex; justify-content:center; gap:14px; margin:2px 16px 10px; }
+.sala-legend-item{ display:flex; align-items:center; gap:5px; font-size:11px; color:var(--ink-soft); }
+.sala-legend-dot{ width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+.sala-hint{ text-align:center; font-size:11px; color:var(--ink-soft); margin:0 16px 12px; }
+.sala-canvas{ position:relative; margin:0 16px; background:repeating-linear-gradient(0deg, rgba(20,20,20,0.035) 0 1px, transparent 1px 28px), repeating-linear-gradient(90deg, rgba(20,20,20,0.035) 0 1px, transparent 1px 28px), var(--cream2); border-radius:16px; border:1px solid var(--line); }
+.sala-table-item{ position:absolute; width:108px; touch-action:none; cursor:grab; user-select:none; z-index:1; transition:box-shadow .15s; }
+.sala-table-item svg{ width:100%; height:auto; display:block; }
+.sala-table-item.dragging{ cursor:grabbing; z-index:5; filter:drop-shadow(0 8px 14px rgba(20,20,20,0.25)); }
+#mesa3d-header{ min-width:0; flex-shrink:0; }
+
+
+/* Login */
+.login-screen{ position:absolute; inset:-2px; z-index:100; background:#FBF1E7 url('login-bg.jpg') center/cover no-repeat; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:32px 30px calc(env(safe-area-inset-bottom) + 32px); text-align:center; overflow:hidden; }
+.login-inner{ position:relative; z-index:1; width:100%; }
+.login-lang-switch{ position:absolute; top:calc(env(safe-area-inset-top,0px) + 44px); right:14px; z-index:2; display:flex; background:rgba(255,255,255,0.85); border-radius:10px; padding:3px; gap:2px; backdrop-filter:blur(4px); }
+.login-lang-switch button{ all:unset; box-sizing:border-box; padding:5px 11px; font-size:12px; font-weight:700; border-radius:7px; cursor:pointer; color:#9a8b83; }
+.login-lang-switch button.active{ background:var(--rust-dark); color:#fff; }
+.login-screen.hidden{ display:none; }
+.login-tag{ color:var(--ink-soft); font-size:12.5px; margin-bottom:26px; letter-spacing:.01em; }
+.login-field{ width:100%; max-width:280px; margin-left:auto; margin-right:auto; position:relative; }
+.login-field input{ width:100%; border:1px solid var(--line); background:var(--card); border-radius:12px; padding:13px 14px; font-size:15px; color:var(--ink); font-family:inherit; outline:none; text-align:center; }
+.login-field input.has-icon{ padding-left:38px; text-align:left; }
+.login-field input.has-toggle{ padding-right:38px; }
+.login-field-icon{ position:absolute; left:12px; top:50%; transform:translateY(-50%); width:18px; height:18px; color:var(--rust-dark); display:flex; pointer-events:none; }
+.login-field-toggle{ all:unset; box-sizing:border-box; position:absolute; right:12px; top:50%; transform:translateY(-50%); width:18px; height:18px; display:flex; color:var(--ink-soft); cursor:pointer; }
+.login-field input:focus{ border-color:var(--gold); }
+.login-btn{ all:unset; box-sizing:border-box; cursor:pointer; width:100%; max-width:280px; text-align:center; margin:10px auto 0; display:block; padding:10px 0; border-radius:11px; background:var(--rust); color:#fff; font-size:13.5px; font-weight:600; }
+.login-btn svg{ width:14px; height:14px; flex-shrink:0; vertical-align:-2px; }
+.login-btn:active{ opacity:.8; }
+/* Corrigido (Set 2026): mais classes usadas sem nenhuma regra CSS a
+   defini-las — mesmo problema do .delete-response-link/.child-remove
+   acima, encontrado numa revisão a todo o ficheiro. */
+.loading{ padding:60px 0; color:var(--ink-soft); font-size:13.5px; text-align:center; }
+/* Pedido (Set 2026): ao anexar um ficheiro (Lua de mel, contrato de
+   fornecedor, documento), a página ficava sem nenhuma indicação clara de
+   que algo estava a acontecer — só um texto pequeno e cinzento, fácil de
+   não reparar, e no caso do contrato de fornecedor nem isso (nada mudava
+   visivelmente enquanto o ficheiro subia). Este "spinner" pequeno é
+   reaproveitado em todos os sítios da app que sobem um ficheiro. */
+.upload-spin{ display:inline-block; width:14px; height:14px; border:2px solid rgba(20,20,20,0.15); border-top-color:var(--rust); border-radius:50%; animation:weddy-upspin .8s linear infinite; vertical-align:-2px; margin-right:7px; flex-shrink:0; }
+@keyframes weddy-upspin{ to{ transform:rotate(360deg); } }
+.upload-status-row{ display:flex; align-items:center; font-size:12.5px; color:var(--ink-soft); }
+.hm-city-num{ flex-shrink:0; width:22px; height:22px; border-radius:50%; background:var(--rust); color:#fff; font-size:11.5px; font-weight:700; display:flex; align-items:center; justify-content:center; margin-right:10px; }
+/* Caixa de seleção do "modo grupo" no ecrã de RSVP (criar um link de
+   família a partir de vários convidados escolhidos à mão) — sem esta
+   regra ficava com o checkbox genérico do sistema operativo, destoando
+   de tudo o resto da app, que nunca usa controlos nativos. */
+.rsvp-group-checkbox{ accent-color:var(--rust); cursor:pointer; }
+.login-msg{ margin:16px auto 0; font-size:12.5px; color:var(--ink-soft); max-width:280px; line-height:1.5; }
+.login-msg.error{ color:var(--rust-dark); }
+.login-msg.success{ color:var(--sage-dark); }
+.login-note{ margin:24px auto 0; font-size:11px; color:var(--ink-soft); opacity:.75; max-width:250px; line-height:1.5; }
+
+/* Bloqueio de orientação — a app é sempre vertical */
+.rotate-lock-overlay{ display:none; position:fixed; inset:0; z-index:9999; background:var(--cream); flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:32px; }
+.rotate-lock-overlay svg{ width:56px; height:56px; color:var(--rust-dark); margin-bottom:18px; }
+.rotate-lock-overlay .rl-title{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:21px; color:var(--heading); margin-bottom:8px; }
+.rotate-lock-overlay .rl-text{ font-size:13px; color:var(--ink-soft); max-width:260px; line-height:1.5; }
+@media (orientation:landscape) and (hover:none) and (pointer:coarse){
+  .rotate-lock-overlay{ display:flex; }
+}
+/* Controlo por JavaScript (mais fiável do que confiar apenas na media
+   query acima, que em alguns browsers/telemóveis pode não disparar):
+   sempre que a classe "rotate-blocked" é aplicada ao <html>, o aviso
+   aparece e cobre tudo, incluindo a barra de navegação inferior. */
+html.rotate-blocked .rotate-lock-overlay{ display:flex; }
+
+</style>
+</head>
+<body>
+
+<div class="rotate-lock-overlay" id="rotate-lock-overlay">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/><path d="M3 9l3-3-3-3" transform="translate(0,3)"/></svg>
+  <div class="rl-title" data-t="rotateLockTitle">Roda o telemóvel</div>
+  <div class="rl-text" data-t="rotateLockText">A Weddy foi pensada para seres usada na vertical. Volta a rodar o teu telemóvel para continuares.</div>
+</div>
+
+<div class="screen">
+  <div class="statusbar-spacer"></div>
+
+  <div id="iab-warning" class="iab-warning">
+    <div class="iab-warning-card">
+      <div class="iab-warning-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16v.01"/></svg></div>
+      <div class="iab-warning-title" data-t="iabWarningTitle">Quase lá! ✨</div>
+      <p data-t="iabWarningP1">Estás a abrir a Weddy dentro do Instagram, e por aqui não é possível instalar a app no teu telemóvel.</p>
+      <p data-t-html="iabWarningP2"><b>Toca nos "•••" ou "⋮" no canto superior direito</b> e escolhe <b>"Abrir no navegador"</b> (Safari ou Chrome).</p>
+      <p class="iab-warning-note" data-t="iabWarningNote">Depois, no Safari, toca no ícone de partilha e em "Adicionar ao ecrã principal" — fica com um atalho como uma app a sério.</p>
+    </div>
+  </div>
+
+  <div id="payment-alert-popup" class="iab-warning">
+    <div class="iab-warning-card">
+      <div class="iab-warning-icon" style="color:var(--rust-dark);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16v.01"/></svg></div>
+      <div class="iab-warning-title" id="payment-alert-title">Pagamentos a terminar o prazo</div>
+      <div id="payment-alert-body" style="text-align:left; margin-bottom:6px;"></div>
+      <button class="login-btn" id="payment-alert-ok" style="margin-top:14px;" data-t="btnOk">Ok</button>
+    </div>
+  </div>
+
+  <div class="app-body" id="app-body">
+    <!-- panels injected by JS -->
+  </div>
+
+  <div class="mesa3d-panel" id="mesa3d-panel">
+    <div id="mesa3d-header"></div>
+    <div class="mesa3d-view" id="mesa3d-view-mesa">
+      <div class="table-chip-row" id="mesa3d-chips"></div>
+      <div class="mesa3d-canvas-wrap">
+        <canvas id="mesa3d-canvas"></canvas>
+        <div class="mesa3d-labels" id="mesa3d-labels"></div>
+        <div class="mesa3d-hint" data-t="mesa3dHint">arrasta para rodar · toca num lugar para atribuir</div>
+      </div>
+    </div>
+    <div class="mesa3d-view" id="mesa3d-view-sala">
+      <div class="sala-scroll" id="sala-scroll"></div>
+    </div>
+  </div>
+
+  <div class="sheet-backdrop" id="sheet-backdrop"></div>
+  <div class="sheet" id="todo-notes-sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title" data-t="sheetTitleMyNotes">As minhas notas</div>
+    <div class="sheet-field"><textarea id="todo-notes-text" rows="8" data-t-placeholder="phMyNotes" placeholder="Escreve aqui as tuas notas…" style="all:unset; box-sizing:border-box; width:100%; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px; font-family:inherit; font-size:14px; color:var(--ink); resize:vertical;"></textarea></div>
+    <div class="sheet-btns">
+      <button class="btn-cancel" id="todo-notes-cancel" data-t="btnCancel">Cancelar</button>
+      <button class="btn-save" id="todo-notes-save" data-t="btnSave">Guardar</button>
+    </div>
+    <button class="visit-action-btn danger" id="todo-notes-delete" style="width:100%; margin-top:9px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h14M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2m-8 0 1 13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1l1-13"/></svg> <span data-t="btnDeleteNotes">Apagar notas</span></button>
+  </div>
+  <div class="sheet" id="todo-cat-sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title" id="tc-sheet-title" data-t="tcSheetTitleNew">Nova categoria</div>
+    <div class="sheet-field"><label data-t="labelTcLabel">Etiqueta (ex: Flores)</label><input type="text" id="tc-label" data-t-placeholder="phTcLabelExample" placeholder="Ex: Flores"></div>
+    <div class="sheet-field"><label data-t="labelTcTitle">Título</label><input type="text" id="tc-title" data-t-placeholder="phTcTitleExample" placeholder="Ex: Decoração floral"></div>
+    <div class="sheet-field"><label data-t="labelTcDesc">Descrição</label><input type="text" id="tc-desc" data-t-placeholder="phTcDescExample" placeholder="Ex: As flores para o altar e as mesas."></div>
+    <div class="sheet-btns">
+      <button class="btn-cancel" id="tc-cancel" data-t="btnCancel">Cancelar</button>
+      <button class="btn-save" id="tc-save" data-t="btnSave">Guardar</button>
+    </div>
+  </div>
+  <div class="sheet" id="hm-option-sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title" id="hm-option-sheet-title" data-t="hmOptionSheetTitleNew">Nova ideia</div>
+    <div class="sheet-field"><label data-t="labelHmName">Nome</label><input type="text" id="hm-name" data-t-placeholder="phHmNameExample" placeholder="Ex: Maldivas"></div>
+    <div class="sheet-field"><label data-t="labelHmCategory">Categoria</label><select id="hm-category"></select></div>
+    <div class="sheet-field"><label data-t="labelHmPhotoTheme">Foto (escolhe um tema)</label>
+      <div class="hm-theme-picker">
+        <button type="button" class="hm-theme-btn" data-theme="praia">${ICONS.beach}<span data-t="hmTypeBeach">Praia</span></button>
+        <button type="button" class="hm-theme-btn" data-theme="cidade">${ICONS.city}<span data-t="hmTypeCity">Cidade</span></button>
+        <button type="button" class="hm-theme-btn" data-theme="montanha">${ICONS.mountain}<span data-t="hmTypeMountain">Montanha</span></button>
+      </div>
+      <input type="hidden" id="hm-theme-value" value="">
+    </div>
+    <div class="sheet-field"><label data-t="labelHmPriceMin">Preço mínimo (€)</label><input type="number" min="0" id="hm-price-min" placeholder="0"></div>
+    <div class="sheet-field"><label data-t="labelHmPriceMax">Preço máximo (€)</label><input type="number" min="0" id="hm-price-max" placeholder="0"></div>
+    <div class="sheet-field"><label data-t="labelHmDueDate">Data limite de pagamento (opcional)</label><input type="date" id="hm-duedate"></div>
+    <div class="sheet-btns">
+      <button class="btn-cancel" id="hm-option-cancel" data-t="btnCancel">Cancelar</button>
+      <button class="btn-save" id="hm-option-save" data-t="btnSave">Guardar</button>
+    </div>
+    <button class="visit-action-btn danger" id="hm-option-delete" style="width:100%; margin-top:9px; display:none;">${ICONS.trash} <span data-t="btnDeleteIdea">Eliminar ideia</span></button>
+  </div>
+  <div class="sheet" id="delete-account-sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title" style="color:var(--rust-dark);" data-t="sheetTitleDeleteAccount">Eliminar a minha conta</div>
+    <p id="delete-account-explain" style="font-size:13px; color:var(--ink); line-height:1.6; margin:0 4px 16px;"></p>
+    <div class="sheet-field"><label data-t="labelConfirmPassword">Confirma a tua password</label><input type="password" id="delete-account-pass" data-t-placeholder="phCurrentPassword" placeholder="A tua password atual"></div>
+    <div id="delete-account-msg" class="login-msg" style="margin:6px 4px 0;"></div>
+    <div class="sheet-btns">
+      <button class="btn-cancel" id="delete-account-cancel" data-t="btnCancel">Cancelar</button>
+      <button class="btn-save" id="delete-account-confirm" style="background:var(--rust-dark);" data-t="btnDeletePermanently">Eliminar definitivamente</button>
+    </div>
+  </div>
+  <div class="sheet" id="visit-sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title" id="visit-sheet-title" data-t="visitSheetTitleNew">Nova visita</div>
+    <div class="sheet-field"><label data-t="labelStoreName">Nome da loja</label><input type="text" id="vf-loja" data-t-placeholder="phStoreNameExample" placeholder="Ex: Atelier Bela Noiva"></div>
+    <div class="sheet-field"><label data-t="labelStoreAddress">Morada</label><input type="text" id="vf-morada" data-t-placeholder="phAddressExample" placeholder="Ex: Rua das Flores, Porto"></div>
+    <div class="sheet-field"><label data-t="labelDate">Data</label><input type="date" id="vf-data"></div>
+    <div class="sheet-field"><label data-t="labelWhoWentWithYou">Quem foi convosco</label><input type="text" id="vf-convidados" data-t-placeholder="phWhoWentExample" placeholder="Ex: Mãe, Joana"></div>
+    <div class="sheet-field"><label data-t="sectionNotes">Notas</label><input type="text" id="vf-notas" data-t-placeholder="phVisitNotesExample" placeholder="O que acharam, preços…"></div>
+    <div class="sheet-btns">
+      <button class="btn-cancel" id="vf-cancel" data-t="btnCancel">Cancelar</button>
+      <button class="btn-save" id="vf-save" data-t="btnSave">Guardar</button>
+    </div>
+  </div>
+  <div class="sheet" id="guest-sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title" data-t="sheetTitleAddGuest">Adicionar convidado</div>
+    <div class="sheet-field"><label data-t="labelGuestName">Nome</label><input type="text" id="gf-name" data-t-placeholder="phGuestNameExample" placeholder="Ex: Maria Santos"></div>
+    <div class="sheet-field">
+      <label data-t="labelSide">Lado</label>
+      <div class="segmented" id="gf-side-seg">
+        <button data-gfside="noiva" class="active" data-t="sideBride">Noiva</button>
+        <button data-gfside="noivo" data-t="sideGroom">Noivo</button>
+      </div>
+    </div>
+    <div class="sheet-field" id="gf-cat-wrap">
+      <label data-t="labelHmCategory">Categoria</label>
+      <select id="gf-cat"></select>
+    </div>
+    <div class="sheet-btns">
+      <button class="btn-cancel" id="gf-cancel" data-t="btnCancel">Cancelar</button>
+      <button class="btn-save" id="gf-save" data-t="btnSave">Guardar</button>
+    </div>
+  </div>
+  <div class="sheet" id="guest-phone-sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title" data-t="sheetTitleGuestPhone">Telefone e comunicações</div>
+    <div class="sheet-field"><label data-t="labelPhoneOptional">Telefone (opcional)</label><input type="tel" id="gp-phone" data-t-placeholder="phGuestPhoneExample" placeholder="Ex: +351 912 345 678"></div>
+    <div class="sheet-toggle-row" id="gp-consent-row" style="display:none;">
+      <div class="toggle-label"><span data-t="labelWhatsappConsent">Pode receber comunicações da Weddy por WhatsApp</span><small data-t="subWhatsappConsent">Vais enviar-lhe lembretes e informações do casamento por WhatsApp. Pode deixar de receber a qualquer momento respondendo STOP.</small></div>
+      <button type="button" class="mini-toggle" id="gp-consent-toggle"><span class="knob"></span></button>
+    </div>
+    <div class="login-msg error" id="gp-error" style="display:none; margin-top:4px;"></div>
+    <div class="sheet-btns">
+      <button class="btn-cancel" id="gp-cancel" data-t="btnCancel">Cancelar</button>
+      <button class="btn-save" id="gp-save" data-t="btnSave">Guardar</button>
+    </div>
+  </div>
+  <div class="sheet" id="event-sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title" id="event-sheet-title" data-t="eventSheetTitleNew">Novo momento</div>
+    <div class="sheet-field"><label data-t="labelEventName">Nome</label><input type="text" id="ef-label" data-t-placeholder="phEventNameExample" placeholder="Ex: Cerimónia, Cocktail, Jantar…"></div>
+    <div class="sheet-field"><label data-t="labelTime">Hora</label><input type="time" id="ef-time"></div>
+    <div class="sheet-field"><label data-t="labelPlaceOptional">Local (opcional)</label><input type="text" id="ef-place" data-t-placeholder="phEventPlaceExample" placeholder="Ex: Igreja de Aldreu"></div>
+    <div class="sheet-toggle-row">
+      <div class="toggle-label"><span data-t="labelShowToGuests">Mostrar aos convidados</span><small data-t="subShowToGuests">Aparece no "Programa do dia" do link de RSVP de cada um</small></div>
+      <button type="button" class="mini-toggle" id="ef-guestvisible"><span class="knob"></span></button>
+    </div>
+    <div class="sheet-btns">
+      <button class="btn-cancel" id="ef-cancel" data-t="btnCancel">Cancelar</button>
+      <button class="btn-save" id="ef-save" data-t="btnSave">Guardar</button>
+    </div>
+  </div>
+  <div class="sheet" id="expense-sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title" data-t="sheetTitleNewExpense">Novo movimento</div>
+    <div class="sheet-field"><label data-t="labelExpenseDescription">Descrição</label><input type="text" id="sf-desc" data-t-placeholder="phExpenseDescExample" placeholder="Ex: Sinal do fotógrafo"></div>
+    <div class="sheet-field"><label data-t="labelDateRequired">Data *</label><input type="date" id="sf-date"></div>
+    <div class="sheet-field"><label data-t="labelTotalValueRequired">Valor total (€) *</label><input type="number" min="0" id="sf-value" placeholder="0"></div>
+    <div class="sheet-field"><label data-t="labelAlreadyPaidRequired">Já pago (€) *</label><input type="number" min="0" id="sf-paid" placeholder="0"></div>
+    <div class="sheet-field"><label data-t="labelPayByDateOptional">Data limite para pagar o resto (opcional)</label><input type="date" id="sf-duedate"></div>
+    <div class="sheet-field"><label data-t="labelHmCategory">Categoria</label><select id="sf-cat"></select></div>
+    <div class="sheet-field"><label data-t="labelSupplierOptional">Fornecedor (opcional)</label><select id="sf-supplier"></select></div>
+    <div class="sheet-field"><label data-t="labelPaymentMethod">Método de pagamento</label>
+      <select id="sf-method">
+        <option value="" data-t="paymentMethodNone">Não definido</option>
+        <option value="transferencia" data-t="paymentMethodTransfer">Transferência</option>
+        <option value="dinheiro" data-t="paymentMethodCash">Dinheiro</option>
+        <option value="cartao" data-t="paymentMethodCard">Cartão</option>
+        <option value="mbway">MB WAY</option>
+      </select>
+    </div>
+    <div class="sheet-btns">
+      <button class="btn-cancel" id="sf-cancel" data-t="btnCancel">Cancelar</button>
+      <button class="btn-save" id="sf-save" data-t="btnSave">Guardar</button>
+    </div>
+  </div>
+
+  <div class="sheet" id="seat-sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title" id="seat-sheet-title" data-t="seatSheetTitleDefault">Atribuir lugar</div>
+    <div class="picker-search"><svg viewBox="0 0 20 20" fill="none"><circle cx="9" cy="9" r="6" stroke="currentColor" stroke-width="1.7"/><path d="M17 17l-3.5-3.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg><input type="text" id="seat-picker-search" data-t-placeholder="phSearchGuestGeneric" placeholder="Procurar convidado"></div>
+    <div class="picker-list" id="seat-picker-list"></div>
+  </div>
+
+  <input type="file" id="insp-file-input" accept="image/*" multiple style="display:none;">
+  <input type="file" id="dress-insp-file-input" accept="image/*" multiple style="display:none;">
+  <input type="file" id="def-reportar-photo-input" accept="image/*" multiple style="display:none;">
+
+  <div class="save-toast" id="save-toast"></div>
+  <div class="img-lightbox" id="img-lightbox">
+    <button class="img-lightbox-close" id="img-lightbox-close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 5l14 14M19 5 5 19"/></svg> <span data-t="btnClose">Fechar</span></button>
+    <img id="img-lightbox-img" src="" alt="">
+  </div>
+
+  <!-- Pré-visualização de documentos PDF anexados (Lua de mel / contratos de
+       fornecedores). Antes, clicar num anexo só fazia window.open(url) —
+       abria um separador novo sem nenhuma forma óbvia de voltar (Set 2026).
+       Reaproveita o mesmo padrão visual do img-lightbox acima. -->
+  <div class="img-lightbox" id="doc-lightbox">
+    <button class="img-lightbox-close" id="doc-lightbox-close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 5l14 14M19 5 5 19"/></svg> <span data-t="btnClose">Fechar</span></button>
+    <!-- Bug encontrado ao vivo (Set 2026): um <iframe src="urlDoPdf"> deixa o
+         motor de PDF nativo do telemóvel decidir o zoom inicial — no Safari
+         iOS isso mostrava só um canto ampliado da 1ª página, cortado, sem
+         dar para ver as restantes. Passa a desenhar-se o PDF nós próprios,
+         página a página, com o pdf.js que a app já usa para ler texto dos
+         PDFs — cada página em tamanho fixo (ajustada à largura do ecrã),
+         empilhadas verticalmente, com scroll normal para ver todas. -->
+    <div id="doc-lightbox-pages" style="width:100%; height:100%; overflow:auto; -webkit-overflow-scrolling:touch; display:flex; flex-direction:column; align-items:center; gap:14px; padding:8px 0 30px;"></div>
+  </div>
+
+  <div class="tabbar" id="tabbar"></div>
+
+  <!-- Botão redondo do Assistente Weddy: fica fora dos separadores/ecrãs de
+       propósito, para se manter sempre visível e fixo no mesmo sítio,
+       acompanhando o scroll, seja qual for o ecrã em que se está. O seu
+       conteúdo (ícone) e estado (bloqueado/desbloqueado) são atualizados
+       depois de cada render(), não é reconstruído com o resto da app. -->
+  <button class="chat-fab" id="chat-fab" aria-label="Assistente Weddy" hidden></button>
+
+  <!-- Janela flutuante do Assistente Weddy: um cartão pequeno por cima do
+       ecrã atual (não uma página inteira) — dá para ver o resto da app por
+       trás. Mostra o chat quando há subscrição ativa, ou o convite para
+       subscrever quando não há. -->
+  <div class="chat-panel-backdrop" id="chat-panel-backdrop" hidden></div>
+  <div class="chat-panel" id="chat-panel" hidden>
+    <div class="chat-panel-header">
+      <span>Assistente Weddy</span>
+      <button class="chat-panel-close" id="chat-panel-close" aria-label="Fechar">✕</button>
+    </div>
+    <div class="chat-panel-body" id="chat-panel-body"></div>
+  </div>
+
+  <div class="login-screen" id="login-screen">
+    <div class="login-lang-switch" id="login-lang-switch">
+      <button type="button" data-loginlang="pt">PT</button>
+      <button type="button" data-loginlang="en">EN</button>
+    </div>
+    <div class="login-inner" id="login-inner">
+
+      <div class="login-tag" data-t="loginLoading">A carregar…</div>
+    </div>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+<script>
+/* ============================================================
+   EMAILJS — "Reporta um problema"
+   Substitui os 3 valores abaixo pelos que a tua conta EmailJS te dá
+   (Account > General para a Public Key; Email Services para o
+   Service ID; Email Templates para o Template ID).
+============================================================ */
+const EMAILJS_PUBLIC_KEY = 'tOxdZX4jWAFzFU97o';
+const EMAILJS_SERVICE_ID = 'service_5v31laj';
+const EMAILJS_TEMPLATE_ID = 'template_736xmlw';
+if(typeof emailjs !== 'undefined'){
+  emailjs.init({ publicKey: EMAILJS_PUBLIC_KEY });
+}
+/* ============================================================
+   CONSENTIMENTO — versões dos Termos e Condições e da Política de
+   Privacidade (Set 2026, pedido da Rita: versionamento em vez de um
+   simples booleano "termsAccepted:true"). Sobe uma destas datas sempre
+   que o TEXTO (ver termsXxx/privacyXxx em APP_I18N) mudar de forma
+   relevante — isso é o que faz aparecer o ecrã "Antes de continuares" a
+   quem já tinha aceitado uma versão anterior (ver findOrCreateFlow).
+   Formato livre (aqui: AAAA-MM-DD), só precisa de mudar para já não
+   bater certo com o que ficou gravado em weddings/{weddingId}.consent.
+============================================================ */
+const CURRENT_TERMS_VERSION = '2026-09-24';
+const CURRENT_PRIVACY_VERSION = '2026-09-24';
+</script>
+<script>
+(function(){
+  // Bloqueia a orientação em vertical quando o browser/PWA o permite (sobretudo
+  // Android em modo instalado). Em navegadores que não suportam a API (ex: iOS
+  // Safari), o overlay CSS "roda o telemóvel" acima garante na mesma que a app
+  // nunca é usada na horizontal.
+  function tryLockPortrait(){
+    try{
+      if(screen.orientation && screen.orientation.lock){
+        screen.orientation.lock('portrait').catch(()=>{});
+      }
+    }catch(err){}
+  }
+  tryLockPortrait();
+  document.addEventListener('fullscreenchange', tryLockPortrait);
+  window.addEventListener('load', tryLockPortrait);
+
+  // A altura da app é controlada apenas por CSS (100dvh) — deixámos de usar
+  // window.innerHeight em JS porque, com apple-mobile-web-app-status-bar-style
+  // "black-translucent", o iOS subtrai por engano a altura da barra de estado
+  // ao innerHeight mesmo estando ela sobreposta ao conteúdo, o que deixava a
+  // app sistematicamente mais curta do que o ecrã real (espaço em branco/preto
+  // no fundo). O 100dvh não sofre deste problema.
+
+  // Esconde a tabbar enquanto o teclado está aberto (em vez de a deixar
+  // flutuar por cima do teclado) e volta a mostrá-la ao fechar.
+  function isTypingField(el){
+    return el && (el.tagName==='INPUT' || el.tagName==='TEXTAREA' || el.tagName==='SELECT');
+  }
+  document.addEventListener('input', e=>{
+    const el = e.target;
+    if(el.tagName!=='INPUT' || el.type!=='number') return;
+    if(el.value===''||el.value==='-') return;
+    let v = el.value;
+    const neg = v.startsWith('-');
+    if(neg) v = v.slice(1);
+    let [intPart, decPart] = v.split('.');
+    let changed = false;
+    if(intPart && intPart.length>9){ intPart = intPart.slice(0,9); changed = true; }
+    if(decPart && decPart.length>2){ decPart = decPart.slice(0,2); changed = true; }
+    if(changed){
+      el.value = (neg?'-':'') + intPart + (decPart!==undefined ? '.'+decPart : (v.includes('.')?'.':''));
+    }
+  }, true);
+  document.addEventListener('focusin', e=>{
+    if(!isTypingField(e.target)) return;
+    const tabbar = document.getElementById('tabbar');
+    if(tabbar) tabbar.style.display = 'none';
+  });
+  document.addEventListener('focusout', e=>{
+    if(!isTypingField(e.target)) return;
+    setTimeout(()=>{
+      if(isTypingField(document.activeElement)) return;
+      const tabbar = document.getElementById('tabbar');
+      if(tabbar) tabbar.style.display = '';
+    }, 50);
+  });
+
+  // Achado ao vivo da Fase 4 (Rita): no chat do Assistente, ao tocar no
+  // campo de texto, o teclado sobe e o balão do chat (#chat-panel) sobe
+  // com ele, mas fica "muito cortado" — porque #chat-panel é posicionado
+  // com "bottom: calc(78px + ... + 62px)" e "max-height: min(72vh, 560px)"
+  // fixos, pensados para quando NÃO há teclado nenhum. Em mobile, quando o
+  // teclado ocupa uma fatia grande do ecrã, esse "bottom" fixo empurra o
+  // painel para cima de mais do que precisa, e o "max-height" continua a
+  // ser calculado sobre o ecrã inteiro (sem descontar o teclado), por isso
+  // o topo do chat fica escondido por trás do próprio teclado/barra de
+  // endereço. Corrigido com a Visual Viewport API (suportada em iOS Safari
+  // e Android Chrome, a forma padrão de saber quanto espaço REAL fica
+  // visível quando o teclado está aberto): só entra em ação quando o
+  // teclado ocupa mais de 60px (para nunca alterar o layout normal, sem
+  // teclado), e volta ao CSS original (estilos inline removidos) assim
+  // que o teclado fecha.
+  // Rita continuou a ver o balão a "subir imenso" mesmo depois da 1ª
+  // correção (Fase 4): essa versão calculava um "bottom" a partir da altura
+  // da JANELA INTEIRA ("window.innerHeight"), que em Safari/iOS pode oscilar
+  // ligeiramente por si só quando o teclado abre (barra de sugestões,
+  // autocorreção a aparecer/desaparecer), fazendo o cálculo saltar a cada
+  // pequena oscilação. Passa agora a ancorar-se diretamente ao retângulo que
+  // o VisualViewport diz estar mesmo visível (offsetTop + height) — a forma
+  // recomendada para isto — em vez de inferir esse valor a partir da janela
+  // inteira menos o teclado. Também já não confia num único disparo do
+  // evento: usa requestAnimationFrame para agrupar disparos seguidos
+  // (resize+scroll costumam disparar quase ao mesmo tempo) numa só
+  // atualização.
+  // Bug encontrado ao vivo outra vez (Set 2026, depois da versão acima):
+  // ao ancorar o balão pelo TOPO e esticar o "max-height" para preencher
+  // (quase) todo o espaço visível acima do teclado, o balão passou a
+  // ocupar praticamente o ecrã inteiro (do topo até mesmo por cima do
+  // teclado) em vez de manter o tamanho compacto de sempre — daí parecer
+  // "muito alto". A causa era mesmo essa esticada de "max-height" a seguir
+  // ao espaço disponível, não a posição em si. Correção: o balão MANTÉM
+  // sempre o tamanho normal (o "max-height" do CSS, nunca alterado por
+  // aqui) — só o "bottom" é que sobe o suficiente para não ficar escondido
+  // atrás do teclado, exatamente como fazia a primeira versão desta
+  // correção, mas ainda ancorado ao VisualViewport (não à janela inteira)
+  // para não saltar com pequenas oscilações do teclado.
+  let kbRaf = null;
+  function adjustChatPanelForKeyboard(){
+    if(kbRaf) cancelAnimationFrame(kbRaf);
+    kbRaf = requestAnimationFrame(()=>{
+      kbRaf = null;
+      const panel = document.getElementById('chat-panel');
+      if(!panel || panel.hidden || !window.visualViewport) return;
+      const vv = window.visualViewport;
+      const keyboardInset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+      panel.style.top = '';
+      panel.style.maxHeight = '';
+      if(keyboardInset > 60){
+        panel.style.bottom = (keyboardInset + 8) + 'px';
+      } else {
+        panel.style.bottom = '';
+      }
+    });
+  }
+  if(window.visualViewport){
+    window.visualViewport.addEventListener('resize', adjustChatPanelForKeyboard);
+    window.visualViewport.addEventListener('scroll', adjustChatPanelForKeyboard);
+  }
+  document.addEventListener('focusin', e=>{
+    if(e.target && e.target.id==='assist-chat-input') setTimeout(adjustChatPanelForKeyboard, 60);
+  });
+  document.addEventListener('focusout', e=>{
+    if(e.target && e.target.id==='assist-chat-input') setTimeout(adjustChatPanelForKeyboard, 60);
+  });
+
+  // Tocar fora de um campo (fora de qualquer input/textarea/select e fora dos botões
+  // que os controlam) fecha o teclado — tira o foco do campo ativo.
+  document.addEventListener('pointerdown', e=>{
+    if(!isTypingField(document.activeElement)) return;
+    if(e.target===document.activeElement) return;
+    if(isTypingField(e.target)) return;
+    if(e.target.closest('label,button,select,.sheet-handle')) return;
+    document.activeElement.blur();
+  }, true);
+
+})();
+</script>
+<script>
+(function(){
+
+/* ============================================================
+   FIREBASE — configuração
+   ⚠️ ESTE FICHEIRO É O CLONE DE TESTES — aponta de propósito para o
+   projeto weddy-premium-teste, NUNCA para o projeto real (weddy-app-bd12f).
+   Nunca copies esta configuração para o index.html real, nem o inverso.
+============================================================ */
+const firebaseConfig = {
+  apiKey: "AIzaSyDkRmmtgKXuM9pUq2sT3AlYTT2-VzgvLIU",
+  authDomain: "weddy-premium-teste.firebaseapp.com",
+  projectId: "weddy-premium-teste",
+  storageBucket: "weddy-premium-teste.firebasestorage.app",
+  messagingSenderId: "319051198074",
+  appId: "1:319051198074:web:f4a3f7ed8d8a0dc4c015c3"
+};
+const FIREBASE_READY = !firebaseConfig.apiKey.startsWith('COLOCA_AQUI');
+// Região onde a Cloud Function de classificação por IA (Fase 3B) é
+// implantada — tem de bater certo com a região usada no deploy
+// (functions-deliverable/index.js), senão a chamada falha.
+const WEDDY_FUNCTIONS_REGION = 'europe-west1';
+let auth = null, db = null, storage = null, cloudFunctions = null;
+if(FIREBASE_READY){
+  firebase.initializeApp(firebaseConfig);
+  auth = firebase.auth();
+  db = firebase.firestore();
+  storage = firebase.storage();
+  cloudFunctions = (typeof firebase.functions==='function') ? firebase.app().functions(WEDDY_FUNCTIONS_REGION) : null;
+}
+
+// Fase 9.1 — Google Calendar. O browser volta aqui depois do OAuth (a
+// função googleCalendarOAuthCallback faz um redirect normal, nunca com
+// tokens no URL — só este sinalizador). Lemos e limpamos o URL já aqui,
+// mesmo antes de saber se há sessão, para nunca deixar isto na barra de
+// endereços nem repetir a mensagem se a pessoa atualizar a página depois.
+let pendingGoogleCalendarReturn = null;
+(function(){
+  const params = new URLSearchParams(window.location.search);
+  const status = params.get('googleCalendar');
+  if(status){
+    pendingGoogleCalendarReturn = status; // 'success' | 'cancelled' | 'error'
+    params.delete('googleCalendar');
+    const clean = window.location.pathname + (params.toString()? '?'+params.toString():'') + window.location.hash;
+    window.history.replaceState({}, '', clean);
+  }
+})();
+// ============================================================
+// AI SERVICE (Fase 3B.1) — única porta de entrada para qualquer chamada a
+// um modelo de IA real em toda a app. Não sabe qual fornecedor está por
+// trás (OpenAI, Gemini, ou outro) — fala sempre com a nossa própria Cloud Function
+// (classifyWeddyIntent), que é quem de facto guarda a chave da API e chama
+// o modelo. Isto é só um CLASSIFICADOR: nunca devolve a resposta final ao
+// utilizador, só a intenção — quem responde continua a ser sempre
+// WeddyActions + os dados reais deste casamento (ver respondeAssistente/
+// respondeConcierge), nunca o modelo de IA a inventar ou calcular nada.
+// Se um dia trocarmos de fornecedor, ou tivermos mais do que uma chamada
+// de IA na app, é só este bloco que muda.
+// ============================================================
+const AIService = {
+  async classify(question, role){
+    if(!cloudFunctions) return { intent:'UNKNOWN' };
+    try{
+      const call = cloudFunctions.httpsCallable('classifyWeddyIntent');
+      // Não envia weddingId: a função deriva sempre o casamento a partir
+      // da sessão Firebase Auth (nunca do que o cliente diga) — ver
+      // resolveWeddingId() na Cloud Function (Fase 3B.5).
+      const res = await call({ question, role });
+      const data = res && res.data;
+      return (data && typeof data.intent === 'string') ? data : { intent:'UNKNOWN' };
+    }catch(err){
+      console.error('Weddy AIService.classify error:', err.code, err.message);
+      return { intent:'UNKNOWN' };
+    }
+  },
+  // Fase 8.1 — AI Seating. Nunca envia weddingId (a Cloud Function deriva-o
+  // sempre da sessão autenticada) nem decide sozinha onde ninguém se
+  // senta — só pede uma proposta já calculada por um motor determinístico
+  // do lado do servidor (ver generateSeatingProposal em
+  // functions-deliverable/index.js). "constraints" já vem com guestIds
+  // (resolvidos aqui, pelo seletor de convidados da própria app);
+  // "freeText" é opcional, para quem preferir escrever por palavras — é a
+  // Cloud Function que interpreta esse texto, nunca o cliente.
+  async generateSeatingProposal(constraints, freeText){
+    if(!cloudFunctions) return { ok:false, reason:'NO_BACKEND', message:ta('svcNoConnectionAI') };
+    try{
+      const call = cloudFunctions.httpsCallable('generateSeatingProposal');
+      const res = await call({ constraints, freeText: freeText||'' });
+      return (res && res.data) || { ok:false, reason:'EMPTY', message:ta('svcEmptyResponse') };
+    }catch(err){
+      console.error('Weddy AIService.generateSeatingProposal error:', err.code, err.message);
+      const message = err && err.code==='resource-exhausted'
+        ? ta('svcAIRateLimited')
+        : ta('svcAIGenericError');
+      return { ok:false, reason: err && err.code, message };
+    }
+  }
+};
+
+// ============================================================
+// CALENDAR SERVICE (Fase 9.1) — única porta de entrada para a integração
+// Google Calendar. Nunca fala diretamente com a Google Calendar API nem
+// guarda tokens aqui — só chama as Cloud Functions (que fazem tudo isso
+// do lado do servidor, ver functions-deliverable/index.js). Se um dia
+// suportarmos outro calendário (Apple/Outlook), é só este objeto que
+// ganha um "provider" — o resto da app continua a chamar CalendarService,
+// nunca a Cloud Function diretamente.
+// ============================================================
+const CalendarService = {
+  async startOAuth(){
+    if(!cloudFunctions) return { ok:false, message:ta('svcNoConnection') };
+    try{
+      const call = cloudFunctions.httpsCallable('googleCalendarStartOAuth');
+      const res = await call({});
+      const url = res && res.data && res.data.authorizationUrl;
+      return url ? { ok:true, authorizationUrl:url } : { ok:false, message:ta('gcalErrNoAuthUrl') };
+    }catch(err){
+      console.error('Weddy CalendarService.startOAuth error:', err.code, err.message);
+      return { ok:false, code: err && err.code, message: googleCalendarErrorMessage(err) };
+    }
+  },
+  async listCalendars(){
+    if(!cloudFunctions) return { ok:false, message:ta('svcNoConnection') };
+    try{
+      const call = cloudFunctions.httpsCallable('googleCalendarListCalendars');
+      const res = await call({});
+      return { ok:true, calendars:(res && res.data && res.data.calendars) || [] };
+    }catch(err){
+      console.error('Weddy CalendarService.listCalendars error:', err.code, err.message);
+      return { ok:false, code: err && err.code, message: googleCalendarErrorMessage(err) };
+    }
+  },
+  async connectCalendar(calendarId){
+    if(!cloudFunctions) return { ok:false, message:ta('svcNoConnection') };
+    try{
+      const call = cloudFunctions.httpsCallable('googleCalendarConnectCalendar');
+      await call({ calendarId });
+      return { ok:true };
+    }catch(err){
+      console.error('Weddy CalendarService.connectCalendar error:', err.code, err.message);
+      return { ok:false, code: err && err.code, message: googleCalendarErrorMessage(err) };
+    }
+  },
+  async sync(){
+    if(!cloudFunctions) return { ok:false, message:ta('svcNoConnection') };
+    try{
+      const call = cloudFunctions.httpsCallable('googleCalendarSync');
+      await call({});
+      return { ok:true };
+    }catch(err){
+      console.error('Weddy CalendarService.sync error:', err.code, err.message);
+      return { ok:false, code: err && err.code, message: googleCalendarErrorMessage(err) };
+    }
+  },
+  async disconnect(){
+    if(!cloudFunctions) return { ok:false, message:ta('svcNoConnection') };
+    try{
+      const call = cloudFunctions.httpsCallable('googleCalendarDisconnect');
+      await call({});
+      return { ok:true };
+    }catch(err){
+      console.error('Weddy CalendarService.disconnect error:', err.code, err.message);
+      return { ok:false, code: err && err.code, message: googleCalendarErrorMessage(err) };
+    }
+  }
+};
+// Fase 9.2 (parte 1) — telefone + consentimento do convidado. Nunca
+// escrito diretamente no Firestore como o resto da lista de convidados
+// (ver comentário em functions-deliverable/index.js, updateGuestPhone):
+// só esta Cloud Function valida o E.164, garante que o número é único em
+// toda a Weddy e mantém o índice invertido sincronizado.
+const GuestCommsService = {
+  async updateGuestPhone(guestId, phone, optedIn){
+    if(!cloudFunctions) return { ok:false, message:ta('svcNoConnection') };
+    try{
+      const call = cloudFunctions.httpsCallable('updateGuestPhone');
+      const payload = { guestId, phone };
+      if(typeof optedIn === 'boolean') payload.optedIn = optedIn;
+      const res = await call(payload);
+      return { ok:true, phone: res && res.data && res.data.phone };
+    }catch(err){
+      console.error('Weddy GuestCommsService.updateGuestPhone error:', err.code, err.message);
+      return { ok:false, code: err && err.code, message: guestPhoneErrorMessage(err) };
+    }
+  }
+};
+function guestPhoneErrorMessage(err){
+  const code = err && err.code;
+  if(code==='already-exists') return ta('gpErrAlreadyExists');
+  if(code==='invalid-argument') return ta('gpErrInvalidArgument');
+  if(code==='not-found') return ta('gpErrNotFound');
+  return ta('gpErrGeneric');
+}
+// Mensagens de erro amigáveis (spec §34) — nunca mostra err.message cru
+// (pode vir em inglês/técnico do lado do Google).
+function googleCalendarErrorMessage(err){
+  const code = err && err.code;
+  const msg = (err && err.message) || '';
+  if(code==='resource-exhausted' && msg==='SYNC_TOO_SOON') return ta('gcalErrSyncTooSoon');
+  if(code==='already-exists' && msg==='SYNC_ALREADY_RUNNING') return ta('gcalErrSyncRunning');
+  if(code==='failed-precondition' && msg==='REAUTH_REQUIRED') return ta('gcalErrReauth');
+  if(code==='failed-precondition' && msg==='NOT_CONNECTED') return ta('gcalErrNotConnected');
+  if(code==='permission-denied') return ta('gcalErrPermissionDenied');
+  if(code==='resource-exhausted') return ta('gcalErrRateLimited');
+  if(code==='unauthenticated') return ta('gcalErrSessionExpired');
+  return ta('gcalErrGeneric');
+}
+
+// Fase 9.2 — sincronização automática silenciosa. Pedido explícito: "se
+// eu crio um prazo, gostava de o ver logo no calendário" — sem ter de ir
+// clicar sempre em "Sincronizar agora". Chamado a seguir a QUALQUER
+// gravação bem sucedida no Firestore (ver pushRemote), com um pequeno
+// tempo de calma próprio (para não disparar uma chamada à Cloud Function
+// a cada gravação em sequência, ex.: várias teclas seguidas). É de
+// propósito silencioso: nunca mostra erro ao utilizador (ex.: se cair no
+// limite de 30s entre sincronizações do lado do servidor, ou se não
+// houver internet) — para isso continua a existir o botão manual
+// "Sincronizar agora", que esse sim mostra o resultado.
+let googleCalendarAutoSyncTimer = null;
+function scheduleGoogleCalendarAutoSync(){
+  if(!hasActiveSubscription()) return;
+  if(!googleCalendarIntegration || !googleCalendarIntegration.connected || !googleCalendarIntegration.calendarId) return;
+  if(googleCalendarAutoSyncTimer) clearTimeout(googleCalendarAutoSyncTimer);
+  googleCalendarAutoSyncTimer = setTimeout(()=>{
+    googleCalendarAutoSyncTimer = null;
+    CalendarService.sync().then(res=>{
+      // Sucesso ou falha (ex.: SYNC_TOO_SOON), atualiza sempre o estado
+      // local em silêncio — assim, quando a pessoa abrir Definições >
+      // Google Calendar, já vê a hora certa da última sincronização, sem
+      // ter de lá voltar a clicar em nada.
+      loadGoogleCalendarIntegration();
+    });
+  }, 3000);
+}
+
+if(typeof pdfjsLib !== 'undefined'){
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+}
+let currentWeddingId = null;
+let currentWeddingOwners = [];
+let currentWeddingCreator = null;
+let currentLastLogins = {};
+let currentUidByEmail = {};
+let currentSubscription = null;
+// Fase Histórico (Set 2026): momento do último backup AUTOMÁTICO (nunca dos
+// manuais), vindo de data.lastAutoSnapshotAt — usado só por
+// maybeCreateAutoSnapshot() para decidir se já passou tempo suficiente
+// desde o último para criar mais um (ver "Histórico do casamento").
+let currentLastAutoSnapshotAt = null;
+// Weddy Premium (chatbot + RSVP) só fica disponível a quem tiver
+// subscrição ativa — este campo vem do documento do casamento
+// (data.subscription), capturado em attachFirestoreSync().
+//
+// Pedido direto da Rita (Fase 4): a subscrição só deve durar 24 meses a
+// partir do INÍCIO dela, para não ficar reutilizável indefinidamente entre
+// pessoas diferentes (comprar uma vez e "passar a conta" para sempre). Como
+// ainda não há um Cloud Scheduler a desativar subscrições automaticamente
+// ao fim desse prazo, o limite é aplicado aqui, no próprio cliente: mesmo
+// que o Firestore continue a dizer "active:true", se já passaram mais de 24
+// meses desde "startedAt", a subscrição deixa de contar como ativa. Contas
+// de teste/antigas sem "startedAt" (criadas antes desta correção) NÃO são
+// retroativamente bloqueadas — ficam válidas como sempre estiveram, para
+// não quebrar contas que já tinham acesso.
+const SUBSCRIPTION_MAX_MONTHS = 24;
+function hasActiveSubscription(){
+  if(!currentSubscription || !currentSubscription.active) return false;
+  const startedAt = currentSubscription.startedAt;
+  if(!startedAt) return true;
+  const started = new Date(startedAt);
+  if(isNaN(started.getTime())) return true;
+  const expiry = new Date(started);
+  expiry.setMonth(expiry.getMonth() + SUBSCRIPTION_MAX_MONTHS);
+  return new Date() < expiry;
+}
+// Ponto único que monta o payload de ativação — usado pelos 2 botões
+// "Subscrever" (janela do Assistente e página de upsell). "startedAt" só é
+// definido a primeira vez (nunca é reposto num cancelar+reativar), para o
+// limite de 24 meses acima ser mesmo um limite, não um relógio que qualquer
+// pessoa pode reiniciar à vontade.
+function buildSubscriptionActivatePayload(){
+  const existingStartedAt = (currentSubscription && currentSubscription.startedAt) || new Date().toISOString();
+  return {
+    active: true,
+    plan: 'premium-mensal-simulado',
+    startedAt: existingStartedAt,
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+  };
+}
+const WEDDINGS = () => db.collection('weddings');
+const CURRENT_DOC = () => db.collection('weddings').doc(currentWeddingId);
+// Coleção separada dos convites RSVP — nunca contém o casamento inteiro,
+// só o que é estritamente necessário para cada convidado responder ao
+// seu próprio convite (ver comentário completo nas regras do Firestore).
+const GUESTS = () => db.collection('guests');
+const MEMORIES = () => db.collection('memories');
+// Fase Feedback (Set 2026, pedido da Rita): coleção separada dos relatórios
+// de bug/feedback enviados de dentro da app ("Reporta um problema"). Cada
+// relatório é escrito uma única vez pelo cliente (create-only — ver
+// firestore.rules.completas.txt) com o contexto capturado automaticamente
+// (página, weddingId, utilizador, dispositivo, hora) e, opcionalmente, até
+// 5 capturas de ecrã guardadas no Storage (nunca no próprio documento, para
+// não aproximar o limite de ~1MiB do Firestore). Não há ainda nenhum ecrã
+// para os REVER dentro da app — por agora ficam só na consola do Firebase.
+const FEEDBACK = () => db.collection('feedback');
+// Fase Histórico (Set 2026, pedido da Rita): "Histórico do casamento" —
+// cópias de segurança do estado completo do casamento (settings + json,
+// exatamente os mesmos dois campos já gravados no documento principal),
+// automáticas (no máximo uma por dia) ou manuais (criadas pela própria
+// pessoa, com um rótulo à escolha, ex.: "Antes de reorganizar mesas").
+// Subcoleção do próprio casamento — nunca uma coleção à parte — porque só
+// faz sentido existir enquanto o casamento existir, e assim as regras de
+// posse já existentes em "weddings/{weddingId}" cobrem-na automaticamente
+// (ver firestore.rules.completas.txt).
+const SNAPSHOTS = () => CURRENT_DOC().collection('snapshots');
+const SNAPSHOT_AUTO_KEEP = 15;
+
+
+/* ============================================================
+   ICONS (estilo SF Symbols, outline)
+============================================================ */
+// Logótipo oficial "G" multicolor da Google — fora do objeto ICONS porque
+// usa fill próprio por caminho (não currentColor), ao contrário de todos os
+// outros ícones aqui, que são monocromáticos e herdam a cor do texto.
+const GOOGLE_G_ICON = '<svg viewBox="0 0 18 18" width="18" height="18"><path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.9c1.7-1.57 2.7-3.88 2.7-6.62z"/><path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.9-2.26c-.8.54-1.84.86-3.06.86-2.35 0-4.34-1.59-5.05-3.72H.96v2.33A9 9 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.95 10.7A5.4 5.4 0 0 1 3.67 9c0-.59.1-1.17.28-1.7V4.97H.96A9 9 0 0 0 0 9c0 1.45.35 2.83.96 4.03l2.99-2.33z"/><path fill="#EA4335" d="M9 3.58c1.32 0 2.51.45 3.44 1.35l2.58-2.58C13.46.89 11.43 0 9 0A9 9 0 0 0 .96 4.97l2.99 2.33C4.66 5.17 6.65 3.58 9 3.58z"/></svg>';
+const ICONS = {
+  todo:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3.5" width="16" height="17" rx="2.3"/><path d="M8 8.3l1.3 1.3L11.5 7.4M8 13.6l1.3 1.3 2.2-2.2"/><path d="M14 8.3h5.5M14 13.6h5.5M8 18.2h11.5"/></svg>',
+  honeymoon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 16.5 12 5.5l9.5 11"/><path d="M6.3 12.1 12 5.5l5.7 6.6"/><path d="M4.4 14.4h15.2M8 20.5c1.2-1.3 2.7-1.3 4-.2 1.3 1.1 2.8 1.1 4-.2"/></svg>',
+  botanical:'<svg viewBox="0 0 64 90" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"><path d="M8 86 40 30"/><path d="M22 62 14 54M26 54 20 45M31 46 27 37M35 39 40 30"/><g fill="currentColor" stroke="none"><circle cx="40" cy="18" r="2.6"/><circle cx="47" cy="22" r="2.6"/><circle cx="49" cy="15" r="2.6"/><circle cx="43" cy="11" r="2.6"/><circle cx="53" cy="10" r="2.6"/><circle cx="45" cy="17" r="1.5" opacity=".6"/><circle cx="12" cy="52" r="2" opacity=".7"/><circle cx="24" cy="44" r="1.7" opacity=".7"/><circle cx="33" cy="32" r="1.7" opacity=".7"/></g></svg>',
+  calendar:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="16" rx="2.5"/><path d="M8 3v4M16 3v4M3.5 10h17"/></svg>',
+  tag:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11.5 3.5h6a2 2 0 0 1 2 2v6L10 21 3.5 14.5 12.9 5.1Z" transform="translate(-1,0)"/><circle cx="15.2" cy="8.8" r="1.1" fill="currentColor" stroke="none"/></svg>',
+  filter: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16M7 12h10M10 19h4"/></svg>',
+  /* --- chips (preenchidos, estilo ícone da app Definições) --- */
+  home: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3.2 2.5 11h2.3v8.3A1.2 1.2 0 0 0 6 20.5h4.1v-5.8h3.8v5.8H18a1.2 1.2 0 0 0 1.2-1.2V11h2.3z"/></svg>',
+  budget: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="9.6" opacity=".28"/><text x="12" y="16.3" font-size="13.5" font-weight="700" text-anchor="middle" font-family="Georgia,serif">€</text></svg>',
+  guests: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="7.6" r="3.3"/><circle cx="17.1" cy="9" r="2.55" opacity=".7"/><path d="M2.3 20c.5-4 3.2-6.2 6.7-6.2s6.2 2.2 6.7 6.2a.85.85 0 0 1-.85.95H3.15A.85.85 0 0 1 2.3 20Z"/><path d="M16.2 13.9c2.8.35 4.9 2.15 5.4 5.4.1.65-.4 1.25-1.05 1.25h-2.9c.15-2.55-.4-4.7-1.45-6.65Z" opacity=".7"/></svg>',
+  expenses: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M3.2 3.8h1.9l.55 2.15h13.7a1 1 0 0 1 .97 1.25l-1.55 6.1a1.6 1.6 0 0 1-1.55 1.2H8.3a1.6 1.6 0 0 1-1.56-1.25L4.4 4.9H3.2Z" opacity=".55"/><circle cx="9.3" cy="19.3" r="1.55"/><circle cx="17.6" cy="19.3" r="1.55"/></svg>',
+  tables: '<svg viewBox="0 0 24 24" fill="currentColor"><ellipse cx="12" cy="7.2" rx="8" ry="3.1"/><path d="M4 7.2v3.9c0 1.7 3.6 3.1 8 3.1s8-1.4 8-3.1V7.2c0 1.7-3.6 3.1-8 3.1s-8-1.4-8-3.1Z" opacity=".55"/><rect x="11.1" y="14" width="1.8" height="7.4" rx=".9"/><rect x="7.6" y="20.2" width="8.8" height="1.6" rx=".8"/></svg>',
+  church:'<svg viewBox="0 0 24 24" fill="currentColor"><rect x="11.15" y="1.6" width="1.7" height="4" rx=".5"/><rect x="9.7" y="2.9" width="4.6" height="1.4" rx=".5"/><path d="M12 5.4 20.3 11v9.6a.9.9 0 0 1-.9.9h-3.9v-6.1a3.5 3.5 0 0 0-7 0v6.1H4.6a.9.9 0 0 1-.9-.9V11Z"/><rect x="10.35" y="14.8" width="3.3" height="6.7" rx="1.6" fill="var(--cream)"/></svg>',
+  musicnote:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 17.5V5.5l10-2v12"/><circle cx="6.5" cy="17.5" r="2.5"/><circle cx="16.5" cy="15.5" r="2.5"/></svg>',
+  docnote:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5h9l3 3v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-16a1 1 0 0 1 1-1Z"/><path d="M14.5 3.5v3.5H18"/><path d="M8 12.5h8M8 16h5.5"/></svg>',
+  beach:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="17" cy="7" r="2.6"/><path d="M2.5 20c3-4 6-6 9.5-6s6.5 2 9.5 6"/><path d="M2 15.8c2.7-1 5.3-1 8 0M14 15.8c2.7-1 5.3-1 8 0"/></svg>',
+  city:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20.5V9l5-3.5V20.5M9 20.5V5.5L15 3v17.5M15 20.5V8l5 2.5v10"/><path d="M2 20.5h20"/><path d="M6.3 10h1M6.3 13.3h1M6.3 16.6h1M11.5 8h1.2M11.5 11.3h1.2M11.5 14.6h1.2M11.5 17.9h1.2M17 12h1M17 15.3h1"/></svg>',
+  mountain:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 19 9 7.5 13 14l2-2.8L21.5 19Z"/><path d="M7.3 10.2 9 7.5l1.1 1.9"/></svg>',
+  ring:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.3 13.7 6l-1.7 1.4L10.3 6Z"/><circle cx="7.7" cy="14.6" r="4.55" opacity=".55"/><circle cx="7.7" cy="14.6" r="2.5" fill="var(--cream)"/><circle cx="16.1" cy="14.6" r="4.55"/><circle cx="16.1" cy="14.6" r="2.5" fill="var(--cream)"/></svg>',
+  rings:'<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="8.3" cy="14.8" r="5" opacity=".55"/><circle cx="8.3" cy="14.8" r="2.85" fill="var(--cream)"/><circle cx="15.4" cy="13.3" r="5" /><circle cx="15.4" cy="13.3" r="2.85" fill="var(--cream)"/><path d="M4.6 7.4c1.6-2 4.4-2.3 6.2-.8-2.1.1-3.6 1-4.4 2.7-.8-.5-1.4-1.1-1.8-1.9Z" opacity=".85"/></svg>',
+  cocktail:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M4.3 4.3h15.4c.4 0 .6.4.4.7l-6.6 7.6v4.7h3v1.9H7.5v-1.9h3v-4.7L3.9 5c-.3-.3-.1-.7.4-.7Z"/><circle cx="9.6" cy="7.6" r="1" fill="var(--cream)"/></svg>',
+  cake:'<svg viewBox="0 0 24 24" fill="currentColor"><rect x="5.3" y="14.3" width="13.4" height="5.9" rx="1.2"/><rect x="7.7" y="8.6" width="8.6" height="5.2" rx="1" opacity=".8"/><rect x="11.35" y="6.6" width="1.3" height="2.2"/><circle cx="12" cy="5.9" r="1.15"/></svg>',
+  placesetting:'<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12.3" r="6.6" opacity=".45"/><circle cx="12" cy="12.3" r="4.4" fill="var(--cream)"/><rect x="3.15" y="3.2" width="1.3" height="17.6" rx=".65"/><rect x="19.55" y="3.2" width="1.3" height="8" rx=".65"/><path d="M20.2 11.2v9.6" stroke="currentColor" stroke-width="1.15" stroke-linecap="round"/></svg>',
+  seat:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6.5 3h11a1.5 1.5 0 0 1 1.5 1.5v7.3H5V4.5A1.5 1.5 0 0 1 6.5 3Z" opacity=".55"/><path d="M4.3 11.8h15.4a1.2 1.2 0 0 1 1.2 1.35l-.65 5.2a1.6 1.6 0 0 1-1.6 1.4H5.35a1.6 1.6 0 0 1-1.6-1.4l-.65-5.2a1.2 1.2 0 0 1 1.2-1.35Z"/><rect x="4.6" y="19.6" width="2" height="2.1" rx=".6"/><rect x="17.4" y="19.6" width="2" height="2.1" rx=".6"/></svg>',
+  /* --- pequenos, estilo outline/regular --- */
+  chev:'<svg class="chev" viewBox="0 0 8 14" fill="none"><path d="M1 1l6 6-6 6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  chevup:'<svg viewBox="0 0 14 14" fill="none"><path d="M2.5 9l4.5-5 4.5 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  draghandle:'<svg viewBox="0 0 14 22" fill="currentColor"><circle cx="4" cy="4" r="1.6"/><circle cx="10" cy="4" r="1.6"/><circle cx="4" cy="11" r="1.6"/><circle cx="10" cy="11" r="1.6"/><circle cx="4" cy="18" r="1.6"/><circle cx="10" cy="18" r="1.6"/></svg>',
+  chevdown:'<svg viewBox="0 0 14 14" fill="none"><path d="M2.5 5l4.5 5 4.5-5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  chevleft:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.15" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg>',
+  check:'<svg viewBox="0 0 14 14" fill="none"><path d="M2.5 7.2l3 3 6-6.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  warn:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 21.5 20h-19L12 3.5Z"/><path d="M12 9.5v4.2"/><circle cx="12" cy="16.7" r=".15" fill="currentColor" stroke-width="1.8"/></svg>',
+  x:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 5l14 14M19 5 5 19"/></svg>',
+  phone:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M6.2 3.5h3l1.5 3.8-1.9 1.4a12 12 0 0 0 5.5 5.5l1.4-1.9 3.8 1.5v3a1.7 1.7 0 0 1-1.9 1.7A16.5 16.5 0 0 1 4.5 5.4 1.7 1.7 0 0 1 6.2 3.5Z"/></svg>',
+  pin:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s6.5-5.7 6.5-10.4A6.5 6.5 0 0 0 5.5 10.6C5.5 15.3 12 21 12 21Z"/><circle cx="12" cy="10.4" r="2.4"/></svg>',
+  globe:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.2 2.4 3.3 5.4 3.3 8.5s-1.1 6.1-3.3 8.5c-2.2-2.4-3.3-5.4-3.3-8.5S9.8 5.9 12 3.5Z"/></svg>',
+  mail:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M3.5 6.3 12 13l8.5-6.7"/></svg>',
+  arrowright:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12h15M13 5.5l6.5 6.5-6.5 6.5"/></svg>',
+  flower:'<svg viewBox="0 0 40 46" fill="none" stroke="currentColor" stroke-width="1.15" stroke-linecap="round" stroke-linejoin="round"><path d="M20 44V16"/><path d="M20 24c-5 0-9-3.2-9-7.5S15 9 20 9s9 3.2 9 7.5S25 24 20 24Z" opacity=".55"/><path d="M20 16c-3.5-2.5-4.5-7-3-10.5M20 16c3.5-2.5 4.5-7 3-10.5" opacity=".55"/><path d="M20 30c-4 0-7-2-7-4.5s3-4.5 7-4.5 7 2 7 4.5-3 4.5-7 4.5Z" opacity=".35"/><path d="M20 36c-3 0-5.5-1.6-5.5-3.5S17 29 20 29s5.5 1.6 5.5 3.5S23 36 20 36Z" opacity=".25"/></svg>',
+  plus:'<svg viewBox="0 0 14 14" fill="none"><path d="M7 1v12M1 7h12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
+  search:'<svg viewBox="0 0 20 20" fill="none"><circle cx="9" cy="9" r="6" stroke="currentColor" stroke-width="1.3"/><path d="M17 17l-3.5-3.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>',
+  heart:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20.2c-.3 0-.6-.1-.8-.3C7.9 17 3.5 13.4 3.5 9.3 3.5 6.4 5.8 4 8.7 4c1.6 0 3 .7 3.9 1.9C13.5 4.7 14.9 4 16.5 4c2.9 0 5.2 2.4 5.2 5.3 0 4.1-4.4 7.7-7.7 10.6-.2.2-.5.3-.8.3Z"/></svg>',
+  logout:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4H6.8a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h7.7"/><path d="M9.5 12h10.3m0 0-3.2-3.2m3.2 3.2-3.2 3.2"/></svg>',
+  gear:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.05A1.65 1.65 0 0 0 10 3.09V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.05a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.05a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
+  pencil:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>',
+  camera:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-2h6l2 2h3v11H4Z"/><circle cx="12" cy="13.5" r="3.3"/></svg>',
+  dress:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 3.2h5l.6 2.6-1.4 1.2.9 1.6L18 19.5a1 1 0 0 1-1 1.3H7a1 1 0 0 1-1-1.3l3.4-10.9.9-1.6-1.4-1.2Z"/><path d="M9.8 6.6h4.4"/></svg>',
+  checklist:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3.3" width="16" height="17.4" rx="2"/><path d="M8 8.3h8M8 12.3h5.5M7 16.3l1.3 1.3L11 15"/></svg>',
+  tableround:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="12" cy="12" r="7.2"/><circle cx="12" cy="4.2" r="1.15" fill="currentColor" stroke="none"/><circle cx="18.2" cy="8" r="1.15" fill="currentColor" stroke="none"/><circle cx="18.2" cy="16" r="1.15" fill="currentColor" stroke="none"/><circle cx="12" cy="19.8" r="1.15" fill="currentColor" stroke="none"/><circle cx="5.8" cy="16" r="1.15" fill="currentColor" stroke="none"/><circle cx="5.8" cy="8" r="1.15" fill="currentColor" stroke="none"/></svg>',
+  tablelong:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="5" y="8.5" width="14" height="7" rx="1.4"/><rect x="2.2" y="6.3" width="2.4" height="2.4" rx=".7" fill="currentColor" stroke="none"/><rect x="2.2" y="15.3" width="2.4" height="2.4" rx=".7" fill="currentColor" stroke="none"/><rect x="19.4" y="6.3" width="2.4" height="2.4" rx=".7" fill="currentColor" stroke="none"/><rect x="19.4" y="15.3" width="2.4" height="2.4" rx=".7" fill="currentColor" stroke="none"/></svg>',
+  tableserpentine:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M2.5 7c2.2 0 2.2 4 4.4 4s2.2-4 4.4-4 2.2 4 4.4 4 2.2-4 4.4-4"/><circle cx="2.5" cy="17" r="1.15" fill="currentColor" stroke="none"/><circle cx="8.2" cy="17" r="1.15" fill="currentColor" stroke="none"/><circle cx="13.9" cy="17" r="1.15" fill="currentColor" stroke="none"/><circle cx="19.6" cy="17" r="1.15" fill="currentColor" stroke="none"/></svg>',
+  lock:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="10.5" width="15" height="10" rx="2"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/></svg>',
+  eye:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="3"/></svg>',
+  crown:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.5 7 12l5-6.5 5 6.5 3.5-3.5-1.4 9.4a1 1 0 0 1-1 .85H5.9a1 1 0 0 1-1-.85L3.5 8.5Z"/><path d="M7 19.5h10"/></svg>',
+  eyeOff:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 3.5l17 17"/><path d="M10.6 5.7A10.6 10.6 0 0 1 12 5.5c6 0 9.5 6.5 9.5 6.5a15.8 15.8 0 0 1-3.2 4.1M6.8 7.2C4.2 8.9 2.5 12 2.5 12s3.5 6.5 9.5 6.5c1.2 0 2.3-.25 3.3-.68"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>',
+  trash:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 7h15M9.5 7V5a1.5 1.5 0 0 1 1.5-1.5h2A1.5 1.5 0 0 1 14.5 5v2M18 7l-.8 12a2 2 0 0 1-2 1.9H8.8a2 2 0 0 1-2-1.9L6 7"/><path d="M10 11v6M14 11v6"/></svg>',
+  question:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9.3 9.2a2.7 2.7 0 1 1 3.9 2.4c-1 .5-1.7 1.2-1.7 2.4v.3"/><circle cx="11.5" cy="17.7" r=".15" fill="currentColor" stroke-width="2.0"/></svg>',
+  briefcase:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3.2" y="7.3" width="17.6" height="12" rx="1.8"/><path d="M8.6 7.3V5.7a1.8 1.8 0 0 1 1.8-1.8h3.2a1.8 1.8 0 0 1 1.8 1.8v1.6"/><path d="M3.2 12.6h17.6"/></svg>',
+  chat:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5h16v10.5a1.5 1.5 0 0 1-1.5 1.5H9.5L5 21v-3.5H5.5A1.5 1.5 0 0 1 4 16V5.5Z"/><path d="M8 9.8h8M8 13h5"/></svg>',
+  sparkle:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.5c.6 3.6 2.2 5.7 6.5 6.5-4.3.8-5.9 2.9-6.5 6.5-.6-3.6-2.2-5.7-6.5-6.5 4.3-.8 5.9-2.9 6.5-6.5Z"/><path d="M19 15.2c.3 1.7 1 2.5 3 2.8-2 .3-2.7 1.1-3 2.8-.3-1.7-1-2.5-3-2.8 2-.3 2.7-1.1 3-2.8Z" opacity=".75"/></svg>',
+  refresh:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11A8 8 0 1 0 18.3 16"/><path d="M20 5.5V11h-5.5"/></svg>',
+  download:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5v12M7.5 11l4.5 4.5L16.5 11"/><path d="M4.5 17v2.3a1.7 1.7 0 0 0 1.7 1.7h11.6a1.7 1.7 0 0 0 1.7-1.7V17"/></svg>',
+  bell:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9.5a6 6 0 0 1 12 0c0 4.5 1.5 5.8 1.5 5.8h-15S6 14 6 9.5Z"/><path d="M10 19a2.2 2.2 0 0 0 4 0"/></svg>',
+  mascot:'<svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M10 34v-4a22 22 0 0 1 44 0v4"/><rect x="4.5" y="30" width="9" height="14" rx="4"/><rect x="50.5" y="30" width="9" height="14" rx="4"/><circle cx="32" cy="34" r="15" fill="var(--card)"/><path d="M25.5 33.5c0-1.6.9-2.6 2-2.6s2 1 2 2.6M34.5 33.5c0-1.6.9-2.6 2-2.6s2 1 2 2.6" stroke-width="2.3"/><path d="M25.5 40c2 2.2 11 2.2 13 0"/><path d="M44 39c1.8 3.5 1.4 7-1 9.5" opacity=".55"/><g fill="currentColor" stroke="none"><path d="M50 8c.35 2.1 1.3 3.3 3.8 3.8-2.5.5-3.45 1.7-3.8 3.8-.35-2.1-1.3-3.3-3.8-3.8 2.5-.5 3.45-1.7 3.8-3.8Z"/><path d="M56.5 15.5c.2 1.15.7 1.8 2.1 2.1-1.4.3-1.9.95-2.1 2.1-.2-1.15-.7-1.8-2.1-2.1 1.4-.3 1.9-.95 2.1-2.1Z" opacity=".75"/></g></svg>',
+  qrcode:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><rect x="3.5" y="3.5" width="6.5" height="6.5" rx="1"/><rect x="14" y="3.5" width="6.5" height="6.5" rx="1"/><rect x="3.5" y="14" width="6.5" height="6.5" rx="1"/><path d="M14 14h3v3h-3zM19.5 14v3M14 19.5h3M19.5 19.5v0"/></svg>'
+};
+/* --- ícones da barra de separadores: outline (inativo) vs. preenchido (ativo), como no iOS --- */
+const TAB_ICONS = {
+  home:{
+    line:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 11.2 12 4l8.5 7.2"/><path d="M5.6 10v8.6c0 .6.5 1.1 1.1 1.1h3.6v-5.9h3.4v5.9h3.6c.6 0 1.1-.5 1.1-1.1V10"/></svg>',
+    fill:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3.2 2.5 11h2.3v8.3A1.2 1.2 0 0 0 6 20.5h4.1v-5.8h3.8v5.8H18a1.2 1.2 0 0 0 1.2-1.2V11h2.3z"/></svg>'
+  },
+  budget:{
+    line:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9.3"/><text x="12" y="16.3" font-size="12.5" font-weight="700" text-anchor="middle" font-family="Georgia,serif" fill="currentColor" stroke="none">€</text></svg>',
+    fill:'<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="9.6" opacity=".3"/><text x="12" y="16.3" font-size="13.5" font-weight="700" text-anchor="middle" font-family="Georgia,serif">€</text></svg>'
+  },
+  guests:{
+    line:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8.3" cy="8.2" r="2.7"/><circle cx="16.2" cy="9.3" r="2.1"/><path d="M3 19c.4-3.4 2.5-5.2 5.3-5.2s4.9 1.8 5.3 5.2"/><path d="M14.3 14.2c2.1.3 3.7 1.7 4.1 4.3"/></svg>',
+    fill:'<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="8.3" cy="8.2" r="2.9"/><circle cx="16.2" cy="9.3" r="2.3" opacity=".65"/><path d="M2.6 19.3c.4-3.7 2.7-5.7 5.7-5.7s5.3 2 5.7 5.7a.75.75 0 0 1-.75.85H3.35a.75.75 0 0 1-.75-.85Z"/><path d="M14.3 14c2.4.35 4.1 1.9 4.5 4.9.05.6-.35 1.15-.95 1.15h-2.4c.1-2.2-.35-4.05-1.15-6.05Z" opacity=".65"/></svg>'
+  },
+  expenses:{
+    line:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><ellipse cx="12" cy="6.6" rx="6.3" ry="2.5"/><path d="M5.7 6.6v4.4c0 1.4 2.8 2.5 6.3 2.5s6.3-1.1 6.3-2.5V6.6"/><path d="M5.7 11v4.4c0 1.4 2.8 2.5 6.3 2.5s6.3-1.1 6.3-2.5V11"/><path d="M5.7 15.4v2.2c0 1.4 2.8 2.5 6.3 2.5s6.3-1.1 6.3-2.5v-2.2"/></svg>',
+    fill:'<svg viewBox="0 0 24 24" fill="currentColor"><ellipse cx="12" cy="6.6" rx="6.6" ry="2.7"/><path d="M5.4 6.6v4.4c0 1.5 3 2.7 6.6 2.7s6.6-1.2 6.6-2.7V6.6c0 1.5-3 2.7-6.6 2.7s-6.6-1.2-6.6-2.7Z" opacity=".55"/><path d="M5.4 11.3v4.1c0 1.5 3 2.7 6.6 2.7s6.6-1.2 6.6-2.7v-4.1c0 1.5-3 2.7-6.6 2.7s-6.6-1.2-6.6-2.7Z" opacity=".75"/></svg>'
+  },
+  tables:{
+    line:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="7.2" rx="7.6" ry="2.9"/><path d="M4.4 7.2v3.7c0 1.6 3.4 2.9 7.6 2.9s7.6-1.3 7.6-2.9V7.2"/><path d="M12 13.8V21M8 21h8"/></svg>',
+    fill:'<svg viewBox="0 0 24 24" fill="currentColor"><ellipse cx="12" cy="7.2" rx="8" ry="3.1"/><path d="M4 7.2v3.9c0 1.7 3.6 3.1 8 3.1s8-1.4 8-3.1V7.2c0 1.7-3.6 3.1-8 3.1s-8-1.4-8-3.1Z" opacity=".55"/><rect x="11.1" y="14" width="1.8" height="7.4" rx=".9"/><rect x="7.6" y="20.2" width="8.8" height="1.6" rx=".8"/></svg>'
+  },
+  cube:{
+    line:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.6 20.3 7.2v9.6L12 21.4 3.7 16.8V7.2Z"/><path d="M3.7 7.2 12 11.8l8.3-4.6M12 11.8v9.6"/></svg>',
+    fill:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.6 20.3 7.2 12 11.8 3.7 7.2Z"/><path d="M3.5 8.5 11.4 13v8.3l-7.9-4.4Z" opacity=".72"/><path d="M20.5 8.5 12.6 13v8.3l7.9-4.4Z" opacity=".5"/></svg>'
+  },
+  photo:{
+    line:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.6" y="4.6" width="18.8" height="14.8" rx="2.4"/><circle cx="8.3" cy="9.4" r="1.6"/><path d="M3.4 16.8 8.6 11.9a1.6 1.6 0 0 1 2.2 0l1.7 1.6"/><path d="M12.8 14.3l2.6-2.5a1.6 1.6 0 0 1 2.2 0l3 2.9"/></svg>',
+    fill:'<svg viewBox="0 0 24 24" fill="currentColor"><rect x="2.6" y="4.6" width="18.8" height="14.8" rx="2.4" opacity=".5"/><circle cx="8.3" cy="9.4" r="1.8"/><path d="M3.4 17.4 8.9 12a1.7 1.7 0 0 1 2.3 0l1.9 1.8 2.9-2.8a1.7 1.7 0 0 1 2.3 0l3.2 3.1v1.7a1.4 1.4 0 0 1-1.4 1.4H4.8a1.4 1.4 0 0 1-1.4-1.4z"/></svg>'
+  },
+  coins:{
+    line:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="9.3" cy="7.3" rx="6" ry="2.7"/><path d="M3.3 7.3v4.6c0 1.5 2.7 2.7 6 2.7s6-1.2 6-2.7V7.3"/><ellipse cx="14.6" cy="14.4" rx="6" ry="2.7"/><path d="M8.6 14.4V19c0 1.5 2.7 2.7 6 2.7s6-1.2 6-2.7v-4.6"/></svg>',
+    fill:'<svg viewBox="0 0 24 24" fill="currentColor"><ellipse cx="9.3" cy="7.3" rx="6.2" ry="2.8"/><path d="M3.1 7.3v4.6c0 1.6 2.8 2.9 6.2 2.9s6.2-1.3 6.2-2.9V7.3c0 1.6-2.8 2.9-6.2 2.9s-6.2-1.3-6.2-2.9Z" opacity=".55"/><ellipse cx="14.6" cy="14.4" rx="6.2" ry="2.8"/><path d="M8.4 14.4V19c0 1.6 2.8 2.9 6.2 2.9s6.2-1.3 6.2-2.9v-4.6c0 1.6-2.8 2.9-6.2 2.9s-6.2-1.3-6.2-2.9Z" opacity=".75"/></svg>'
+  },
+  list:{
+    line:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3.3" width="16" height="17.4" rx="2.2"/><path d="M7.6 8.4h8.8M7.6 12h8.8M7.6 15.6h5.6"/></svg>',
+    fill:'<svg viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="3.3" width="16" height="17.4" rx="2.2" opacity=".28"/><path d="M7.6 7.6h8.8a1 1 0 1 1 0 2H7.6a1 1 0 1 1 0-2Z"/><path d="M7.6 11.2h8.8a1 1 0 1 1 0 2H7.6a1 1 0 1 1 0-2Z"/><path d="M7.6 14.8h5.6a1 1 0 1 1 0 2H7.6a1 1 0 1 1 0-2Z"/></svg>'
+  },
+  dots:{
+    line:'<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5.2" cy="12" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="18.8" cy="12" r="1.9"/></svg>',
+    fill:'<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5.2" cy="12" r="2.1"/><circle cx="12" cy="12" r="2.1"/><circle cx="18.8" cy="12" r="2.1"/></svg>'
+  }
+};
+const CAT_COLORS = ['#B96752','#7C8A6E','#CB9A8C','#C9A480','#A8B39C','#96897D','#9A4F3D','#B8ADA3'];
+const CAT_COLOR_PAIRS = [
+  {bg:'#F3DDD6', fg:'#B96752'},
+  {bg:'#E2E8DC', fg:'#5F7355'},
+  {bg:'#F5DFD3', fg:'#C97F63'},
+  {bg:'#F2E4C8', fg:'#B08A4A'},
+  {bg:'#E3E8DD', fg:'#6B7D5C'},
+  {bg:'#EAD9DE', fg:'#9C6E7A'},
+  {bg:'#F3DCDC', fg:'#C06D6D'},
+  {bg:'#EAE3DA', fg:'#96897D'}
+];
+function chipStyle(i){ const p = CAT_COLOR_PAIRS[i%CAT_COLOR_PAIRS.length]; return `background:${p.bg}; color:${p.fg};`; }
+
+function CHECKLIST_PHASES_LIST(){ return ta('checklistPhasesData'); }
+const CHECKLIST_PHASES_PT = [
+  { id:'f1', desc:'Para fazer logo após o noivado — prioridade máxima.', tasks:[
+    {t:'Definir o orçamento', n:'com realismo'},
+    {t:'Fazer uma lista de convidados preliminar', n:'íntimo ou grande — 50, 100, +150?'},
+    {t:'Perceber que estilo/tema combina com os dois', n:'minimalista, boho, clássico...'},
+    {t:'Definir os "não negociáveis"', n:'ex: quinta perto de casa, comida obrigatória'},
+    {t:'Definir onde querem casar, geograficamente', n:'norte, sul, ilhas, fora do país...'},
+    {t:'Definir data aproximada'},
+    {t:'Visitar locais e comparar orçamento/disponibilidade'},
+    {t:'Fechar o local ideal', n:'o mais rápido possível'}
+  ]},
+  { id:'f2', desc:'Começa a montar a estrutura — organiza as pastas do Pinterest.', tasks:[
+    {t:'Contratar fotógrafo e videógrafo', n:'esgotam cedo'},
+    {t:'Reservar o catering', n:'se não estiver incluído no local'},
+    {t:'Pesquisar bandas, DJ ou saxofone'},
+    {t:'Procurar wedding planner', n:'total, parcial, ou só coordenação do dia'},
+    {t:'Preparar um moodboard', n:'cores base, ambiente, prioridades'},
+    {t:'Definir convites digitais ou físicos', n:'grafismo, designer de papelaria'}
+  ]},
+  { id:'f3', desc:'A parte mais divertida — o vestido e a lua de mel.', tasks:[
+    {t:'Começar a procurar o vestido de noiva', n:'na 1ª prova, foca-te só em perceber o teu estilo'},
+    {t:'Pensar na lua de mel', n:'se for internacional, comprar com antecedência ajuda no preço'},
+    {t:'Definir o fato do noivo', n:'depois do vestido escolhido, para combinarem'},
+    {t:'Fechar a lista de damas, pajens, madrinhas e padrinhos'},
+    {t:'Preparar o convite formal para damas e pajens'}
+  ]},
+  { id:'f4', desc:'O casamento está a ganhar forma.', tasks:[
+    {t:'Reservar decoradora/florista/aluguer de móveis'},
+    {t:'Escolher o bolo e fazer provas de menu'},
+    {t:'Enviar os save the dates'},
+    {t:'Planear sessão de noivado', n:'se quiserem'},
+    {t:'Mandar fazer o vestido', n:'com todos os ajustes'}
+  ]},
+  { id:'f5', desc:'Não te esqueças de nenhum destes — são imprescindíveis.', tasks:[
+    {t:'Fechar maquilhadora e cabeleireira'},
+    {t:'Fechar celebrante/igreja', n:'ir ao registo civil 2-6 meses antes'},
+    {t:'Procurar animação extra', n:'fogos, photo booth, zona de crianças'},
+    {t:'Assegurar hotéis e transporte', n:'para noivos e convidados'}
+  ]},
+  { id:'f6', desc:'Os pequenos detalhes fazem toda a diferença.', tasks:[
+    {t:'Comprar as alianças'},
+    {t:'Preparar o dress code para convidados de honra'},
+    {t:'Fechar os detalhes de decoração', n:'mesas, cores, arranjos, bouquet, porta-alianças...'},
+    {t:'Começar a pensar na primeira dança', n:'aulas, música'}
+  ]},
+  { id:'f7', desc:'Priorizem-se como casal — tenham um dia sem falar do casamento.', tasks:[
+    {t:'Fazer a 2ª ou 3ª prova do vestido', n:'se necessário'},
+    {t:'Comprar sapatos, acessórios e véu', n:'da noiva e do noivo'},
+    {t:'Fazer as reservas finais da lua de mel'},
+    {t:'Falar em conjunto sobre pontos importantes do dia', n:'álcool, horários, first look ou não...'}
+  ]},
+  { id:'f8', desc:'Está na hora de virarem anfitriões perfeitos.', tasks:[
+    {t:'Escolher as lembranças para convidados'},
+    {t:'Enviar os convites finais'},
+    {t:'Definir a playlist da pista de dança'},
+    {t:'Pensar em brincadeiras, jogos e entretenimento'}
+  ]},
+  { id:'f9', desc:'O local já está bonito — e vocês?', tasks:[
+    {t:'Fazer a prova de maquilhagem e cabelo'},
+    {t:'Confirmar que o noivo já tem o look definido'},
+    {t:'Plano de mesas inicial'},
+    {t:'Marcar um jantar com pajens, damas e pais', n:'para se conhecerem melhor'},
+    {t:'Fazer um ensaio com fotógrafo/videógrafo no local', n:'e partilhar os momentos-chave que queres captados'}
+  ]},
+  { id:'f10', desc:'Falta tão pouco!', tasks:[
+    {t:'Confirmar todos os fornecedores'},
+    {t:'Criar o cronograma final do dia', n:'e enviar a todos os fornecedores'},
+    {t:'Confirmar todos os convidados'},
+    {t:'Fazer o plano de mesas final'},
+    {t:'Ensaiar as entradas e votos'}
+  ]},
+  { id:'f11', desc:'Hora de respirar fundo e dar o check final.', tasks:[
+    {t:'Fazer a prova final do vestido, sapatos e fato'},
+    {t:'Confirmar transportes e alojamentos'},
+    {t:'Comprar kits de emergência', n:'para noiva, noivo e convidados'},
+    {t:'Reunião final no local', n:'com a wedding planner ou coordenadora'},
+    {t:'Ensaiar entradas e votos'}
+  ]},
+  { id:'f12', desc:'Estamos a uma semana!', tasks:[
+    {t:'Confirmar o número final de convidados', n:'e reenviar os detalhes do dia'},
+    {t:'Unhas, sobrancelhas, barbeiro, hidratação do cabelo'},
+    {t:'Deixar as malas da lua de mel prontas'},
+    {t:'Preparar uma muda de roupa para depois'},
+    {t:'Descansar e confiar no trabalho feito até aqui'}
+  ]}
+];
+const CHECKLIST_PHASES_EN = [
+  { id:'f1', desc:'To do right after the engagement — top priority.', tasks:[
+    {t:'Set the budget', n:'realistically'},
+    {t:'Make a preliminary guest list', n:'intimate or big — 50, 100, 150+?'},
+    {t:'Figure out what style/theme suits you both', n:'minimalist, boho, classic...'},
+    {t:'Define your "non-negotiables"', n:'e.g. venue close to home, food is a must'},
+    {t:'Decide roughly where you want to get married', n:'north, south, islands, abroad...'},
+    {t:'Set an approximate date'},
+    {t:'Visit venues and compare budget/availability'},
+    {t:'Book the ideal venue', n:'as fast as possible'}
+  ]},
+  { id:'f2', desc:'Start building the structure — organize your Pinterest boards.', tasks:[
+    {t:'Book photographer and videographer', n:'they get booked up early'},
+    {t:'Book the catering', n:'if not included with the venue'},
+    {t:'Research bands, DJs or a saxophonist'},
+    {t:'Look for a wedding planner', n:'full, partial, or just day-of coordination'},
+    {t:'Put together a moodboard', n:'base colors, mood, priorities'},
+    {t:'Decide on digital or paper invitations', n:'design, stationery designer'}
+  ]},
+  { id:'f3', desc:'The most fun part — the dress and the honeymoon.', tasks:[
+    {t:'Start looking for the wedding dress', n:'at the first fitting, just focus on figuring out your style'},
+    {t:'Start planning the honeymoon', n:'if it\'s international, booking early helps with price'},
+    {t:'Decide on the groom\'s suit', n:'after the dress is chosen, to match'},
+    {t:'Finalize the list of bridesmaids, groomsmen and pageboys'},
+    {t:'Prepare the formal invitation for bridesmaids and pageboys'}
+  ]},
+  { id:'f4', desc:'The wedding is taking shape.', tasks:[
+    {t:'Book decorator/florist/furniture rental'},
+    {t:'Choose the cake and do menu tastings'},
+    {t:'Send the save-the-dates'},
+    {t:'Plan an engagement shoot', n:'if you want one'},
+    {t:'Get the dress made', n:'with all the fittings'}
+  ]},
+  { id:'f5', desc:'Don\'t forget any of these — they\'re essential.', tasks:[
+    {t:'Book makeup artist and hairstylist'},
+    {t:'Book the officiant/church', n:'go to the civil registry 2-6 months before'},
+    {t:'Look for extra entertainment', n:'fireworks, photo booth, kids\' zone'},
+    {t:'Sort out hotels and transport', n:'for the couple and guests'}
+  ]},
+  { id:'f6', desc:'The small details make all the difference.', tasks:[
+    {t:'Buy the rings'},
+    {t:'Prepare the dress code for honor guests'},
+    {t:'Finalize the decoration details', n:'tables, colors, arrangements, bouquet, ring holder...'},
+    {t:'Start thinking about the first dance', n:'lessons, music'}
+  ]},
+  { id:'f7', desc:'Make time for each other as a couple — have a day without talking about the wedding.', tasks:[
+    {t:'Do the 2nd or 3rd dress fitting', n:'if needed'},
+    {t:'Buy shoes, accessories and veil', n:'for both of you'},
+    {t:'Make the final honeymoon bookings'},
+    {t:'Talk together about important points of the day', n:'alcohol, timings, first look or not...'}
+  ]},
+  { id:'f8', desc:'Time to become perfect hosts.', tasks:[
+    {t:'Choose the favors for guests'},
+    {t:'Send the final invitations'},
+    {t:'Put together the dance floor playlist'},
+    {t:'Think about games and entertainment'}
+  ]},
+  { id:'f9', desc:'The venue already looks great — what about you two?', tasks:[
+    {t:'Do the hair and makeup trial'},
+    {t:'Confirm the groom already has his look sorted'},
+    {t:'Initial seating plan'},
+    {t:'Set up a dinner with pageboys, bridesmaids and parents', n:'to get to know each other better'},
+    {t:'Do a walkthrough with photographer/videographer at the venue', n:'and share the key moments you want captured'}
+  ]},
+  { id:'f10', desc:'So close now!', tasks:[
+    {t:'Confirm all suppliers'},
+    {t:'Create the final day-of schedule', n:'and send it to all suppliers'},
+    {t:'Confirm all guests'},
+    {t:'Do the final seating plan'},
+    {t:'Rehearse the entrances and vows'}
+  ]},
+  { id:'f11', desc:'Time to take a deep breath and do the final check.', tasks:[
+    {t:'Do the final fitting for dress, shoes and suit'},
+    {t:'Confirm transport and accommodation'},
+    {t:'Buy emergency kits', n:'for the couple and guests'},
+    {t:'Final meeting at the venue', n:'with the wedding planner or coordinator'},
+    {t:'Rehearse entrances and vows'}
+  ]},
+  { id:'f12', desc:'One week to go!', tasks:[
+    {t:'Confirm the final guest count', n:'and resend the day\'s details'},
+    {t:'Nails, eyebrows, barber, hair treatment'},
+    {t:'Get the honeymoon bags ready'},
+    {t:'Prepare a change of clothes for after'},
+    {t:'Rest and trust the work you\'ve put in'}
+  ]}
+];
+const WEDDING_DAY_CHECKLIST_PT = [
+  'Vestido e cabide + muda de roupa para o fim',
+  'Lingerie, liga, robe, pantufas',
+  'Véu e acessórios de cabelo e joias',
+  'Sapatos altos e sapatos rasos confortáveis',
+  'Licença de casamento, votos e alianças',
+  'Kit de maquilhagem para retoques + produtos de cabelo',
+  'Desodorizante, toalhitas, pensos, kit de costura, analgésico, água e snacks',
+  'Playlist para o GRWM, telemóvel e carregador',
+  'Bouquet'
+];
+const WEDDING_DAY_CHECKLIST_EN = [
+  'Dress and hanger + change of clothes for the end',
+  'Lingerie, garter, robe, slippers',
+  'Veil and hair accessories and jewelry',
+  'Heels and comfortable flats',
+  'Marriage license, vows and rings',
+  'Touch-up makeup kit + hair products',
+  'Deodorant, wipes, pads, sewing kit, painkiller, water and snacks',
+  'Playlist for the GRWM, phone and charger',
+  'Bouquet'
+];
+function WEDDING_DAY_CHECKLIST_LIST(){ return ta('weddingDayChecklistData'); }
+
+const THEMES = {
+  get rust(){  return { label:ta('themeRust'),   heading:'#96453A', rust:'#C1583E', rustDark:'#9A4530', gold:'#C9A02E' }; },
+  get navy(){  return { label:ta('themeNavy'),   heading:'#2C4460', rust:'#3B5B7A', rustDark:'#293F55', gold:'#B9A36A' }; },
+  get olive(){ return { label:ta('themeOlive'),  heading:'#4F5A3A', rust:'#6B7A4F', rustDark:'#4F5A3A', gold:'#B08D57' }; },
+  get blush(){ return { label:ta('themeBlush'),  heading:'#8F535C', rust:'#B76E79', rustDark:'#8F535C', gold:'#C9A02E' }; },
+  get gold(){  return { label:ta('themeGold'),   heading:'#7A5C1E', rust:'#B08D2F', rustDark:'#8A6D24', gold:'#D8B94A' }; }
+};
+function applyTheme(key){
+  const t = THEMES[key] || THEMES.rust;
+  let styleEl = document.getElementById('theme-override');
+  if(!styleEl){
+    styleEl = document.createElement('style');
+    styleEl.id = 'theme-override';
+    document.head.appendChild(styleEl);
+  }
+  styleEl.textContent = `:root{ --heading:${t.heading}; --rust:${t.rust}; --rust-dark:${t.rustDark}; --gold:${t.gold}; }`;
+}
+
+/* ============================================================
+   Migração: as categorias do orçamento costumavam guardar apenas
+   uma percentagem (pct) do total. Isso fazia com que, ao mudar o
+   orçamento total, o valor em euros de cada categoria mudasse
+   sozinho (mantendo a percentagem). Agora guardamos sempre um
+   valor fixo em euros (c.value) — a percentagem passa a ser
+   apenas calculada para mostrar, nunca guardada. Esta função
+   garante que contas antigas (só com "pct") ganham o campo
+   "value" uma única vez, sem perder o valor que já tinham.
+============================================================ */
+function normalizeCategories(){
+  if(!state || !Array.isArray(state.categories)) return;
+  const total = (state.budget && Number(state.budget.total)) || 0;
+  state.categories.forEach(c=>{
+    if(c.value===undefined || c.value===null || isNaN(Number(c.value))){
+      c.value = total * (Number(c.pct)||0);
+    }
   });
 }
 
-function reminderEmailHtml({ guestName, coupleName1, coupleName2, deadline, link, daysLeft }) {
-  const prazoTxt = deadline ? `até ${deadline}` : 'brevemente';
-  const diasTxt = daysLeft === 0 ? 'hoje' : daysLeft === 1 ? 'amanhã' : `daqui a ${daysLeft} dias`;
+/* Texto "de fábrica" antigo de cada categoria — usado só para detetar se a
+   pessoa ainda tem o texto original (nunca editou) e, nesse caso, trocá-lo
+   pela versão reescrita. Se a pessoa já tiver apagado ou acrescentado algo,
+   deixamos como está, para nunca perder uma edição própria. */
+const LEGACY_CATEGORY_DESC = {
+  quinta: ['Aluguer do espaço','Catering não incluído','Bebidas ou bar aberto','Staff (wedding planner, empregados de mesa, coordenador de sala)','Aluguer de mobiliário (mesas, cadeiras, talheres)','Talheres, copos, toalhas, guardanapos','Camâra de vigilância, cofre, horário extra'],
+  cerimonia: ['Veículo de transporte para a igreja/quinta','Igreja ou conservatória','Grupo musical para a cerimónia (órgão, coro, quarteto, violino)','Decoração da igreja/altar ou local da cerimónia','Tapete, bancos, cadeiras, microfones','Missal','Porta-alianças','Alianças'],
+  entretenimento: ['DJ e/ou banda','Banda ao vivo','Som e iluminação','Animações extra (saxofonista, fogo-de-artifício, artistas)','Photobooth / cabine de fotos/ AudioGuest','Atividades para crianças'],
+  foto: ['Fotógrafo principal','Segundo fotógrafo','Videógrafo(s)','Drone (se incluído)','Álbum físico e digital','Vídeo sameday editado final','Sessão na quinta'],
+  vestuario: ['Vestido(s) da noiva)','Fato do noivo','Sapatos de noiva e noivo','Acessórios (véu, joias, gravata)','Bouquet da noiva e acessórios florais','Maquilhagem e cabelo (prova incluída)'],
+  decoracao: ['Arranjos florais frescos (igreja, quinta, mesas, entrada)','Decoração da sala (velas, centros de mesa)','Decoração exterior (entrada, jardins, lounge)','Estruturas (arco floral)'],
+  convites: ['Convites formais','Save the date','Missais/ordem da cerimónia','Menus de mesa e seating plan','Marcadores de mesa/nome'],
+  extras: ['Lembranças para convidados','Wedding planner','Ensaios dança','Kit SOS para noiva/noivo','Kit SOS para WC\'s','Pernoitar na quinta','Material DIY']
+};
+function migrateCategoryDescriptions(){
+  if(!state || !Array.isArray(state.categories)) return;
+  const fresh = seedData().categories;
+  state.categories.forEach(c=>{
+    const legacy = LEGACY_CATEGORY_DESC[c.id];
+    if(!legacy || !Array.isArray(c.desc)) return;
+    const isUnchanged = c.desc.length===legacy.length && c.desc.every((d,i)=>d===legacy[i]);
+    if(isUnchanged){
+      const freshCat = fresh.find(f=>f.id===c.id);
+      if(freshCat) c.desc = freshCat.desc.slice();
+    }
+  });
+}
+
+/* ============================================================
+   Migração: as crianças costumavam ser uma lista única, partilhada
+   entre os dois lados (state.guests.criancas), sem se saber de quem
+   eram "responsabilidade". Agora "Crianças" é uma categoria como
+   Família/Amigos, existente dentro de cada lado (noiva e noivo), e
+   dá para criar outras categorias à parte (ex: "Pagam metade").
+   Esta função só corre uma vez por conta: junta a lista antiga
+   completa dentro da categoria "Crianças" da noiva (escolha
+   arbitrária, mas não perde ninguém), e garante que ambos os lados
+   já têm essa categoria pronta a usar, mesmo quem nunca teve
+   crianças na lista antiga.
+============================================================ */
+function migrateGuestCategories(){
+  if(!state || !state.guests) return;
+  ['noiva','noivo'].forEach(side=>{
+    if(!state.guests[side].custom) state.guests[side].custom = [];
+    if(!state.guests[side].custom.some(c=>c.id==='criancas')){
+      state.guests[side].custom.push({ id:'criancas', label:'Crianças', names:[] });
+    }
+  });
+  if(Array.isArray(state.guests.criancas)){
+    const oldList = state.guests.criancas;
+    const noivaCriancas = state.guests.noiva.custom.find(c=>c.id==='criancas');
+    const startIdx = noivaCriancas.names.length;
+    oldList.forEach((name,i)=>{
+      noivaCriancas.names.push({ name, age:'', payingPct:0 });
+      if(state.confirmed['crianca|'+i]!==undefined){
+        state.confirmed['noiva|criancas|'+(startIdx+i)] = state.confirmed['crianca|'+i];
+        delete state.confirmed['crianca|'+i];
+      }
+    });
+    delete state.guests.criancas;
+  }
+  // Quem já tinha usado uma versão anterior (crianças só com nome; ou já com
+  // idade e um "paying" verdadeiro/falso, em vez da percentagem) fica com
+  // formatos antigos aqui — converte tudo para o formato atual, sem perder
+  // nome nem idade já preenchidos.
+  ['noiva','noivo'].forEach(side=>{
+    const cat = state.guests[side].custom.find(c=>c.id==='criancas');
+    if(cat) cat.names = cat.names.map(n=>{
+      if(typeof n==='string') return { name:n, age:'', payingPct:0 };
+      if(n && n.payingPct===undefined) return { name:n.name, age:n.age||'', payingPct: n.paying ? 1 : 0 };
+      return n;
+    });
+  });
+  // Staff/fornecedores era só uma lista de nomes (strings) — passa a ter,
+  // tal como as crianças, uma percentagem de pagamento por pessoa (por
+  // defeito 100%, já que normalmente são convidados como os outros).
+  ['noiva','noivo'].forEach(side=>{
+    if(Array.isArray(state.guests[side].staff)){
+      state.guests[side].staff = state.guests[side].staff.map(n=>{
+        if(typeof n==='string') return { name:n, payingPct:1 };
+        if(n && n.payingPct===undefined) return { name:n.name, payingPct:1 };
+        return n;
+      });
+    }
+  });
+  // Por fim, dá um identificador fixo (id) a QUALQUER convidado que ainda
+  // não tenha — em qualquer categoria, fixa ou criada pela pessoa. Nomes
+  // simples (ainda em texto) ganham também a forma de objeto, sem perder o
+  // nome. Isto é o que permite, por exemplo, que um link de RSVP aponte
+  // sempre à mesma pessoa, mesmo que a lista seja reordenada depois.
+  ['noiva','noivo'].forEach(side=>{
+    allGuestCategoriesOf(side).forEach(c=>{
+      const arr = getGuestNames(side, c.id);
+      if(!Array.isArray(arr)) return;
+      arr.forEach((n,idx)=>{
+        if(typeof n==='string'){ arr[idx] = { name:n, id:generateGuestId() }; }
+        else if(n && typeof n==='object' && !n.id){ n.id = generateGuestId(); }
+      });
+    });
+  });
+  // Fase 8.0 — Guest Data Foundation (Set 2026): o campo "id" acima já
+  // identifica cada convidado de forma permanente, mas nunca foi usado
+  // como CHAVE em lado nenhum (state.confirmed, mesas, etc. continuavam a
+  // usar "lado|categoria|índice", que quebra sempre que a lista é
+  // reordenada ou alguém é removido). "guestId" é o mesmo valor de "id",
+  // só que agora É USADO como identidade em todo o lado — ver
+  // migrateConfirmedAndSeatingToGuestId() logo a seguir, chamada sempre
+  // depois desta função.
+  ['noiva','noivo'].forEach(side=>{
+    allGuestCategoriesOf(side).forEach(c=>{
+      const arr = getGuestNames(side, c.id);
+      if(!Array.isArray(arr)) return;
+      arr.forEach(n=>{ if(n && typeof n==='object' && !n.guestId) n.guestId = n.id; });
+    });
+  });
+}
+// Fase 8.0 — Guest Data Foundation (Set 2026): converte state.confirmed e
+// state.seating.assignments do formato antigo, baseado na posição do
+// convidado na lista ("lado|categoria|índice"), para o novo formato
+// baseado no guestId permanente. Idempotente: só mexe nas entradas que
+// ainda estão no formato antigo (chave começa por "noiva|"/"noivo|" ou
+// valor contém "::"); depois da primeira conversão, correr outra vez não
+// muda nada. Tem de correr DEPOIS de migrateGuestCategories() ter
+// garantido que todos os convidados já têm guestId.
+function migrateConfirmedAndSeatingToGuestId(){
+  if(!state) return;
+  function guestIdAt(side, cat, idx){
+    const arr = getGuestNames(side, cat);
+    const entry = arr && arr[idx];
+    return entry && typeof entry==='object' ? entry.guestId : null;
+  }
+  if(state.confirmed){
+    const old = state.confirmed;
+    const isLegacyKey = k=> /^(noiva|noivo)\|/.test(k);
+    if(Object.keys(old).some(isLegacyKey)){
+      const next = {};
+      Object.keys(old).forEach(k=>{
+        if(!isLegacyKey(k)){ next[k] = old[k]; return; }
+        const parts = k.split('|');
+        const idx = Number(parts[parts.length-1]);
+        const cat = parts.slice(1,-1).join('|');
+        const side = parts[0];
+        const gid = guestIdAt(side, cat, idx);
+        if(gid) next[gid] = old[k];
+      });
+      state.confirmed = next;
+    }
+  }
+  if(state.seating && state.seating.assignments){
+    const assignments = state.seating.assignments;
+    Object.keys(assignments).forEach(seatKey=>{
+      const val = assignments[seatKey];
+      if(typeof val!=='string' || val.indexOf('::')===-1) return; // já no formato novo (só guestId)
+      const [oldKey] = val.split('::');
+      const parts = oldKey.split('|');
+      if(parts.length<3){ delete assignments[seatKey]; return; }
+      const idx = Number(parts[parts.length-1]);
+      const cat = parts.slice(1,-1).join('|');
+      const side = parts[0];
+      const gid = guestIdAt(side, cat, idx);
+      if(gid) assignments[seatKey] = gid; else delete assignments[seatKey];
+    });
+  }
+}
+// Dado um guestId, encontra o convidado em qualquer categoria de qualquer
+// lado. É a única forma "correta" de resolver um convidado a partir da
+// Fase 8.0 — nenhuma funcionalidade nova deve voltar a navegar por
+// índice/posição.
+function findGuestByGuestId(guestId){
+  if(!guestId) return null;
+  for(const side of ['noiva','noivo']){
+    for(const c of allGuestCategoriesOf(side)){
+      const arr = getGuestNames(side, c.id);
+      if(!Array.isArray(arr)) continue;
+      const idx = arr.findIndex(e=>e && typeof e==='object' && e.guestId===guestId);
+      if(idx>=0) return { side, catId:c.id, idx, entry:arr[idx], arr };
+    }
+  }
+  return null;
+}
+// Fase 8.0 — metade "local" da remoção de um convidado: tira-o do array,
+// da confirmação e do lugar à mesa, e devolve a entry que foi removida
+// (para quem chamar poder ainda tratar do RSVP no Firestore). Extraída de
+// deleteGuest() para permitir apagar VÁRIOS convidados de uma vez sem
+// disparar uma limpeza de RSVP por convidado em paralelo — ver o bug
+// corrigido no teste de aceitação da 8.0 (Set 2026): apagar uma categoria
+// inteira com 2+ convidados do MESMO link de família chamava
+// deleteGuestRSVPDoc() em simultâneo para cada um; cada chamada lia a
+// mesma cópia local desatualizada do documento e calculava "quem sobra"
+// a partir dela, por isso nenhuma das chamadas via o documento a ficar
+// sem ninguém — o documento nunca era apagado e ficava com respostas
+// perdidas (ganhava a última escrita). Ver deleteGuestRSVPDocsBatch().
+function deleteGuestLocalOnly(guestId){
+  const found = findGuestByGuestId(guestId);
+  if(!found) return null;
+  const { arr, idx, entry } = found;
+  arr.splice(idx, 1);
+  delete state.confirmed[guestId];
+  if(state.seating && state.seating.assignments){
+    Object.keys(state.seating.assignments).forEach(seatKey=>{
+      if(state.seating.assignments[seatKey]===guestId) delete state.seating.assignments[seatKey];
+    });
+  }
+  return entry;
+}
+// Fase 8.0 — operação central de remoção de UM convidado. Resolve sozinha
+// TODAS as referências desse convidado (RSVP no Firestore, confirmação,
+// lugar à mesa) e remove o registo — em vez de cada funcionalidade nova
+// ter de saber, ela própria, tudo o que precisa de limpar. Qualquer
+// caminho da app que remova/apague um convidado deve chamar esta função
+// (ou, para vários convidados de uma vez, deleteGuestLocalOnly() +
+// deleteGuestRSVPDocsBatch() — ver comentário acima), nunca fazer
+// splice() diretamente no array.
+function deleteGuest(guestId){
+  const entry = deleteGuestLocalOnly(guestId);
+  if(!entry) return Promise.resolve();
+  if(!entry.rsvpToken) return Promise.resolve();
+  return deleteGuestRSVPDoc(entry).catch(()=>{});
+}
+
+function seedData(){
+  return {
+    budget:{ total:20000, guestsEstimate:80 },
+    categories:[
+      { id:'quinta', name:'Espaço e Catering', value:10000, desc:['Arrendamento do local do evento','Serviço de catering (welcome drink, jantar, sobremesa e ceia)','Bebidas e bar (vinhos, espumante, bar aberto e cocktails)','Equipa de serviço (cozinha, empregados de mesa e coordenação de sala)','Mobiliário de apoio (mesas, cadeiras e zonas lounge)','Menagem completa: pratos, talheres, copos, toalhas e guardanapos','Extras possíveis: tenda, pista de dança ou prolongamento de horário'] },
+      { id:'cerimonia', name:'Cerimónia', value:1000, desc:['Taxas do local da cerimónia (igreja ou conservatória)','Música ao vivo durante a cerimónia (órgão, coro, quarteto ou violino)','Decoração do altar ou do espaço onde decorre a cerimónia','Equipamento de apoio: tapete, assentos e microfones','Almofada ou caixa para as alianças','Alianças de casamento'] },
+      { id:'entretenimento', name:'Entretenimento', value:1600, desc:['Música para a festa: DJ e/ou banda ao vivo','Equipamento de som e jogos de luz','Momentos extra de animação (saxofonista, fogo de artifício, artistas convidados)','Cabine de fotografias para os convidados','Espaço ou monitores para entreter os mais novos'] },
+      { id:'foto', name:'Fotografia e Vídeo', value:2400, desc:['Fotógrafo responsável pelo dia','Fotógrafo de apoio, caso seja necessário','Equipa de vídeo','Filmagens aéreas com drone, se aplicável','Álbum impresso e respetiva versão digital','Vídeo-resumo e filme final editado'] },
+      { id:'vestuario', name:'Vestuário e Acessórios', value:3000, desc:['Vestido de noiva, comprado ou alugado','Fato ou traje do noivo','Calçado para os dois','Acessórios do look (véu, joias, gravata ou suspensórios)','Ramo de noiva e pequenos detalhes florais','Maquilhagem e penteado, incluindo o ensaio prévio'] },
+      { id:'decoracao', name:'Decoração e Flores', value:1000, desc:['Flores para a cerimónia, o espaço e as mesas','Decoração da sala: velas e centros de mesa','Ambientação dos espaços exteriores (entrada, jardim, zona lounge)','Luz ambiente com pisca-piscas ou tochas','Estruturas decorativas (arco floral, painel para fotos, fundos cenográficos)'] },
+      { id:'convites', name:'Convites e Papelaria', value:400, desc:['Convites oficiais para os convidados','Cartão "Reservem a data"','Folheto com o programa da cerimónia','Menus impressos e mapa de lugares','Cartões com o nome de cada convidado'] },
+      { id:'extras', name:'Extras e Logística', value:600, desc:['Pequenas lembranças para levar para casa','Apoio de wedding planner ou coordenador no dia','Licenças necessárias e seguro do evento','Ensaio geral antes do grande dia','Kit de emergência para os noivos','Margem para taxas e imprevistos'] }
+    ],
+    guests:{
+      noiva:{ familia:[], amigos:[], duvida:[], staff:[], custom:[{id:'criancas', label:'Crianças', names:[]}] },
+      noivo:{ familia:[], amigos:[], duvida:[], staff:[], custom:[{id:'criancas', label:'Crianças', names:[]}] }
+    },
+    confirmed:{},
+    expenses:[],
+    seating:{ tables: Array.from({length:10}, (_,i)=>({ id:i+1, shape:'round', seats:10, x:null, y:null })), assignments:{} },
+    daySchedule:[],
+    checklistDone:{},
+    checklistPersonal:[],
+    dressChecklistDone:{},
+    dressVisits:[],
+    favoriteVisitId:null,
+    suppliers:[],
+    todos:[],
+    todoCategories:[
+      { id:'tc1', icon:'music', label:'Músicas', title:'Playlist do casamento', desc:'As músicas que queremos que toquem ao longo do dia.', items:[] },
+      { id:'tc2', icon:'church', label:'Igreja', title:'Cânticos e leituras', desc:'Seleciona os cânticos e leituras para a cerimónia religiosa.', items:[] },
+      { id:'tc3', icon:'doc', label:'Geral', title:'Outras tarefas', desc:'Ideias, lembretes e tudo o que quiseres organizar.', items:[] }
+    ],
+    todoNotes:'',
+    honeymoon:{ options:[] },
+    payments:[],
+    weddingDocuments:[]
+  };
+}
+function defaultSettings(name1, name2, dateStr, venue){
+  return {
+    coupleName1: name1 || ta('genericName1'),
+    coupleName2: name2 || ta('genericName2'),
+    weddingDate: dateStr || '',
+    venue: venue || '',
+    accentColor: 'rust',
+    heroPhotoUrl: null,
+    heroPhotoPosX: 50,
+    heroPhotoPosY: 50,
+    heroPhotoZoom: 100
+  };
+}
+
+const FIXED_GUEST_CATS = [
+  { id:'familia', label:'Família', icon:'home', colorIdx:0 },
+  { id:'amigos', label:'Amigos', icon:'guests', colorIdx:7 },
+  { id:'duvida', label:'Na dúvida', icon:'question', colorIdx:3 },
+  { id:'staff', label:'Staff / fornecedores', icon:'briefcase', colorIdx:5 }
+];
+const FIXED_GUEST_CAT_KEY = { familia:'catFamilia', amigos:'catFriends', duvida:'catMaybe', staff:'catStaff' };
+const PAYMENT_TRACKING_CATS = ['criancas','staff'];
+
+let state = seedData();
+normalizeCategories();
+migrateCategoryDescriptions();
+migrateGuestCategories();
+migrateConfirmedAndSeatingToGuestId();
+// Bug encontrado ao vivo (Set 2026): "defaultSettings()" chamada aqui, sem
+// argumentos, cai no fallback "name1 || ta('genericName1')" — e ta() precisa
+// de APP_I18N, que só é declarado bastante mais abaixo neste mesmo ficheiro.
+// Como esta inicialização corre imediatamente ao carregar a página (é
+// código de topo, não dentro de nenhuma função chamada mais tarde), isso
+// tentava ler APP_I18N ainda dentro da "temporal dead zone" — um
+// ReferenceError síncrono que travava a aplicação inteira ANTES de sequer
+// desenhar o ecrã de login ("A carregar…" para sempre). Este valor é sempre
+// só um placeholder, substituído a seguir por defaultSettings(name1,name2,…)
+// no Assistente de Configuração ou pelos dados reais vindos do Firestore —
+// por isso não precisa mesmo nada de passar por ta() aqui; construímos o
+// objeto à mão, com a mesma forma de defaultSettings(), sem essa dependência.
+let weddingSettings = { coupleName1:'', coupleName2:'', weddingDate:'', venue:'', accentColor:'rust', heroPhotoUrl:null, heroPhotoPosX:50, heroPhotoPosY:50, heroPhotoZoom:100 };
+let activeTab = 'inicio';
+let guestSeg = 'noiva';
+let openDesc = {};
+let openTable = {};
+let openGuestGroup = {};
+let openChecklistPhaseId = CHECKLIST_PHASES_PT[0] ? CHECKLIST_PHASES_PT[0].id : null;
+let openNoivaChecklist = false;
+let showAllPhaseProgress = false;
+function collapseAllSections(){
+  openDesc = {};
+  openTable = {};
+  openGuestGroup = {};
+  openChecklistPhaseId = CHECKLIST_PHASES_PT[0] ? CHECKLIST_PHASES_PT[0].id : null;
+  openNoivaChecklist = false;
+  openDressVisit = {};
+  openSupplierCat = {};
+  todoOpenCategoryId = null;
+  todoQuery = '';
+  hmOpenOptionId = null;
+  hmDraftOption = null;
+  supplierQuery = '';
+  guestFilter = '';
+  definicoesSection = null;
+  fornecedoresSubview = 'lista';
+  openSupplierDetailId = null;
+}
+let openDressVisit = {};
+let openSupplierCat = {};
+let todoOpenCategoryId = null;
+let todoFilter = 'todas';
+let todoQuery = '';
+let hmFilter = 'destino';
+let hmOpenOptionId = null;
+let hmDraftOption = null;
+let supplierFilter = 'todos';
+let supplierQuery = '';
+let fornecedoresSubview = 'lista'; // 'lista' | 'recomendados' | 'detalhe'
+let openSupplierDetailId = null;
+let showFilterChips = false;
+let definicoesSection = null;
+let dressInspirations = [];
+let editingSeatKey = null;
+let seatQuery = '';
+let guestFilter = '';
+let inspirations = [];
+
+// Fase 8.1 — AI Seating. Estado só local (nunca gravado no Firestore) —
+// a proposta é efémera por desenho: só existe enquanto o casal a está a
+// rever, e ou é aceite (grava-se então em state.seating.assignments, o
+// mesmo sítio de sempre) ou é descartada. "constraints" aqui é só o que
+// se está a construir no ecrã de preferências; para já não persistimos
+// preferências entre sessões (fica para uma fase futura).
+let aiSeatingScreen = null; // null | 'prefs' | 'loading' | 'proposal'
+let aiSeatingConstraints = []; // [{type,priority,guestIds:[...],names:[...]}]
+let aiSeatingFreeText = '';
+let aiSeatingProposal = null; // resultado (ok:true) da Cloud Function
+let aiSeatingErrorMsg = null; // mensagem quando ok:false (impossível)
+let aiSeatingPicking = null; // {type,priority} enquanto se escolhe quem
+let aiSeatingPickIds = []; // guestIds escolhidos no picker atual
+let aiSeatingPickQuery = '';
+let aiSeatingNewPriority = 'STRONG'; // prioridade escolhida para a PRÓXIMA preferência a criar
+let aiSeatingCommitting = false; // true enquanto commitSeatingProposal() está a validar/gravar/sincronizar
+
+/* ============================================================
+   HELPERS
+============================================================ */
+let pendingRenderAfterEdit = false;
+function isEditingTextField(){
+  const el = document.activeElement;
+  return !!el && (el.tagName==='INPUT' || el.tagName==='TEXTAREA');
+}
+document.addEventListener('focusout', e=>{
+  if(!(e.target && (e.target.tagName==='INPUT' || e.target.tagName==='TEXTAREA'))) return;
+  setTimeout(()=>{
+    if(pendingRenderAfterEdit && !isEditingTextField()){
+      pendingRenderAfterEdit = false;
+      _origRender();
+    }
+  }, 0);
+});
+function escapeHTML(str){
+  if(str===undefined || str===null) return '';
+  return String(str)
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;')
+    .replace(/'/g,'&#39;');
+}
+// Fase Feedback (Set 2026): usado só para mostrar "X,X MB" no total das
+// capturas de ecrã escolhidas em "Reporta um problema" — não precisa de
+// precisão a mais, só de dar uma ideia rápida de quanto falta para o limite.
+function fmtFileSize(bytes){
+  if(!bytes) return '0 MB';
+  return (bytes/(1024*1024)).toFixed(1)+' MB';
+}
+// Fase 4D da auditoria (BUG-01, P2): n=Number(n) ANTES do isNaN. Antes,
+// fmtEUR(null) rebentava com TypeError — isNaN(null) é `false` (porque
+// Number(null) é 0, um número válido), por isso o guard nunca disparava
+// para este caso concreto, e n continuava `null` até chegar a
+// n.toLocaleString(...), que `null` não tem. Number(n) primeiro garante
+// que isNaN(n) a seguir vê sempre um número (ou NaN), nunca null/undefined.
+function fmtEUR(n){ n=Number(n); if(isNaN(n)) n=0; return n.toLocaleString('pt-PT',{style:'currency',currency:'EUR',maximumFractionDigits:0}); }
+function fmtPct(n){ n=Number(n); if(isNaN(n)||!isFinite(n)) n=0; return n>999 ? '999%+' : `${n}%`; }
+function fmtEUR2(n){ n=Number(n); if(isNaN(n)) n=0; return n.toLocaleString('pt-PT',{style:'currency',currency:'EUR',maximumFractionDigits:2}); }
+function flagRequiredField(el){
+  if(!el) return;
+  el.classList.add('field-error');
+  el.focus();
+  if(el.scrollIntoView) el.scrollIntoView({block:'center', behavior:'smooth'});
+  const clear = ()=>{ el.classList.remove('field-error'); el.removeEventListener('input', clear); };
+  el.addEventListener('input', clear);
+}
+function catById(id){ return state.categories.find(c=>c.id===id); }
+function guestKey(side,cat,idx){ return side+'|'+cat+'|'+idx; }
+// Categorias onde o "peso" de cada convidado para efeitos de contagem pode
+// não ser 1 inteiro — crianças e staff/fornecedores muitas vezes pagam
+// meio-preço ou nada. As mesas continuam a dar-lhes sempre um lugar inteiro;
+// isto só afeta os NÚMEROS de convidados mostrados na app.
+function isPaymentTrackingCat(catId){ return PAYMENT_TRACKING_CATS.includes(catId); }
+// Peso de UM convidado para efeitos de contagem: 1 para a generalidade dos
+// convidados (guardados só como nome/string), ou 0 / 0.5 / 1 consoante a
+// percentagem de pagamento escolhida, para crianças e staff/fornecedores.
+function guestWeight(entry){
+  if(entry && typeof entry==='object' && entry.payingPct!==undefined){
+    const p = entry.payingPct;
+    return (p===0 || p===0.5 || p===1) ? p : 1;
+  }
+  return 1;
+}
+// Identificador único e permanente por convidado — gerado uma vez, quando o
+// convidado é criado, e nunca muda depois disso (mesmo reordenando ou
+// apagando outras pessoas da lista). É a "morada fixa" de cada convidado,
+// necessária para, por exemplo, um link de RSVP apontar sempre à pessoa
+// certa, independentemente da posição dela na lista.
+function generateGuestId(){
+  return 'g'+Date.now().toString(36)+Math.random().toString(36).slice(2,8);
+}
+// Cria a entrada certa consoante a categoria: crianças ganham idade e
+// percentagem de pagamento; staff/fornecedores só a percentagem; o resto
+// só o nome — mas TODOS ganham sempre um identificador fixo (id).
+function newGuestEntry(catId, name){
+  const id = generateGuestId();
+  if(catId==='criancas') return { name, id, guestId:id, age:'', payingPct:0 };
+  if(catId==='staff') return { name, id, guestId:id, payingPct:1 };
+  return { name, id, guestId:id };
+}
+// Arredonda para 1 casa decimal e mostra sem ".0" quando é um número inteiro
+// (ex: 3 em vez de "3.0", mas 1.5 continua "1.5").
+function fmtGuestCount(n){
+  const r = Math.round(n*10)/10;
+  return Number.isInteger(r) ? String(r) : String(r);
+}
+// Lista, para um lado (noiva/noivo), TODAS as categorias — as 4 fixas mais
+// as que a pessoa foi criando (Crianças, por defeito, e quaisquer outras
+// que adicione, ex: "Pagam metade" ou por faixa etária).
+function allGuestCategoriesOf(side){
+  const fixed = FIXED_GUEST_CATS.map(c=>({ id:c.id, label:c.label, icon:ICONS[c.icon], colorIdx:c.colorIdx, isCustom:false }));
+  const custom = (state.guests[side].custom||[]).map((c,i)=>({ id:c.id, label:c.label, icon:ICONS.guests, colorIdx:2+(i%6), isCustom:true }));
+  return fixed.concat(custom);
+}
+// Devolve a referência direta ao array de nomes de uma categoria (fixa ou
+// custom) — permite fazer push/splice diretamente nela.
+function getGuestNames(side, catId){
+  if(FIXED_GUEST_CATS.some(c=>c.id===catId)) return state.guests[side][catId];
+  const custom = (state.guests[side].custom||[]).find(c=>c.id===catId);
+  return custom ? custom.names : null;
+}
+function getGuestCatLabel(side, catId){
+  const fixed = FIXED_GUEST_CATS.find(c=>c.id===catId);
+  if(fixed) return fixed.label;
+  const custom = (state.guests[side].custom||[]).find(c=>c.id===catId);
+  return custom ? custom.label : catId;
+}
+// Fase 8.0 — Guest Data Foundation (Set 2026): antes, "confirmado" e o
+// lugar à mesa eram guardados por posição na lista ("lado|categoria|
+// índice"), por isso reordenar ou remover um convidado exigia reindexar
+// manualmente tudo o resto (as duas funções que estavam aqui,
+// reindexConfirmedAfterRemoval/AfterMove). Agora que state.confirmed é
+// chaveado pelo guestId permanente de cada convidado (ver
+// migrateConfirmedAndSeatingToGuestId), mover ou remover um convidado
+// nunca desalinha mais nada — o guestId não muda com a posição, por isso
+// estas duas funções deixaram de ser necessárias e foram removidas.
+function moveGuestToIndex(side, cat, fromIdx, toIdx){
+  const arr = getGuestNames(side, cat);
+  if(!arr) return;
+  toIdx = Math.max(0, Math.min(arr.length-1, toIdx));
+  if(toIdx===fromIdx) return;
+  const [item] = arr.splice(fromIdx,1);
+  arr.splice(toIdx,0,item);
+}
+function moveGuest(side, cat, fromIdx, dir){
+  moveGuestToIndex(side, cat, fromIdx, fromIdx+dir);
+}
+const TABLE_SHAPES = { round:{get label(){return ta('shapeRound');}, icon:'tableround'}, long:{get label(){return ta('shapeLong');}, icon:'tablelong'}, serpentine:{get label(){return ta('shapeSerpentine');}, icon:'tableserpentine'} };
+function getTable(id){ return state.seating.tables.find(t=>t.id===id); }
+function nextTableId(){
+  const usedIds = new Set(state.seating.tables.map(t=>t.id));
+  let candidate = 1;
+  while(usedIds.has(candidate)) candidate++;
+  return candidate;
+}
+function totalSeatsCount(){ return state.seating.tables.reduce((s,t)=>s+t.seats,0); }
+function assignedSeatsCount(){ return Object.keys(state.seating.assignments).filter(k=>state.seating.assignments[k]).length; }
+function clearSeatsAbove(tableId, fromSeat){
+  Object.keys(state.seating.assignments).forEach(k=>{
+    const m = k.match(/^t(\d+)-s(\d+)$/);
+    if(m && Number(m[1])===tableId && Number(m[2])>fromSeat) delete state.seating.assignments[k];
+  });
+}
+function clearAllSeatsForTable(tableId){
+  Object.keys(state.seating.assignments).forEach(k=>{
+    const m = k.match(/^t(\d+)-s(\d+)$/);
+    if(m && Number(m[1])===tableId) delete state.seating.assignments[k];
+  });
+}
+// Fase 8.0: resolve o convidado atual em (side,cat,idx) e lê a sua
+// confirmação pelo guestId estável, nunca por posição — mesmo que este
+// helper continue a receber side/cat/idx (útil no render, onde a posição
+// atual é sempre fiável), o que fica gravado em state.confirmed é sempre
+// o guestId.
+function isConfirmed(side,cat,idx){
+  const arr = getGuestNames(side,cat);
+  const entry = arr && arr[idx];
+  return !!(entry && typeof entry==='object' && state.confirmed[entry.guestId]);
+}
+function countGuests(side){
+  let total = 0;
+  allGuestCategoriesOf(side).forEach(c=>{
+    (getGuestNames(side,c.id)||[]).forEach(n=>{ total += guestWeight(n); });
+  });
+  return total;
+}
+function countConfirmed(side){
+  let n=0;
+  allGuestCategoriesOf(side).forEach(c=>{
+    (getGuestNames(side,c.id)||[]).forEach((n2,idx)=>{ if(isConfirmed(side,c.id,idx)) n += guestWeight(n2); });
+  });
+  return n;
+}
+function totalExpenseValue(){ return state.expenses.reduce((s,e)=>s+(Number(e.value)||0),0); }
+function totalExpensePaid(){ return state.expenses.reduce((s,e)=>s+(Number(e.paid)||0),0); }
+function spentByCategory(id){ return state.expenses.filter(e=>e.category===id).reduce((s,e)=>s+(Number(e.value)||0),0); }
+function paidByCategory(id){ return state.expenses.filter(e=>e.category===id).reduce((s,e)=>s+(Number(e.paid)||0),0); }
+// Usada para atribuir lugares às mesas — inclui todos os convidados de
+// todas as categorias, incluindo Crianças (pagantes ou não, têm lugar à
+// mesa na mesma). As crianças são guardadas como objeto {name,age,paying},
+// por isso o nome tem de ser sempre extraído com cuidado.
+function allAdultGuests(){
+  const out=[];
+  ['noiva','noivo'].forEach(side=>{
+    allGuestCategoriesOf(side).forEach(c=>{
+      (getGuestNames(side,c.id)||[]).forEach((n,idx)=>{
+        const name = (typeof n==='object' && n!==null) ? (n.name||'') : n;
+        const gid = (typeof n==='object' && n!==null) ? n.guestId : null;
+        out.push({side,cat:c.id,idx,name,key:gid,guestId:gid});
+      });
+    });
+  });
+  return out;
+}
+function daysUntil(dateStr){
+  const target = new Date(dateStr+'T00:00:00');
+  const now = new Date();
+  const diff = Math.ceil((target - now)/(1000*60*60*24));
+  return diff;
+}
+function formatDatePT(dateStr){
+  if(!dateStr) return ta('dateNotSet');
+  const meses = ta('monthNamesFull');
+  const d = new Date(dateStr+'T00:00:00');
+  return appLang==='en' ? `${meses[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}` : `${d.getDate()} de ${meses[d.getMonth()]} de ${d.getFullYear()}`;
+}
+function formatDateShortPT(dateStr){
+  if(!dateStr) return '';
+  const meses = ta('monthNamesShort');
+  const d = new Date(dateStr+'T00:00:00');
+  return appLang==='en' ? `${meses[d.getMonth()]} ${d.getDate()}` : `${d.getDate()} ${meses[d.getMonth()]}`;
+}
+// Fase 9.1 — usado só para mostrar "Última sincronização" do Google
+// Calendar. Aceita um Date já convertido (o chamador trata do
+// Firestore Timestamp -> Date antes de chamar isto).
+function formatDateTimePT(date){
+  if(!date || !(date instanceof Date) || isNaN(date.getTime())) return '';
+  const dd = String(date.getDate()).padStart(2,'0');
+  const mm = String(date.getMonth()+1).padStart(2,'0');
+  const hh = String(date.getHours()).padStart(2,'0');
+  const min = String(date.getMinutes()).padStart(2,'0');
+  return `${dd}/${mm} ${ta('dateAtTimeSeparator')} ${hh}:${min}`;
+}
+function dueUrgency(dateStr){
+  if(!dateStr) return '';
+  const days = daysUntil(dateStr);
+  if(days<0) return 'overdue';
+  if(days<=7) return 'soon';
+  return '';
+}
+/* Início — "Calendário da semana": junta os itens de to-do com prazo, de todas as categorias */
+function getDuedTodoItems(){
+  const out = [];
+  (state.todoCategories||[]).forEach((cat,catIdx)=>{
+    (cat.items||[]).forEach((item,i)=>{
+      if(item.done || !item.due) return;
+      out.push({ catId:cat.id, catLabel:cat.label, catIcon:cat.icon, catIdx, i, text:item.text, due:item.due, time:item.time||'', days:daysUntil(item.due) });
+    });
+  });
+  out.sort((a,b)=> a.days-b.days || (a.time||'').localeCompare(b.time||''));
+  return out;
+}
+function toLocalISODate(d){
+  const y = d.getFullYear(), m = String(d.getMonth()+1).padStart(2,'0'), day = String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
+/* Segunda a domingo da semana atual, como datas locais */
+function currentWeekDates(){
+  const now = new Date();
+  const dow = now.getDay();
+  const mondayOffset = dow===0 ? -6 : 1-dow;
+  const monday = new Date(now); monday.setDate(now.getDate()+mondayOffset);
+  const dates = [];
+  for(let i=0;i<7;i++){ const d=new Date(monday); d.setDate(monday.getDate()+i); dates.push(d); }
+  return dates;
+}
+let weekAgendaSelectedDate = null;
+function weekStripHTML(duedItems, selectedISO){
+  const dayNames = ta('weekDayAbbrevs');
+  return currentWeekDates().map((d,i)=>{
+    const iso = toLocalISODate(d);
+    const isSelected = iso===selectedISO;
+    const hasTask = duedItems.some(it=>it.due===iso);
+    return `<div class="week-day ${isSelected?'today':''}" data-weekday="${iso}">
+      <div class="week-day-name">${dayNames[i]}</div>
+      <div class="week-day-num">${d.getDate()}</div>
+      <div class="week-day-dot ${hasTask?'':'none'}"></div>
+    </div>`;
+  }).join('');
+}
+function weekAgendaHTML(){
+  const allDued = getDuedTodoItems();
+  if(!weekAgendaSelectedDate) weekAgendaSelectedDate = toLocalISODate(new Date());
+  const weekISOs = currentWeekDates().map(toLocalISODate);
+  if(!weekISOs.includes(weekAgendaSelectedDate)) weekAgendaSelectedDate = toLocalISODate(new Date());
+  const selected = weekAgendaSelectedDate;
+  const overdueCount = allDued.filter(it=>it.days<0).length;
+  const dayItems = allDued.filter(it=>it.due===selected);
+  const rows = dayItems.length ? dayItems.map(it=>{
+    return `<div class="agenda-item" data-catgoto="${it.catId}">
+      <div class="agenda-check" data-catitemcheck="${it.catId}|${it.i}">${ICONS.check}</div>
+      <div class="agenda-mid">
+        <div class="agenda-text">${escapeHTML(it.text)}</div>
+        <div class="agenda-cat-row">
+          <span class="agenda-cat-chip" style="${chipStyle(it.catIdx)}">${escapeHTML(it.catLabel)}</span>
+          ${it.time ? `<span class="agenda-time">${it.time}</span>` : ''}
+        </div>
+      </div>
+      <div class="agenda-chevron">${ICONS.chev}</div>
+    </div>`;
+  }).join('') : `<div class="agenda-empty">${ta('agendaEmptyDay')}</div>`;
   return `
-  <div style="font-family:Georgia,serif; max-width:480px; margin:0 auto; color:#3a3330;">
-    <p>Olá ${guestName || ''},</p>
-    <p>É só um lembrete simpático de ${coupleName1 || ''} & ${coupleName2 || ''} — o prazo para confirmares presença no casamento termina ${prazoTxt} (${diasTxt}).</p>
-    <p><a href="${link}" style="display:inline-block; padding:12px 22px; background:#a8503a; color:#fff; text-decoration:none; border-radius:10px; font-weight:bold;">Responder agora</a></p>
-    <p style="font-size:12px; color:#8a7d75;">Se o botão não funcionar, copia este link: ${link}</p>
+  <div class="week-agenda">
+    <div class="week-agenda-head">
+      <div class="week-agenda-title"><span class="week-agenda-icon">${ICONS.calendar||ICONS.checklist}</span>${ta('weekAgendaTitle')}</div>
+      <button class="week-agenda-link" data-goto="todo">${ta('weekAgendaSeeAll')} ${ICONS.chev}</button>
+    </div>
+    <div class="week-strip">${weekStripHTML(allDued, selected)}</div>
+    ${overdueCount ? `<div class="agenda-overdue">${overdueCount} tarefa${overdueCount>1?'s':''} atrasada${overdueCount>1?'s':''}</div>` : ''}
+    <div class="agenda-list">${rows}</div>
+  </div>`;
+}
+function donutSVG(pct, color, size, stroke){
+  const r = (size-stroke)/2, c = size/2;
+  const circ = 2*Math.PI*r;
+  const off = circ*(1-Math.max(0,Math.min(pct,1)));
+  return `<svg viewBox="0 0 ${size} ${size}">
+    <circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="rgba(20,20,20,0.09)" stroke-width="${stroke}"/>
+    <circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="${color}" stroke-width="${stroke}" stroke-linecap="round" stroke-dasharray="${circ}" stroke-dashoffset="${off}" transform="rotate(-90 ${c} ${c})"/>
+  </svg>`;
+}
+function multiDonutSVG(segments, size, stroke){
+  const r = (size-stroke)/2, c = size/2;
+  const circ = 2*Math.PI*r;
+  let acc = 0, arcs = '';
+  segments.forEach(seg=>{
+    const remaining = Math.max(0, circ-acc);
+    const len = Math.min(remaining, circ*Math.max(0, seg.pct));
+    if(len > 0.15){
+      const rot = -90 + (acc/circ)*360;
+      arcs += `<circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="${seg.color}" stroke-width="${stroke}" stroke-dasharray="${Math.max(len-1.4,0)} ${circ}" transform="rotate(${rot} ${c} ${c})"/>`;
+    }
+    acc += len;
+  });
+  return `<svg viewBox="0 0 ${size} ${size}">
+    <circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="rgba(20,20,20,0.07)" stroke-width="${stroke}"/>
+    ${arcs}
+  </svg>`;
+}
+
+/* ============================================================
+   TABS
+============================================================ */
+const TABS = [
+  { id:'inicio', label:'Início', icon:'home' },
+  { id:'orcamento', label:'Orçamento', icon:'coins' },
+  { id:'convidados', label:'Convidados', icon:'guests' },
+  { id:'gastos', label:'Gastos', icon:'list' },
+  { id:'mesas', label:'Mesas', icon:'tables' },
+  { id:'mesa3d', label:'Lugares', icon:'cube' }
+];
+
+/* ============================================================
+   IDIOMA DA APP (PT/EN) — por agora cobre a barra de separadores e o
+   menu principal de Definições ("chrome" da app). O resto da app (todas
+   as outras páginas, o conteúdo que o próprio casal escreve, etc.) ainda
+   só está em português — é um trabalho grande à parte, a continuar aos
+   poucos. Preferência guardada por dispositivo (não sincroniza entre
+   telemóveis, tal como o idioma do link do convidado).
+============================================================ */
+let appLang = 'pt';
+try{ const savedLang = localStorage.getItem('weddy_app_lang'); if(savedLang==='en') appLang = 'en'; }catch(e){}
+const APP_I18N = {
+  pt: {
+    tabHome:'Início', tabBudget:'Orçamento', tabGuests:'Convidados', tabExpenses:'Gastos', tabTables:'Mesas', tabSeating:'Lugares',
+    defTitle:'Definições', defSubtitle:'Personaliza a tua experiência na Weddy<br>e gere o teu casamento.',
+    sectionPremium:'Weddy Premium', sectionWedding:'O casamento', sectionData:'Os teus dados', sectionAccess:'Acesso e conta', sectionInfo:'Informação', sectionHelp:'Ajuda',
+    subscriptionTitle:'Gerir subscrição', subscriptionDesc:'O estado do teu plano Weddy Premium',
+    subscriptionActiveStatus:'Weddy Premium está ativo', subscriptionActiveText:'Tens acesso a todas as funcionalidades Premium — RSVP, Wedding Health, Memórias, Documentos e Google Calendar.',
+    subscriptionPlanLabel:'Plano', subscriptionManageNote:'(Protótipo — a gestão de faturação real ainda não está ligada a nenhum pagamento.)',
+    subscriptionStartedLabel:'Início', subscriptionExpiresLabel:'Válida até',
+    btnCancelSubscription:'Cancelar subscrição', btnCancelingEllipsis:'A cancelar…',
+    subscriptionSubtitleText:'Mais funcionalidades. Um casamento mais completo.',
+    subscriptionActiveBadge:'Ativo',
+    subscriptionFeatureGuests:'Convidados ilimitados', subscriptionFeatureAISeating:'AI Seating', subscriptionFeatureWeddingHealth:'Wedding Health',
+    subscriptionFeatureMemories:'Memórias', subscriptionFeatureRSVP:'RSVP avançado', subscriptionFeatureMore:'E muito mais…',
+    subscriptionCurrentPlanLabel:'Plano atual', subscriptionDefaultPlanName:'Premium — 24 meses', subscriptionPriceText:'29,99€ / 24 meses',
+    subscriptionRenewsOnLabel:(d)=>`Renova a ${d}`,
+    subscriptionNeedHelpTitle:'Precisas de ajuda?', subscriptionNeedHelpDesc:'Fala com a nossa equipa de suporte.',
+    confirmCancelSubscriptionText:'Isto cancela já a subscrição Weddy Premium — todas as funcionalidades Premium (RSVP, Wedding Health, Memórias, Documentos, Google Calendar, Assistente) ficam bloqueadas de imediato. Confirmas?',
+    alertSubscriptionCancelError:'Não foi possível cancelar a subscrição agora — verifica a ligação e tenta de novo.',
+    homePremiumSectionLabel:'Weddy Premium',
+    premiumHubTitle:'Ferramentas Weddy', premiumHubDesc:'Tudo o que precisas para organizar o grande dia, num só lugar.',
+    premiumHubBadge:'Weddy Premium',
+    premiumHubCtaTitle:'Desbloqueia todas as ferramentas', premiumHubCtaDesc:'Torna a tua organização ainda mais completa.',
+    premiumTileRSVP:'Confirma a presença e as respostas dos convidados.',
+    premiumTileChatbot:'Chatbot', premiumTileChatbotDesc:'Tira as tuas dúvidas em tempo real.',
+    premiumTileHealthDesc:'Um raio-x rápido ao estado do casamento.',
+    premiumTileAISeatingDesc:'A Weddy AI organiza os convidados nas mesas por ti.',
+    premiumTileMemoriesDesc:'Revive os melhores momentos do grande dia.',
+    premiumTileDocumentosDesc:'Consulta os teus contratos e documentos.',
+    premiumTileGoogleCalDesc:'Sincroniza o teu calendário do casamento.',
+    rsvpTitle:'Convites RSVP', rsvpDesc:'Envia e acompanha as respostas dos convidados',
+    rsvpRespostasNavTitle:'Respostas dos convidados', rsvpRespostasNavDesc:'Vê, pesquisa e agrupa quem já respondeu',
+    rsvpDeadlineNavDesc:'Define até quando os convidados podem responder',
+    rsvpFaqNavTitle:'Perguntas personalizadas', rsvpFaqNavDesc:'O que o assistente responde aos convidados',
+    rsvpDeadlineUnset:'Ainda não definido',
+    btnAddFaq:'Adicionar pergunta', faqEmptyState:'Ainda não tens perguntas personalizadas. Adiciona a primeira.',
+    faqQuestionPlaceholder:'Pergunta (ex: Posso levar acompanhante?)', faqAnswerPlaceholder:'Resposta que o assistente vai dar',
+    btnEditFaq:'Editar', btnDeleteFaq:'Eliminar', confirmDeleteFaq:'Eliminar esta pergunta?',
+    faqToggleHint:'Desliga uma pergunta para o assistente deixar de a usar, sem a apagar.',
+    rsvpInfoSeeFaqLink:'Gerir perguntas personalizadas',
+    healthTitle:'Wedding Health', healthDesc:'Um raio-x rápido ao estado do teu casamento',
+    healthAllGood:'Está tudo controlado! 🎉',
+    healthAllGoodDesc:'Não encontrei nada a precisar da tua atenção neste momento — passa por aqui de vez em quando.',
+    healthSummaryRed: n => `${n} coisa${n===1?'':'s'} precisa${n===1?'':'m'} da tua atenção.`,
+    healthSummaryYellow: n => `${n} coisa${n===1?'':'s'} para ires vendo, sem urgência.`,
+    healthConfirmedPct: pct => `${pct}% dos convidados já confirmaram presença.`,
+    healthCheckPendingRSVP: n => `${n} convidado${n===1?'':'s'} ainda ${n===1?'não respondeu':'não responderam'} ao RSVP.`,
+    healthCheckPaymentsSoon: n => `Tens ${n} pagamento${n===1?'':'s'} nos próximos 7 dias.`,
+    healthCheckPaymentsUpcoming: n => `Tens ${n} pagamento${n===1?'':'s'} nos próximos 15 dias.`,
+    healthCheckBudgetOver: pct => `O orçamento está ${pct}% acima do planeado.`,
+    healthCheckNoTable: n => `${n} convidado${n===1?'':'s'} confirmado${n===1?'':'s'} ainda sem mesa atribuída.`,
+    healthCheckNoMeal: n => `${n} convidado${n===1?'':'s'} confirmado${n===1?'':'s'} ainda sem refeição escolhida.`,
+    healthCheckSuppliers: n => `${n} fornecedor${n===1?'':'es'} ainda por contratar.`,
+    btnResolve:'Resolver',
+    memoriesTitle:'Weddy Memories', memoriesDesc:'Fotos que os convidados partilharam contigo',
+    documentsTitle:'Documentos do casamento', documentsDesc:'Carrega contratos em PDF e pesquisa neles pelo Assistente',
+    googleCalendarTitle:'Google Calendar', googleCalendarDesc:'Leva o cronograma do teu casamento para o teu calendário',
+    googleCalendarConnectedDesc:'Ligado — o teu cronograma está a ser sincronizado',
+    googleCalendarIntroText:'Leva o cronograma do teu casamento diretamente para o teu calendário. Cria e atualiza os eventos automaticamente — tu continuas a editar tudo aqui na Weddy.',
+    googleCalendarConnect:'Ligar Google Calendar', googleCalendarConnecting:'A ligar…',
+    googleCalendarConnectedTitle:'Google Calendar ligado',
+    googleCalendarCalendarLabel:'Calendário', googleCalendarLastSyncLabel:'Última sincronização',
+    googleCalendarNeverSynced:'Ainda não sincronizado',
+    googleCalendarSyncNow:'Sincronizar agora', googleCalendarSyncing:'A sincronizar…',
+    googleCalendarChangeCalendar:'Alterar calendário',
+    googleCalendarDisconnect:'Desligar Google Calendar',
+    googleCalendarDisconnectConfirm:'Queres desligar o Google Calendar? Os eventos já criados no teu Google Calendar não serão apagados.',
+    googleCalendarDisconnectSuccess:'Google Calendar desligado. Os eventos que já lá estavam continuam no teu Google Calendar.',
+    googleCalendarSyncSuccess:'Sincronizado com sucesso.',
+    googleCalendarConnectSuccess:'Calendário escolhido — a sincronizar pela primeira vez.',
+    googleCalendarPickCalendarText:'Escolhe o calendário onde a Weddy deve criar e atualizar os eventos do teu casamento.',
+    googleCalendarNoCalendars:'Não encontrámos nenhum calendário onde tenhas permissão para editar. Cria um calendário na tua conta Google e tenta novamente.',
+    googleCalendarReauthText:'A ligação ao Google Calendar expirou. Volta a ligar a tua conta Google para continuar a sincronizar.',
+    googleCalendarReconnect:'Voltar a ligar',
+    googleCalendarOAuthSuccess:'Google Calendar ligado com sucesso — escolhe agora o calendário.',
+    googleCalendarOAuthCancelled:'A ligação ao Google Calendar foi cancelada.',
+    googleCalendarOAuthError:'Não foi possível ligar o Google Calendar. Tenta novamente.',
+    googleCalendarSyncErrorPrefix:'A última sincronização falhou',
+    googleCalendarGenericSyncError:'A última sincronização falhou. Os teus dados na Weddy não foram alterados.',
+    subscriptionNeeded:'Subscrição necessária',
+    weddingInfoTitle:'Nomes, data e local', weddingInfoUnset:'Ainda por definir',
+    designTitle:'Design e foto de capa', designDesc:'Personaliza a imagem do teu casamento',
+    categoriesTitle:'Categorias de gastos', categoriesDesc:'Edita as categorias do teu orçamento',
+    exportTitle:'Exportar dados', exportDesc:'Descarrega tudo em Excel ou PDF',
+    historicoTitle:'Histórico do casamento', historicoDesc:'Cópias de segurança e restauro',
+    inviteTitle:'Convidar participante no planeamento', inviteDesc:'Partilha o planeamento do casamento',
+    accessTitle:'Quem tem acesso', accessDesc:'Controla quem pode ver e editar os dados',
+    privacyTitle:'Privacidade e RGPD', privacyDesc:'Consulta a nossa política de privacidade',
+    aboutTitle:'Sobre a Weddy', aboutDesc:'Versão 1.0.0',
+    reportTitle:'Reporta um problema', reportDesc:'Encontraste um bug? Conta-nos',
+    signOut:'Terminar sessão',
+    languageLabel:'Idioma',
+    catFamilia:'Família', catFriends:'Amigos', catMaybe:'Na dúvida', catStaff:'Staff / fornecedores',
+    shapeRound:'Redonda', shapeLong:'Longa', shapeSerpentine:'Serpente',
+    loginLoading:'A carregar…',
+    loginTagSignup:'Cria a tua conta de casal', loginTagLogin:'Entra na tua conta',
+    btnHidePassword:'Ocultar password', btnShowPassword:'Mostrar password',
+    emailPlaceholder:'o-teu-email@exemplo.com', passPlaceholder:'Password (mín. 6 caracteres)', passConfirmPlaceholder:'Confirma a password',
+    btnCreateAccount:'Criar conta', btnEnter:'Entrar', btnWait:'Aguarda…',
+    forgotPassword:'Esqueceste a password?', toggleToLogin:'Já tens conta? Entrar', toggleToSignup:'Ainda não tens conta? Criar conta',
+    forgotNeedsEmail:'Escreve o teu email em cima e toca outra vez em "Esqueceste a password?".',
+    firebaseNotReady:'A configuração do Firebase não está pronta.',
+    forgotSuccess: email => `Enviámos um email para ${email} com instruções para redefinires a password.`,
+    forgotUserNotFound:'Não há nenhuma conta com este email.', forgotGenericError:'Não foi possível enviar o email. Verifica se está correto.',
+    setupNeededTitle:'Falta configurar o acesso', setupNeededMsg:'Ainda não colocaste a configuração do Firebase no ficheiro <b>index.html</b>. Segue as instruções no README.md.',
+    verifyEmailTitle:'Confirma o teu email',
+    verifyEmailMsg: email => `Enviámos um link de confirmação para <b>${email}</b>. Abre esse email e toca no link antes de continuares — isto protege o teu casamento.`,
+    btnResendEmail:'Reenviar email', btnAlreadyConfirmed:'Já confirmei, continuar',
+    resendSuccess:'Email reenviado.', resendError:'Não foi possível reenviar. Tenta outra vez daqui a pouco.',
+    verifying:'A verificar…', notConfirmedYet:'Ainda não está confirmado. Verifica o email (e o spam).',
+    fillEmailPass:'Escreve o email e a password.', passwordMismatch:'As duas passwords não coincidem.',
+    firebaseNotReadyFile:'A configuração do Firebase não está pronta neste ficheiro.',
+    authErrEmailInUse:'Já existe uma conta com este email — tenta entrar.',
+    authErrUnauthorizedDomain:'Este site ainda não está autorizado no Firebase (Authentication → Settings → Authorized domains).',
+    authErrBadCredentials:'Email ou password incorretos. Tenta novamente.',
+    authErrWeakPassword:'A password precisa de pelo menos 6 caracteres.',
+    authErrInvalidEmail:'Esse email não parece válido.',
+    authErrAccountExistsDifferentCred:'Já existe uma conta com este email, criada de outra forma (ex.: com password). Entra com essa opção.',
+    authErrPopupBlocked:'O teu navegador bloqueou a janela de login da Google. Permite pop-ups para este site e tenta novamente.',
+    btnContinueGoogle:'Continuar com a Google',
+    orSeparatorLabel:'ou',
+    authErrGeneric: code => `Não foi possível continuar (${code}).`,
+    obTitle:'Vamos configurar o vosso casamento', obName1:'Nome noiva (ex: Rita)', obName2:'Nome noivo (ex: Tiago)',
+    obDateLabel:'Data do casamento', obVenue:'Local (ex: Quinta do Jardim, Barcelos)', obStart:'Começar',
+    obErrNames:'Escreve pelo menos os dois nomes.', obErrDate:'Escolhe a data do casamento (podes sempre mudar depois).',
+    obCreating:'A criar o vosso espaço…',
+    verifyingAccount:'A verificar a tua conta…',
+    loginErrorAccessData:'Não foi possível aceder aos dados. Tenta sair e entrar de novo.',
+    loginErrorVerifyAccount:'Não foi possível verificar a tua conta. (permissão negada — confirma as regras do Firestore)',
+    loginErrorVerifyGeneric:'Não foi possível verificar a tua conta.', loginErrorPermExtra:' (permissão negada — confirma as regras do Firestore)',
+
+    homeSubtitle:'O seu casamento,<br>num só lugar',
+    homeCountdownLabel:'Faltam',
+    daysLeftLabel:(n)=>`${n} dias`,
+    homeDateTBD:'Data ainda por marcar',
+    homeQuickHoneymoon:'Lua-de-mel',
+    homeQuickSuppliers:'Fornecedores',
+    homeProgressLabel:'O teu progresso',
+    lblConfirmed:'Confirmados',
+    sideBride:'Noiva',
+    sideGroom:'Noivo',
+    homeBudgetSpentLabel:'Orçamento gasto',
+    homeToSpendLabel:'Por gastar',
+    homeBigDayLabel:'O grande dia',
+    donutAllocatedLabel:'repartido',
+
+    btnRename:'Renomear',
+    btnDelete:'Eliminar',
+    placeholderAddItem:'Adicionar item…',
+    placeholderAge:'Idade',
+    loadingLabel:'A carregar…',
+    navBudgetTitle:'Orçamento',
+    budgetTotalLabel:'Orçamento total',
+    budgetGuestsEstLabel:'Convidados (est.)',
+    perGuestLabel:'€ / convidado',
+    budgetBreakdownLabel:'Repartição por categoria',
+    budgetCategoriesHint:'Categorias · toca para ver detalhe',
+    valueEurLabel:'Valor (€)',
+    perGuestSuffix:' / convidado',
+    placeholderNewCategory:'Nova categoria…',
+
+    payingNone:'Não pagante',
+    paying50:'Pagante 50%',
+    paying100:'Pagante 100%',
+    emptyNoGuestsInCategory:'sem convidados nesta categoria',
+    addToCategoryPlaceholder:(label)=>`Adicionar a ${label}…`,
+    btnEditName:'Editar nome',
+    promptNewCategoryName:'Novo nome da categoria:',
+    confirmDeleteCategoryWithGuests:(label,count)=>`Eliminar "${label}"? Os ${count} convidado(s) lá dentro perdem-se também.`,
+    confirmDeleteCategorySimple:(label)=>`Eliminar a categoria "${label}"?`,
+    navGuestsTitle:'Convidados',
+    placeholderSearchGuest:'Procurar convidado',
+    totalGuestsLabel:'convidados no total',
+    perGuestPaidLabel:'€ / convidado (pago)',
+    placeholderNewGuestCategory:'Nova categoria (ex: Amigos da família)…',
+
+    placeholderDescription:'Descrição',
+    labelDate:'Data',
+    labelPaidColon:'Pago:',
+    labelMethod:'Método',
+    optionNotDefined:'Não definido',
+    methodTransfer:'Transferência',
+    methodCash:'Dinheiro',
+    methodCard:'Cartão',
+    remainingToPayLabel:(x)=>`Falta pagar ${x} — até`,
+    btnSetDueDate:'+ definir data limite',
+    navExpensesTitle:'Gastos',
+    lblPaid:'Pago',
+    lblToPay:'Por pagar',
+    lblOfBudget:'Do orçamento',
+    sectionPaidVsBudgeted:'Pago vs. orçamentado',
+    sectionMovements:'Movimentos',
+    emptyNoMovements:'sem movimentos registados',
+
+    tapToAssign:'toca para atribuir',
+    labelShape:'Forma',
+    labelSeats:'Lugares',
+    notesTableLabel:'Notas (ex: não sentar a Ana perto do Bruno)',
+    placeholderWriteHere:'Escreve aqui…',
+    btnDeleteTable:'Eliminar mesa',
+    tableLabel:(n)=>`Mesa ${n}`,
+    titleHasNotes:'Tem notas',
+    navTablesTitle:'Mesas',
+    totalTablesLabel:'mesas no total',
+    seatsToAssignLabel:'lugares por atribuir',
+    tablesHint:'Toca numa mesa para ver, editar a forma e atribuir lugares',
+
+    // Achado ao vivo da Fase 4 (Rita): esta secção inteira (AI Seating)
+    // estava com texto fixo em português, mesmo com appLang='en' — nunca
+    // tinha sido passada por ta(). Também aproveitado para reorganizar o
+    // ecrã "Gerar proposta" (ver comentário em viewAISeatingPrefs).
+    aiSeatingOpenBtn:'Organizar com Weddy AI',
+    aiSeatingTitle:'Organizar com Weddy AI',
+    aiSeatingProposalTitle:'✨ Proposta da Weddy',
+    aiSeatingLoadingText:'A Weddy está a preparar a proposta de mesas…',
+    aiSeatingIntroText:'A Weddy AI organiza os teus convidados pelas mesas, tendo em conta os lugares disponíveis e as preferências que definires abaixo.',
+    aiSeatingConfirmedGuestsLabel:'Convidados confirmados', aiSeatingTablesCountLabel:'Mesas',
+    aiSeatingSeatsAvailableLabel:'Lugares disponíveis',
+    sectionPreferences:'Preferências',
+    aiSeatingNoPreferencesText:'Ainda não adicionaste nenhuma preferência — podes gerar a proposta na mesma, a Weddy só vai preencher as mesas por ordem, respeitando a capacidade.',
+    aiSeatingNewPreferenceLabel:'Nova preferência', priorityNextPrefLabel:'Prioridade', aiSeatingTypeStepLabel:'Tipo',
+    aiSeatingFreeTextLabel:'Ou escreve por palavras (opcional)',
+    aiSeatingFreeTextPlaceholder:'Ex: "Quero os meus pais perto dos padrinhos e não quero o tio António perto do João."',
+    aiSeatingOverCapacityText:(confirmed,seats)=>`Tens ${confirmed} convidados confirmados mas só ${seats} lugares disponíveis. Ajusta as mesas em "Mesas" antes de gerar uma proposta.`,
+    btnGenerateProposal:'Gerar proposta',
+    aiSeatingSearchGuestPlaceholder:'Procurar convidado…',
+    aiSeatingNoConfirmedGuestsText:'Sem convidados confirmados.',
+    btnAddCount:(n)=>`Adicionar (${n})`,
+    aiSeatingTypeTogether:'Juntos', aiSeatingTypeApart:'Separados', aiSeatingTypeNear:'Perto',
+    aiSeatingPriorityHard:'🔴 Obrigatório', aiSeatingPriorityStrong:'🟠 Importante', aiSeatingPrioritySoft:'🟡 Se possível',
+    aiSeatingVerbTogether:'juntos', aiSeatingVerbApart:'separados', aiSeatingVerbNear:'perto',
+    pctPreferencesRespectedLabel:'das preferências pedidas foram respeitadas',
+    requiredPreferencesNotRespectedLabel:'Preferências obrigatórias não respeitadas',
+    aiSeatingUnresolvedFreeTextText:(list)=>`Não encontrei "${list}" na lista de convidados confirmados — essa parte do texto foi ignorada.`,
+    aiSeatingStaleProposalText:'Esta proposta já não corresponde à configuração atual das mesas/convidados (algo mudou entretanto). Gera uma nova proposta antes de aceitar.',
+    aiSeatingFailedCountText:(n)=>`${n} preferência(s) não foi(ram) possível respeitar.`,
+    btnAcceptProposal:'Aceitar proposta', btnConfirmingEllipsis:'A confirmar…',
+    btnAcceptAndEditManually:'Aceitar e editar manualmente',
+    btnGenerateAnother:'Gerar outra (com as mesmas preferências)',
+    aiSeatingRsvpSyncErrorText:'A distribuição foi guardada, mas houve um problema a atualizar os convites RSVP dos convidados. Sincroniza outra vez em "Lugares".',
+    aiSeatingProposalGenericErrorText:'Não foi possível gerar a proposta.',
+    aiSeatingProposalStaleErrorText:'Esta proposta já não corresponde à configuração atual das mesas/convidados. Gera uma nova proposta.',
+
+    navInspirationTitle:'Inspiração',
+    inspirationHint:'Guarda imagens que te inspiraram — vestidos, decoração, flores, o que quiseres (máx. 6)',
+    btnAdd:'Adicionar',
+
+    statusTodo:'Por fazer',
+    statusInProgress:'Em progresso',
+    statusDone:'Concluído',
+    tagFinancas:'Finanças', tagConvidados:'Convidados', tagInspiracao:'Inspiração', tagLocal:'Local', tagDatas:'Datas',
+    tagFornecedores:'Fornecedores', tagVestido:'Vestido', tagPapelaria:'Papelaria', tagLuaDeMel:'Lua de mel', tagDocumentos:'Documentos',
+    tagBeleza:'Beleza', tagTransporte:'Transporte', tagDecoracao:'Decoração', tagMusica:'Música', tagCerimonia:'Cerimónia',
+    tagMesas:'Mesas', tagPlaneamento:'Planeamento', tagGeral:'Geral',
+    phaseLabel:(n)=>`Fase ${n}`,
+    dueByLabel:(d)=>`até ${d}`,
+    deadlineWasLabel:(d)=>`prazo era ${d}`,
+    phasesCompletedLabel:'Fases concluídas',
+    planningPctSuffix:(pct)=>`${pct}% do planeamento`,
+    forBigDayLabel:'para o grande dia',
+    brideChecklistTitle:'Checklist da noiva',
+    brideChecklistDesc:'Para a noite anterior',
+    personalChecklistTitle:'Checklist pessoal',
+    personalChecklistEmpty:'adiciona aqui o que não pode faltar no teu dia',
+    checklistPageSubtitle:'Pequenos passos, grandes momentos.<br>Vamos a isso?',
+
+    noNameLabel:'Sem nome',
+    noDateLabel:'Sem data',
+    titleMarkChosen:'Marcar como escolhido',
+    labelAddress:'Morada:',
+    labelWhoWent:'Foram:',
+    labelNotesColon:'Notas:',
+    btnEdit:'Editar',
+    storeVisitsTitle:'Idas às lojas',
+    storeVisitsEmpty:'Ainda não registaste nenhuma ida a uma loja. Toca no + para adicionar.',
+    inspirationPhotosLabel:'Fotos de inspiração (máx. 6)',
+
+    filterAll:'Todas',
+    filterAllPlural:'Todos',
+    filterDone:'Concluídas',
+    placeholderSearchGeneric:'Pesquisar…',
+    emptyNothingFound:'Nada encontrado.',
+    myNotesLabel:'As minhas notas',
+    placeholderWriteNotesHere:'Escreve aqui as tuas notas…',
+    todoPageSubtitle:'Pequenas tarefas, grandes momentos.',
+    untilWord:'até',
+    noDueDateInsert:'sem data — insere uma',
+    titleRemoveDeadline:'Remover prazo',
+    emptyNoItems:'ainda sem itens',
+    placeholderAddEllipsis:'Adicionar…',
+    btnEditCategory:'Editar categoria',
+    btnDeleteCategory:'Eliminar categoria',
+
+    hmTypeBeach:'Praia', hmTypeCity:'Cidade', hmTypeMountain:'Montanha', hmTypeCruise:'Cruzeiro', hmTypeAdventure:'Aventura', hmTypeRelax:'Relax',
+    honeymoonSubtitle:'Sonha, planeia, partilha.',
+    honeymoonBannerTitle:'Toca no ♥ da vossa favorita!',
+    honeymoonBannerText:'Podem criar várias hipóteses e ir comparando, só uma fica marcada como a escolhida.',
+    honeymoonEmpty:'Ainda sem hipóteses de lua-de-mel. Toca no + para criar a primeira.',
+    newOptionTitle:'Nova hipótese',
+    labelOptionName:'Nome da hipótese',
+    phOptionNameExample:'Ex: Lua-de-mel nas Maldivas',
+    labelType:'Tipo',
+    labelNumDays:'Nº de dias',
+    labelEstimatedBudget:'Orçamento estimado (€)',
+    sectionItinerary:'Itinerário · cidades a visitar',
+    emptyNoCities:'ainda sem cidades',
+    placeholderAddCity:'Adicionar cidade…',
+    labelNotesHelp:'Notas / ajudas de familiares e amigos',
+    phNotesHelpExample:'Ex: os padrinhos vão ajudar nos voos',
+    btnSave:'Guardar',
+    btnCancel:'Cancelar',
+    btnDeleteThisOption:'Eliminar esta hipótese',
+
+    statusConsider:'A considerar',
+    statusContacted:'Contactado',
+    statusHired:'Contratado',
+    suppliersSubtitle:'Descobre os nossos fornecedores recomendados e adiciona os teus para te organizares melhor.',
+    placeholderSearchSuppliers:'Pesquisar fornecedores… (mín. 2 letras)',
+    titleFilterByCategory:'Filtrar por categoria',
+    recommendedEyebrow:'Os nossos recomendados',
+    recommendedTitle:'Fornecedores<br>em que podes confiar',
+    recommendedSub:'Selecionámos alguns dos nossos fornecedores preferidos para o teu grande dia.',
+    btnViewAll:'Ver todos',
+    yourSuppliersLabel:'Os teus fornecedores',
+    supplierNoticeHtml:'<b>Novidade:</b> toca num fornecedor para abrires a ficha completa — dá para registares pagamentos, contrato, próximo passo e mais.',
+    recommendedPageTitle:'Fornecedores recomendados',
+    emptyNoRecommendations:'Ainda sem recomendações.',
+    emptyNoSupplierFound:'Nenhum fornecedor encontrado.',
+    addSupplierLabel:'Adicionar fornecedor',
+    otherSupplierLabel:'OUTRO FORNECEDOR',
+    addSupplierHint:'Guarda aqui os teus próprios fornecedores.',
+    confirmDeleteSupplier:'Eliminar este fornecedor?',
+    supplierDetailTitle:'Fornecedor',
+    phSupplierName:'Nome do fornecedor',
+    labelPhone:'Telefone',
+    labelPrice:'Preço',
+    phPriceExample:'Ex: 1500€',
+    labelEmail:'Email',
+    labelWebsite:'Website',
+    sectionPayments:'Pagamentos',
+    labelTotalContractedValue:'Valor total contratado (€)',
+    lblPaidLower:'pago',
+    pctPaidSuffix:(pct)=>`${pct}% pago`,
+    emptyNoPayments:'Ainda sem pagamentos registados.',
+    placeholderValueEuro:'Valor €',
+    labelNextPayment:'Próximo pagamento',
+    phValueExample600:'Ex: 600',
+    sectionContract:'Contrato',
+    addContractLabel:'Adicionar contrato',
+    tapToView:'Toca para ver',
+    contractHint:'PDF ou foto do contrato',
+    sectionNotes:'Notas',
+    phSupplierNotesExample:'Ex: pedir orçamento atualizado, confirmar disponibilidade…',
+    sectionNextStep:'Próximo passo',
+    labelWhatIsLeft:'O que falta tratar',
+    phNextStepExample:'Ex: Enviar horário da cerimónia',
+    sectionLastContact:'Última conversa',
+    labelLastContactDate:'Data do último contacto',
+    btnDeleteSupplier:'Eliminar fornecedor',
+    errStoragePhoto:'Não foi possível guardar a foto — o telemóvel pode estar sem espaço de armazenamento.',
+    errStorageContract:'Não foi possível guardar o contrato — o telemóvel pode estar sem espaço de armazenamento.',
+    errContractUnsupportedType:'Tipo de ficheiro não suportado. Usa um PDF ou uma imagem.',
+    defaultNewSupplierName:'Novo fornecedor',
+    labelSupplierOptional:'Fornecedor (opcional)',
+    noSupplierOption:'Sem fornecedor',
+    autoPaymentDesc:(name)=>`Pagamento a ${name}`,
+    contractSyncedNote:'Sincronizado — visível em todos os dispositivos e pesquisável pelo Assistente.',
+    contractLocalOnlyNote:'Guardado só neste telemóvel. Carrega o contrato novamente para o sincronizar.',
+    statusUploadingContract:'A carregar contrato…',
+    legacyPaymentTag:'pagamento antigo migrado',
+
+    premiumLockedText:(title)=>`"${title}" e as restantes funcionalidades Premium ficam disponíveis assim que teres uma subscrição ativa.`,
+    premiumFeatureRSVP:'Convites RSVP com link individual por convidado',
+    premiumFeatureAssistant:'Assistente Weddy para tirar dúvidas sobre o teu casamento',
+    btnSubscribePremium:'Subscrever Weddy Premium',
+    assistLockedText:'O Assistente Weddy e os Convites RSVP ficam disponíveis assim que tiveres uma subscrição ativa.',
+    assistGreeting1: name => `Olá${name}! 👋 Sou a assistente da Weddy e estou aqui para ajudar-te com tudo o que precisares sobre o teu casamento.`,
+    assistGreeting2:'Podes perguntar-me sobre fornecedores, listas de convidados, orçamento, checklist, funcionalidades da app e muito mais!\n\nComo posso ajudar-te hoje?',
+    assistChipSuppliers:'Quero saber sobre fornecedores', assistChipRSVP:'Como funciona o RSVP?', assistChipQuestion:'Tenho uma dúvida sobre a app', assistChipFeatures:'Quero ver novas funcionalidades',
+    assistHeroEyebrow:'Assistente Weddy', assistHeroTitle:'O seu aliado no<br>planeamento do casamento', assistHeroText:'Tire as suas dúvidas, receba sugestões<br>e tenha tudo mais simples.',
+    assistInputPlaceholder:'Escreve a tua pergunta…', assistSendLabel:'Enviar', btnClose:'Fechar',
+    assistThinking:'A pensar…',
+    testAccountNote:'(Esta conta é de testes — a subscrição real ainda não está ligada a nenhum pagamento.)',
+    rsvpSyncChanged: parts => `O que mudou: ${parts}.`, rsvpSyncNothing:'Sem alterações novas desde a última vez.',
+    rsvpConfirmedChanged: n => `${n} confirmaç${n===1?'ão':'ões'} atualizada${n===1?'':'s'}`,
+    rsvpSeatsFreed: n => `${n} lugar${n===1?'':'es'} libertado${n===1?'':'s'} nas mesas`,
+    rsvpChildrenAdded: n => `${n} criança${n===1?'':'s'} nova${n===1?'':'s'} em "Crianças"`,
+    rsvpChildrenLinked: n => `${n} criança${n===1?'':'s'} já existente${n===1?'':'s'} associada${n===1?'':'s'} ao RSVP`,
+    rsvpChildrenUnlinked: n => `${n} criança${n===1?'':'s'} desassociada${n===1?'':'s'} do RSVP`,
+
+    rsvpStatusGoing:'Vai',
+    rsvpStatusNotGoing:'Não vai',
+    rsvpStatusMaybe:'Ainda não sabe',
+    rsvpStatusOpened:'Visto, a pensar',
+    rsvpStatusPending:'Por responder',
+    btnCopyLink:'Copiar link',
+    btnGenerateLink:'Gerar link',
+    titleRemoveInvite:'Remover convite (apaga a resposta e desativa o link)',
+    labelChildrenColon:'Crianças:',
+    yearsOldSuffix:(a)=>` (${a} anos)`,
+    notGoingSuffix:' — não vai',
+    needsTransport:'precisa de transporte',
+    needsAccommodation:'precisa de alojamento',
+    rsvpFilterConfirmed:'Confirmados',
+    rsvpFilterMaybe:'Talvez',
+    rsvpFilterPending:'Por responder',
+    rsvpFilterNotGoing:'Não vai',
+    deadlinePassedWarn:(dateStr,count)=>`O prazo (${dateStr}) já passou e ${fmtGuestCount(count)} convidado${count===1?'':'s'} ainda não respond${count===1?'eu':'eram'}. Talvez valha a pena enviar um lembrete.`,
+    respondedLabel:'Responderam',
+    maybeCountLabel:(n)=>`${fmtGuestCount(n)} ainda ${n===1?'não sabe':'não sabem'}`,
+    transportCountLabel:(n)=>`${fmtGuestCount(n)} pede${n===1?'':'m'} transporte`,
+    accommodationCountLabel:(n)=>`${fmtGuestCount(n)} pede${n===1?'':'m'} alojamento`,
+    labelRSVPDeadline:'Prazo para responder',
+    guestInfoLabel:'Informações para os convidados',
+    guestInfoSubLabel:'(aparecem no link de cada um, em "Perguntas frequentes")',
+    phDressCode:'ex: Traje de cerimónia, cores a evitar…',
+    phGuestNotes:'ex: como chegar, transporte, alojamento perto…',
+    btnSaveInfo:'Guardar informações',
+    conciergeLabel:'Weddy Concierge (chat dos convidados)',
+    conciergeSubLabel:'(o que o assistente de cada convidado vai saber responder)',
+    phParking:'ex: gratuito no local, parque a 200m…',
+    phTransport:'ex: shuttle às 18h do hotel X…',
+    phAccommodation:'ex: hotéis recomendados, desconto com o código X…',
+    phGifts:'ex: IBAN, lua de mel, sem prendas…',
+    phContact:'ex: telefone ou email dos noivos',
+    labelDressCode:'Dress code',
+    labelGuestNotes:'Outras notas',
+    labelParking:'Estacionamento',
+    labelTransport:'Transporte',
+    labelAccommodation:'Alojamento',
+    labelGifts:'Presentes / lista de casamento',
+    labelContact:'Contacto para dúvidas',
+    btnAddInfoField:'+ Adicionar',
+    guestInfoAddSectionLabel:'Podes adicionar:',
+    conciergeFaqLabel:'Perguntas e respostas personalizadas',
+    phConciergeFaq:'P: Posso levar crianças?\nR: Sim, adoramos ter as crianças connosco!\n\nP: Há vegetariano?\nR: Sim, é só dizeres no RSVP.',
+    conciergeFaqHint:'Escreve pares "P:" (pergunta) e "R:" (resposta), separados por uma linha em branco. O chat só responde com base no que aqui escreveres.',
+    updatingLabel:'A atualizar…',
+    btnUpdateResponses:'Atualizar respostas',
+    lastUpdateLabel:(x)=>`Última atualização: ${x}.`,
+    neverUpdatedLabel:'Ainda não atualizaste as respostas.',
+    btnCopyReminders:(n)=>`Copiar lembretes (${n})`,
+    autopilotTitle:'Weddy Autopilot',
+    autopilotLateCount:(n)=>`🔴 ${n} atrasado${n===1?'':'s'}`,
+    autopilotDueCount:(n)=>`🟠 ${n} precisa${n===1?'':'m'} de lembrete`,
+    autopilotAllOnTime:'Ninguém precisa de um lembrete agora — tudo dentro do prazo.',
+    autopilotPrepareBtn:(n)=>n>0 ? `Preparar lembrete (${n})` : 'Preparar lembrete',
+    autopilotModalTitle:(n)=>`Rever lembrete para ${n} convidado${n===1?'':'s'}`,
+    autopilotModalHint:'A Weddy prepara o texto com o link de cada um. Confirma para copiar — o envio continua a ser sempre feito por ti (email, WhatsApp, o que preferires).',
+    autopilotConfirmBtn:'Confirmar e copiar',
+    reminderChannelLabel:'Canal', reminderMsgLabel:'Mensagem',
+    reminderCharCount: n => `${n} caractere${n===1?'':'s'}`,
+    reminderRecipientsLabel: n => `Vai para ${n} convidado${n===1?'':'s'}`,
+    reminderDefaultGreeting:'Olá! É só um lembrete simpático para confirmares presença 💌',
+    autopilotBadgeLate:'Atrasado — o prazo já passou',
+    autopilotBadgeDue:'Precisa de um lembrete',
+    btnExportCSV:'Exportar CSV',
+    phSearchGuestEllipsis:'Pesquisar convidado…',
+    emptyNoMatchSearch:'Nenhum convidado corresponde à pesquisa/filtro.',
+    emptyNoGuestsSaved:'Ainda não tens convidados guardados em "Convidados".',
+    rsvpNoteLinkPrivate:'Cada link é só desse convidado — nunca mostra a lista toda nem o orçamento do casamento.',
+    rsvpNoteAutoFree:'Quando alguém responde "Não vou", o lugar à mesa (se já estivesse atribuído) fica automaticamente livre. As crianças que a pessoa declarar no link aparecem em "Convidados → Crianças", já contadas e prontas a sentar às mesas.',
+    rsvpNoteAutoFreeTitle:'Tudo automático',
+    rsvpRespostasNotesShort:'Cada link é privado. Quem responde "Não vou" liberta o lugar automaticamente e as crianças são contadas em "Convidados → Crianças".',
+    rsvpRefreshErrorNote:'Não foi possível atualizar as respostas agora.',
+    btnReportProblem:'Reportar problema',
+    rsvpTabSendInvites:'Enviar convites', rsvpTabGuestList:'Lista de convidados',
+    rsvpHubSubtitle:'Escolhe como configurar e acompanhar os convites dos teus convidados.',
+    securityHeroTitle:'Os teus dados estão seguros',
+    btnGroupFamily:'Agrupar em família',
+    btnCancelGroup:'Cancelar',
+    groupModeHint:'Seleciona 2 ou mais convidados que devem partilhar o mesmo link de RSVP (ex: um casal ou uma família toda).',
+    btnCreateFamilyLink: n=>`Criar link de família (${n})`,
+    familyBadge:'Família',
+    familyLinkCreated:'Link de família criado com sucesso.',
+    familyGroupTooFew:'Seleciona pelo menos 2 convidados para agrupar.',
+    phGuestEmail:'Email para lembretes automáticos (opcional)',
+    relTimeNow:'agora mesmo',
+    relTimeFewMinutes:'há poucos minutos',
+    relTimeMinutes: n=>`há ${n} minutos`,
+    relTimeOneHour:'há 1 hora',
+    relTimeHours: n=>`há ${n} horas`,
+    relTimeOneDay:'há 1 dia',
+    relTimeDays: n=>`há ${n} dias`,
+    confirmRemoveContract:'Remover o contrato guardado?',
+    confirmRemoveGuestInfoField:'Remover esta informação? O texto já escrito também é apagado.',
+    confirmDeleteSupplier:'Eliminar este fornecedor? Esta ação não pode ser desfeita.',
+    confirmDeleteMemory:'Apagar esta fotografia? Não é possível desfazer.',
+    alertDeleteMemoryError:'Não foi possível apagar esta fotografia. Tenta novamente.',
+    confirmRemoveRSVPInvite: name=>`Remover o convite RSVP de "${name}"? Isto apaga a resposta dada e desativa o link — deixa de ser possível responder através dele. O convidado continua na tua lista, mas sem link de RSVP.`,
+    alertRemoveInviteError:'Não foi possível remover o convite. Tenta novamente.',
+    alertSaveNoConnection:'Não foi possível guardar (sem ligação).',
+    alertSaveError:'Não foi possível guardar. Tenta novamente.',
+    alertNoConnectionRetry:'Sem ligação — tenta novamente.',
+    alertSubscriptionActivateError:'Não foi possível ativar a subscrição. Tenta novamente.',
+    confirmDeleteVisit:'Eliminar esta visita?',
+    confirmDeleteTodoCategory: title=>`Eliminar "${title}"? Os itens lá dentro perdem-se.`,
+    confirmDeleteHoneymoonOption:'Eliminar esta hipótese de lua-de-mel?',
+    sectionHoneymoonAttachments:'Anexos',
+    honeymoonAttachmentsIntroText:'Reservas de hotel, voos, vouchers, passaportes ou outros documentos desta hipótese — em PDF ou foto.',
+    honeymoonAttachmentsEmptyText:'Ainda sem anexos nesta hipótese.',
+    honeymoonAttachmentsSaveFirstText:'Guarda esta hipótese primeiro para poderes anexar documentos.',
+    btnAddHoneymoonAttachment:'Adicionar anexo (PDF ou foto)',
+    errAttachmentUnsupportedType:'Tipo de ficheiro não suportado. Usa um PDF ou uma imagem, até 15MB.',
+    errOpenAttachmentFailed:'Não foi possível abrir este anexo. Tenta novamente.',
+    btnOpenInNewTab:'Abrir noutro separador',
+    confirmDeleteHoneymoonAttachment:'Eliminar este anexo?',
+    confirmSignOut:'Tens a certeza que queres sair da conta?',
+    alertOnlyCreatorCanRemoveAccess:'Só quem criou o casamento pode remover o próprio acesso.',
+    confirmRemoveAccess: email=>`Remover o acesso de ${email}?`,
+    alertRemoveAccessError:'Não foi possível remover. Tenta novamente.',
+    alertGuestNotFound:'Não foi possível encontrar este convidado (a lista pode ter mudado). Tenta atualizar a página.',
+    alertGenerateLinkError:'Não foi possível gerar o link. Confirma que as regras do Firestore já foram atualizadas e tenta novamente.',
+    confirmDeleteDocument:'Eliminar este documento? O Assistente deixa de conseguir pesquisar nele.',
+    alertNoPendingWithLink:'Não há convidados por responder com link já gerado.',
+    alertFamilyLinkError:'Não foi possível criar o link de família. Tenta novamente.',
+    confirmDeleteMoment:'Eliminar este momento?',
+    alertCategoryInUse: name=>`A categoria "${name}" tem gastos associados. Remove ou muda esses gastos primeiro.`,
+    confirmDeleteCategory: name=>`Eliminar a categoria "${name}"?`,
+    confirmDeleteTable:'Eliminar esta mesa? Os lugares atribuídos ficam livres.',
+    alertSyncNoConnection:'Não foi possível sincronizar (sem ligação).',
+    alertPhotoSaveError:'Não foi possível guardar a foto — o telemóvel pode estar sem espaço de armazenamento. Tenta apagar alguma foto antiga.',
+    confirmDeleteNotes:'Apagar as notas?',
+    confirmDeleteHmIdea:'Eliminar esta ideia?',
+    alertDataAnomaly:'A Weddy detetou uma leitura estranha dos teus dados (pareciam ter desaparecido) e evitou gravar por cima do que já tens. Fecha e volta a abrir a app numa boa ligação à internet para confirmar que está tudo bem. Se o aviso voltar a aparecer, contacta o suporte antes de continuares a usar a app.',
+    btnSavingEllipsis:'A guardar…',
+    btnSavedCheck:'Guardado ✓',
+    savedSuccessMsg:'Guardado com sucesso.',
+    btnGeneratingEllipsis:'A gerar…',
+    copiedCheck:'Copiado!',
+    promptCopyLinkManually:'Copia este link manualmente:',
+    promptCopyReminderManually:'Copia esta mensagem manualmente:',
+    promptRenameBudgetCategory:'Novo nome da categoria:',
+    btnActivatingEllipsis:'A ativar…',
+    statusPdfOnly:'Só é possível carregar ficheiros PDF.',
+    statusFileTooLarge:'Ficheiro grande demais (máx. 15MB).',
+    statusReadingPdf:'A ler o PDF…',
+    statusUploadingFile: (name)=>`A enviar "${name}"…`,
+    statusPdfReadError:'Não foi possível ler este PDF. Tenta outro ficheiro.',
+    tcSheetTitleNew:'Nova categoria',
+    tcSheetTitleEdit:'Editar categoria',
+    msgWriteDescriptionFirst:'Escreve uma descrição antes de enviar.',
+    msgEmailServiceError:'Não foi possível ligar ao serviço de email.',
+    msgSendingEllipsis:'A enviar…',
+    msgReportThanks:'Problema reportado — obrigada!',
+    msgSendError:'Não foi possível enviar. Tenta de novo.',
+    msgInvalidEmail:'Escreve um email válido.',
+    msgInvitingEllipsis:'A convidar…',
+    msgInviteSuccess: email=>`Acesso dado. Não foi enviado nenhum email — basta ${email} criar conta na app com este mesmo email.`,
+    msgInviteError: code=>`Não foi possível convidar (${code}).`,
+    unknownErrorLabel:'erro desconhecido',
+    seatSheetTitle: (t,s)=>`Mesa ${t} · Lugar ${s}`,
+    btnSyncedCheck:'Sincronizado ✓',
+    msgInvalidSession:'Sessão inválida. Tenta entrar de novo.',
+    btnDeletingEllipsis:'A eliminar…',
+    btnDeletePermanently:'Eliminar definitivamente',
+    msgWrongPassword:'Password incorreta.',
+    msgTooManyAttempts:'Muitas tentativas. Espera um pouco e tenta de novo.',
+    msgDeleteAccountError:'Não foi possível eliminar a conta. Tenta novamente.',
+    msgAccountDeletedSuccess:'A tua conta e os teus dados foram eliminados. Obrigado por teres experimentado a Weddy.',
+    msgExcelLoadError:'Não foi possível carregar o gerador de Excel. Confirma que tens internet e tenta novamente.',
+    msgDownloadedSuccess:'Descarregado com sucesso!',
+    msgFileGenError:'Não foi possível gerar o ficheiro. Tenta novamente.',
+    msgPdfLoadError:'Não foi possível carregar o gerador de PDF. Confirma que tens internet e tenta novamente.',
+
+    defMenuLangLabel:'Idioma',
+    defCasamentoTitle:'Casamento',
+    labelBrideName:'Nome noiva',
+    labelGroomName:'Nome noivo',
+    labelWeddingDate:'Data do casamento',
+    labelVenue:'Local',
+    defDesignTitle:'Design',
+    weddingColorLabel:'Cor do casamento',
+    coverPhotoLabel:'Foto de capa (Início)',
+    editCoverPhotoAlt:'Mudar a foto de capa',
+    dragToRecenterHint:'arrasta para recentrar',
+    noCoverPhotoNote:'Ainda não escolheste uma foto de capa — fica um gradiente elegante por defeito.',
+    btnChangePhoto:'Trocar foto',
+    btnAddPhoto:'Adicionar foto',
+    btnRemovePhoto:'Remover foto (usar gradiente)',
+    defCategoriasTitle:'Categorias',
+    defConvidarTitle:'Convidar',
+    inviteParticipantLabel:'Convidar participante no planeamento',
+    labelInviteEmail:'Email da pessoa a convidar',
+    inviteNoEmailNote:'Isto não envia nenhum email — apenas dá acesso. Basta avisares a pessoa (por WhatsApp, por exemplo) para criar conta na app com este mesmo email.',
+    btnInvite:'Convidar',
+    neverLoggedIn:'Ainda não entrou',
+    defSegurancaTitle:'Segurança',
+    whoHasAccessLabel:'Quem tem acesso',
+    createdWeddingTag:'(criou o casamento)',
+    lastSessionLabel:(x)=>`Última sessão: ${x}`,
+    btnRemoveAccess:'Remover acesso',
+    onlyAccessNote:'É o único com acesso — convida alguém em "Convidar" se quiseres partilhar.',
+    onlyCreatorCanRemoveNote:'Só quem criou o casamento pode remover o próprio acesso.',
+    exportDataLabel:'Os teus dados',
+    exportDataTitle:'Exportar os meus dados',
+    exportDataNote:'Descarrega uma cópia de tudo o que a Weddy guarda sobre este casamento — convidados, orçamento, gastos, mesas, respostas de RSVP — num ficheiro que podes guardar ou levar para outro sítio.',
+    btnExportData:'Exportar os meus dados',
+    exportDataPreparing:'A preparar…',
+    exportDataError:'Não foi possível preparar a exportação. Tenta novamente.',
+    dangerZoneLabel:'Zona de perigo',
+    deleteMyAccountTitle:'Eliminar a minha conta',
+    deleteAccountNoteShared:'A tua conta deixa de ter acesso. Os dados do casamento continuam a existir para quem mais tiver acesso.',
+    deleteAccountNoteSolo:'Apaga definitivamente todos os dados deste casamento — convidados, orçamento, gastos, mesas, tudo. Não é possível desfazer.',
+    btnDeleteMyAccount:'Eliminar a minha conta',
+    memoriesLoadingText:'A carregar fotos…',
+    memoriesEmptyText:'Ainda não há fotos partilhadas. Assim que um convidado adicionar uma no link de RSVP, aparece aqui.',
+    memoriesIntroText:'Fotos que os teus convidados foram partilhando pelo próprio link de RSVP. Só tu consegues vê-las.',
+    memoriesPrivateTitle:'As tuas memórias são privadas.', memoriesPrivateDesc:'Só tu consegues vê-las.',
+    btnRefresh:'Atualizar',
+    charsExtractedLabel:(n)=>`${n} caracteres extraídos`,
+    docsEmptyText:'Ainda não carregaste nenhum documento.',
+    docsCardTitle:'Mantém os teus documentos organizados', uploadedDocumentsLabel:'Documentos carregados',
+    docsIntroText:'Carrega contratos ou documentos em PDF — o Assistente Weddy passa a conseguir procurar e mostrar-te o trecho relevante quando perguntares algo sobre eles (ex: "o que diz o contrato do espaço sobre o pagamento final?"). Tudo processado aqui no telemóvel/computador, sem nenhuma IA nem servidor externo — é só uma pesquisa por palavras-chave, não uma resposta inventada.',
+    btnUploadPDF:'Carregar PDF',
+
+    privacyIntro:'Conheça a nossa Política de Privacidade, Segurança e Cookies.',
+    privacyWhoWeAreTitle:'Quem somos',
+    privacyWhoWeAreText:'A Weddy é um projeto pessoal gerido por Rita Matos Oliveira. Para qualquer questão sobre os teus dados, podes escrever para geral@weddy.pt.',
+    privacyControllerTitle:'Quem é responsável pelo tratamento dos seus dados pessoais',
+    privacyControllerText:'A weddy é a responsável pelo tratamento dos dados pessoais recolhidos através desta app, no âmbito da organização do teu casamento.',
+    privacyCollectTitle:'Como é que recolhemos os seus dados pessoais',
+    privacyCollectText:'Recolhemos dados quando crias uma conta (email), quando preenches a informação do teu casamento (nomes, data, local), quando adicionas convidados, gastos ou mesas, e quando convidas outra pessoa a juntar-se ao teu casamento.',
+    privacyPurposeTitle:'Para que finalidades e com que fundamento podem ser utilizados os seus dados pessoais',
+    privacyPurposeText:'Os teus dados servem exclusivamente para organizar o teu casamento dentro da app e para sincronizar essa informação entre ti e as pessoas que convidares — com fundamento na execução do serviço que a app te presta. Não usamos os teus dados para marketing, publicidade ou qualquer finalidade comercial, e nunca os vendemos a terceiros.',
+    privacyWhatDataTitle:'Que dados pessoais podem ser recolhidos',
+    privacyWhatDataText:'O teu email de acesso; os nomes e a data do casamento; o local; a lista de convidados e as respetivas confirmações; o orçamento e os gastos que registas; a disposição das mesas; e, se carregares, a foto de capa ou o ícone personalizado do teu casamento.',
+    privacySecurityTitle:'Como é que mantemos os seus dados pessoais seguros',
+    privacySecurityText:'Os dados ficam guardados nos servidores do Firebase (Google Cloud), protegidos por regras de acesso que garantem que só as pessoas com o email que tu convidares explicitamente conseguem ler ou alterar os dados do teu casamento.',
+    privacyRetentionTitle:'Durante quanto tempo conservamos os seus dados pessoais',
+    privacyRetentionText:'Conservamos os teus dados enquanto a tua conta e o teu casamento existirem na app. Se pedires a eliminação da conta, os dados são apagados de forma permanente.',
+    privacyRightsTitle:'Direito às informações e à correção, eliminação ou bloqueio de dados pessoais',
+    privacyRightsText:'Podes aceder, corrigir ou apagar a maior parte dos teus dados a qualquer momento diretamente na app (em "Segurança" e nos restantes ecrãs). Se quiseres apagar a conta e todos os dados associados por completo, bloquear o tratamento, ou tiveres qualquer outra questão sobre os teus dados, escreve para geral@weddy.pt — respondemos o mais rapidamente possível.',
+    privacyPhotosTitle:'Nota sobre fotos',
+    privacyPhotosText:'As fotos que adicionares em secções como "Inspiração" ou "Dress" ficam guardadas apenas no teu telemóvel, não são enviadas para nenhum servidor — se desinstalares a app ou trocares de telemóvel, perdes essas fotos.',
+    privacyWhoSeesTitle:'Nota sobre quem vê os teus dados',
+    privacyWhoSeesText:'Só as pessoas com o email que tu convidares (em "Convidar"), listadas em "Segurança", conseguem ver os dados do teu casamento. Podes remover o acesso de alguém a qualquer momento.',
+    privacyGuestsTitle:'Nota sobre os teus convidados (Convites RSVP)',
+    privacyGuestsText:'Quando geras um link de RSVP para um convidado, criamos um registo próprio e independente só para essa pessoa — com o nome que lhe deste, a data e o local do casamento, e (depois de responder) a presença, a escolha de refeição, restrições alimentares ou alergias, e se precisa de transporte ou alojamento. Esse convidado nunca vê a lista completa de convidados nem o orçamento do casamento — só a sua própria informação. Ele pode consultar, atualizar ou apagar a sua resposta a qualquer momento através do próprio link, sem precisar de criar conta. Tu, como responsável pelo tratamento destes dados, podes remover o link de um convidado a qualquer momento em "Convites RSVP"; ao fazê-lo, deixa de ser possível responder ou consultar essa resposta através do link. Quando agrupas vários convidados da mesma família num único link partilhado, esse registo passa a guardar a resposta de cada pessoa da família separadamente (num campo próprio para cada uma) — mas continua a ser um único link, por isso qualquer pessoa que o receba consegue ver e alterar a resposta de todos os membros desse grupo; só quem tem o link consegue aceder a estes dados. É tua responsabilidade informar os teus convidados de que os dados que partilham contigo através deste link servem apenas para organizar o casamento.',
+    privacyAssistantTitle:'Nota sobre o Assistente Weddy (Copilot dos noivos)',
+    privacyAssistantText:'O Assistente Weddy responde a perguntas sobre o teu próprio casamento (convidados, orçamento, pagamentos, tarefas) e só executa ações simples e de baixo risco quando pedes explicitamente (como criar uma tarefa) — nunca altera dados de convidados nem pagamentos através do chat. As respostas vêm sempre dos dados reais deste casamento, nunca inventadas: quando a tua pergunta não é reconhecida por regras simples, pode ser enviada (só o texto da pergunta, nunca os dados do casamento) a um modelo de inteligência artificial só para tentar perceber a que tipo de pedido corresponde — nunca para gerar a resposta final. A conversa fica guardada no documento do teu casamento (tal como o resto dos teus dados), só para veres o histórico entre sessões.',
+    privacyConciergeTitle:'Nota sobre o assistente de conversa (Weddy Concierge)',
+    privacyConciergeText:'Cada link de convidado inclui um pequeno assistente de conversa que responde a perguntas sobre o casamento (local, horário, dress code, estacionamento, transporte, alojamento, presentes, e outras perguntas e respostas que tu próprio(a) escreveres em Definições → Convites RSVP → Weddy Concierge). Se o convidado disser, por exemplo, que afinal não vai poder vir ou que tem uma restrição alimentar, o assistente pede sempre confirmação antes de alterar a resposta guardada — nunca altera nada sem essa confirmação explícita. As respostas vêm sempre da informação que tu preencheste, nunca inventadas: quando a mensagem do convidado não é reconhecida por regras simples, pode ser enviada (só o texto da pergunta, nunca dados do casamento) a um modelo de inteligência artificial só para tentar perceber a que tipo de pedido corresponde — nunca para gerar a resposta final nem para decidir sozinho uma alteração. A conversa em si fica só no dispositivo do convidado — não é guardada nem fica visível para ti, apenas o resultado de uma alteração que o convidado confirme (tal como se tivesse usado o formulário normal).',
+
+    // Fase Consentimento — 2ª ronda (Set 2026): pontos novos, pedidos pela
+    // Rita depois de rever a Política de Privacidade de uma app concorrente
+    // como referência ("não mudes absolutamente nada do que já temos, só
+    // acrescenta o que faltar"). Nada acima desta linha foi tocado.
+    privacySubprocessorsTitle:'Com quem partilhamos os teus dados (subcontratantes)',
+    privacySubprocessorsText:'Não vendemos os teus dados nem os cedemos a terceiros para fins de marketing. Para o funcionamento da Weddy, recorremos aos seguintes prestadores, que tratam dados em nosso nome, sob contrato: Firebase / Google Cloud — base de dados, autenticação, armazenamento de ficheiros e as Cloud Functions que processam pedidos como a eliminação de conta; GitHub Pages — alojamento dos ficheiros da aplicação; EmailJS — envio do email que nos chega quando usas "Reporta um problema"; e, apenas se ligares essa funcionalidade, a API do Google Calendar (ver ponto seguinte). Usamos ainda redes de entrega de conteúdo (como a cdnjs e a jsDelivr) só para carregar bibliotecas técnicas do browser (como o gerador de Excel/PDF) — não lhes é enviado nenhum dado teu.',
+    privacyGCalTitle:'Google Calendar e APIs Google',
+    privacyGCalText:'Se ligares a tua conta Google em Definições, acedemos ao teu Google Calendar apenas para criar, atualizar e eliminar os eventos que escolheres sincronizar a partir da Agenda — nunca aos restantes eventos do teu calendário. A utilização desta informação respeita a Política de Dados de Utilizador dos Serviços de API Google, incluindo os requisitos de Utilização Limitada (Limited Use). Podes revogar este acesso a qualquer momento em myaccount.google.com/permissions ou desligando a conta em Definições → Google Calendar.',
+    privacyIntlTransferTitle:'Transferências internacionais',
+    privacyIntlTransferText:'Alguns dos prestadores acima (nomeadamente o Firebase/Google Cloud) podem processar dados em servidores fora do Espaço Económico Europeu. Quando isso acontece, é sempre ao abrigo de garantias adequadas, como as Cláusulas Contratuais-Tipo aprovadas pela Comissão Europeia.',
+    privacyComplaintTitle:'Direito de reclamação',
+    privacyComplaintText:'Além dos direitos já indicados acima, tens sempre o direito de apresentar reclamação junto de uma autoridade de controlo — em Portugal, a Comissão Nacional de Proteção de Dados (CNPD), em www.cnpd.pt.',
+    privacyCookiesTitle:'Cookies e armazenamento local',
+    privacyCookiesText:'A Weddy não usa cookies nem armazenamento local para publicidade ou para te seguir noutros sites. Usamos apenas armazenamento local do teu próprio dispositivo (localStorage) para guardar preferências e conveniências — como o idioma escolhido, fotos de inspiração ainda não sincronizadas, ou teres já fechado um aviso — nunca para fins de marketing ou de perfilamento.',
+    privacyMinorsTitle:'Menores',
+    privacyMinorsText:'A Weddy não se destina a menores de 16 anos enquanto titulares de conta. Não recolhemos intencionalmente dados de menores para efeitos de conta própria. Dados de crianças eventualmente incluídos como convidados (por exemplo, na categoria "Crianças") são introduzidos pelo próprio casal, sob a sua responsabilidade — ver "Nota sobre os teus convidados" acima.',
+    privacyConsentRecordTitle:'Registo da tua aceitação',
+    privacyConsentRecordText:'Guardamos, junto dos dados do teu casamento, um registo de qual a versão dos Termos e Condições e desta Política de Privacidade que aceitaste e quando — isto permite-nos pedir-te uma nova aceitação sempre que uma alteração relevante o justifique (ver "Alterações a esta política" abaixo), e serve de prova de que aceitaste. Este registo é apagado junto com os restantes dados do teu casamento se eliminares a conta.',
+    privacyChangesTitle:'Alterações a esta política',
+    privacyChangesText:'Podemos atualizar esta Política de Privacidade de tempos a tempos. Quando a alteração for significativa, vais ver um ecrã ("Antes de continuares") a pedir para a releres e aceitares antes de continuares a usar a app.',
+
+    termsTitle:'Termos e Condições',
+    termsDesc:'Consulta os nossos Termos e Condições',
+    termsDraftNotice:'Rascunho de trabalho — ainda por rever antes de entrar em produção com pagamentos reais.',
+    termsUpdatedLabel:(dateStr,version)=>`Última atualização: ${dateStr} (versão ${version}).`,
+    termsIntro:'Estes Termos e Condições regulam a utilização da Weddy. Ao criares uma conta, ou ao continuares a usá-la depois de os termos serem atualizados, confirmas que os leste e que aceitas.',
+    termsScopeTitle:'1. Âmbito e destinatários',
+    termsScopeText:'A Weddy é uma aplicação de planeamento de casamentos, destinada a casais que planeiam o seu próprio casamento. Alguns ecrãs mostram também uma lista de fornecedores recomendados, de carácter meramente informativo (ver ponto 8) — a Weddy não é um marketplace nem intermedeia contratos entre o casal e esses fornecedores.',
+    termsAcceptanceTitle:'2. Aceitação dos termos',
+    termsAcceptanceText:'Ao criares uma conta na Weddy confirmas que leste, compreendeste e aceitas estes Termos e Condições e a nossa Política de Privacidade. Se não concordares com alguma parte, não deves usar a app. Sempre que fizermos uma alteração relevante a estes termos, vais ver um ecrã ("Antes de continuares") a pedir para releres e aceitares a nova versão antes de continuares.',
+    termsAccountTitle:'3. A tua conta',
+    termsAccountText:'És responsável por manteres a password da tua conta em segurança e por tudo o que acontece através dela. O registo exige a confirmação do teu email através de um link de verificação. Podes convidar outras pessoas (por exemplo, o teu par) a aceder ao mesmo casamento, em "Segurança" — cada uma passa a ter acesso total aos dados desse casamento.',
+    termsSubscriptionTitle:'4. Weddy Premium e pagamentos',
+    termsSubscriptionText:'Algumas funcionalidades fazem parte do plano Weddy Premium, com um período de acesso de 24 meses a partir da data de ativação. Os detalhes exatos — funcionalidades incluídas, duração e preço — são sempre mostrados dentro da app antes de subscreveres, e podem ser revistos ao longo do tempo, sem efeito retroativo sobre períodos já pagos. Podes cancelar a subscrição a qualquer momento em Definições — o acesso Premium mantém-se até ao fim do período já pago. Nota: à data destes termos, a Weddy ainda não tem nenhum meio de pagamento real ligado — esta secção descreve como o plano vai funcionar quando isso acontecer.',
+    termsWithdrawalTitle:'5. Direito de livre resolução',
+    termsWithdrawalText:'Quando existirem pagamentos reais, e enquanto consumidor, terás um prazo de 14 dias para resolver a compra sem indicar motivo (Decreto-Lei n.º 24/2014). Como o acesso Premium é ativado de imediato, ao concluíres a compra vais poder pedir esse acesso imediato — sendo um conteúdo digital fornecido de imediato com o teu consentimento expresso, isso faz cessar o direito de livre resolução assim que o acesso for ativado, tal como a lei prevê.',
+    termsContentTitle:'6. O teu conteúdo',
+    termsContentText:'Os dados que introduzes (convidados, orçamento, mesas, fotografias, documentos) são teus. A Weddy só os usa para te prestar o serviço — para isso, alojamo-los e processamo-los nos nossos servidores (ver Política de Privacidade), mas nunca os vendemos nem os usamos para publicidade. Podes exportar ou apagar os teus dados a qualquer momento, em "Exportar dados" e "Eliminar conta".',
+    termsIPTitle:'7. Propriedade intelectual',
+    termsIPText:'A aplicação Weddy — o seu código, design, estrutura e o nome "Weddy" — são propriedade da Weddy e não podem ser copiados, descompilados ou reutilizados sem autorização escrita. Isto não afeta em nada os teus próprios dados (ponto 6), que continuam a ser sempre teus.',
+    termsSuppliersTitle:'8. Fornecedores recomendados',
+    termsSuppliersText:'Alguns ecrãs da Weddy mostram uma lista de fornecedores recomendados, com carácter meramente informativo. A Weddy não é parte em nenhum contrato, orçamento ou reserva que faças com esses fornecedores, não garante os seus serviços, preços ou disponibilidade, e qualquer questão sobre um serviço contratado deve ser resolvida diretamente com o próprio fornecedor.',
+    termsGuestsTitle:'9. Convidados e RSVP',
+    termsGuestsText:'Quando convidas alguém através de um link de RSVP, és tu quem decide que informação pedir e como a usar — a Weddy trata esses dados só a teu pedido, nunca por conta própria (ver "Nota sobre os teus convidados" na Política de Privacidade). É tua responsabilidade informar os teus convidados sobre o que partilham contigo através da app.',
+    termsAcceptableUseTitle:'10. Utilização aceitável',
+    termsAcceptableUseText:'Compromete-te a usar a Weddy apenas para organizar o teu próprio casamento, de forma lícita, sem tentar aceder a dados de outras contas nem perturbar o funcionamento do serviço.',
+    termsAvailabilityTitle:'11. Disponibilidade e continuidade do serviço',
+    termsAvailabilityText:'A Weddy é um projeto pessoal gerido por uma só pessoa (ver Política de Privacidade) — fazemos o possível para manter o serviço sempre disponível, mas não podemos garantir um funcionamento ininterrupto. Dependemos de serviços de terceiros essenciais ao funcionamento da app (como o Firebase, o Google Calendar ou o envio de emails) — falhas ou indisponibilidades desses serviços estão fora do nosso controlo. Os teus dados são o mais importante que tens aqui: recomendamos que uses "Exportar dados" com regularidade para guardares também uma cópia própria.',
+    termsFutureFeaturesTitle:'12. Funcionalidades futuras e versões beta',
+    termsFutureFeaturesText:'Qualquer funcionalidade anunciada como "em breve", em fase experimental ou "beta" é disponibilizada sem garantias — pode ter erros, mudar significativamente ou ser descontinuada, incluindo com eliminação dos dados nela introduzidos.',
+    termsLiabilityTitle:'13. Limitação de responsabilidade',
+    termsLiabilityText:'A Weddy é fornecida "tal como está". Na medida permitida por lei, não nos responsabilizamos por perdas indiretas decorrentes da utilização da app — recomendamos sempre que guardes também uma cópia externa das decisões e datas mais importantes do teu casamento (ver "Exportar dados"). Nada nestes termos afasta a responsabilidade que a lei não permite afastar, nem reduz os direitos que a lei garante aos consumidores.',
+    termsIndemnityTitle:'14. Indemnização',
+    termsIndemnityText:'Obrigas-te a manter a Weddy indemne por qualquer reclamação, dano ou despesa que resulte do conteúdo que introduzas na app, da violação destes termos ou da lei, ou da violação de direitos de terceiros — por exemplo, ao carregares uma fotografia de alguém sem autorização.',
+    termsTerminationTitle:'15. Cessação',
+    termsTerminationText:'Podes deixar de usar a Weddy e eliminar a tua conta a qualquer momento, em Definições → Eliminar conta. Reservamo-nos o direito de suspender contas que violem estes termos. Se um dia a Weddy deixar de funcionar, avisamos com a maior antecedência possível e mantemos disponível a exportação dos teus dados enquanto isso for possível.',
+    termsChangesTitle:'16. Alterações a estes termos',
+    termsChangesText:'Podemos atualizar estes Termos e Condições de tempos a tempos. Quando a alteração for significativa, vais ver um aviso ("Antes de continuares") a pedir para releres e aceitares a nova versão antes de continuares a usar a app.',
+    termsCommunicationsTitle:'17. Comunicações',
+    termsCommunicationsText:'Enviamos-te as comunicações de serviço necessárias à gestão da tua conta — confirmação de email, recuperação de password e avisos sobre o teu casamento. Não enviamos newsletter nem comunicações de marketing.',
+    termsLawTitle:'18. Lei aplicável',
+    termsLawText:'Estes termos regem-se pela lei portuguesa.',
+    termsContactTitle:'19. Contacto',
+    termsContactText:'Para qualquer questão sobre estes termos, escreve para geral@weddy.pt.',
+    consentCheckboxHtml:()=>'Li e aceito a <a href="#" data-openprivacy style="color:var(--rust); font-weight:600;">Política de Privacidade</a> e os <a href="#" data-openterms style="color:var(--rust); font-weight:600;">Termos e Condições</a>.',
+    consentRequiredError:'Tens de aceitar a Política de Privacidade e os Termos e Condições para continuar.',
+    reconsentTitle:'Antes de continuares',
+    reconsentPrivacyRowTitle:'Política de Privacidade',
+    reconsentIntro:'Atualizámos os nossos Termos e Condições e/ou a nossa Política de Privacidade. Para continuares a usar a Weddy, por favor lê e aceita a versão mais recente.',
+    btnAcceptContinue:'Li e aceito — continuar',
+    btnReadTerms:'Ler Termos e Condições',
+    btnReadPrivacy:'Ler Política de Privacidade',
+
+    defExportTitle:'Exportar dados',
+    exportIncludesLabel:'O que vai incluído',
+    exportIncludesText:'Orçamento por categoria, todos os gastos, a lista de convidados com confirmações, o plano de mesas e os teus fornecedores — tudo tal como está agora na app.',
+
+    historicoIntroText:'A Weddy guarda automaticamente cópias de segurança do teu casamento, e podes criar também as tuas próprias a qualquer momento (por exemplo, antes de reorganizares as mesas). Restaurar uma cópia cria sempre, primeiro, uma cópia de segurança do estado atual — nunca perdes dados sem rede de segurança.',
+    snapshotLabelInputLabel:'Dar um nome a esta cópia (opcional)',
+    phSnapshotLabel:'Ex.: Antes de reorganizar mesas',
+    btnCreateManualSnapshot:'Criar cópia de segurança agora',
+    creatingBackupLabel:'A criar cópia…',
+    historicoListLabel:'Cópias guardadas',
+    historicoLoadError:'Não foi possível carregar o histórico. Tenta novamente.',
+    historicoEmptyText:'Ainda não há nenhuma cópia de segurança. A Weddy cria uma automaticamente à medida que vais usando a app.',
+    snapshotManualBadge:'Manual',
+    snapshotAutoBadge:'Automática',
+    btnViewSnapshot:'Ver',
+    btnRestoreSnapshot:'Restaurar',
+    restoringLabel:'A restaurar…',
+    snapshotAutoLabel:'Cópia automática',
+    snapshotBeforeRestoreLabel:'Antes de restaurar',
+    confirmRestoreSnapshotText:'Tens a certeza que queres restaurar esta cópia? Vamos guardar primeiro uma cópia de segurança do estado atual, e depois substituir os dados do casamento pelos desta cópia.',
+    alertSnapshotCreateError:'Não foi possível criar a cópia de segurança. Verifica a tua ligação e tenta novamente.',
+    alertRestoreError:'Não foi possível restaurar esta cópia. Os teus dados atuais não foram alterados — tenta novamente.',
+    historicoPreviewTitle:'Resumo desta cópia',
+    historicoPreviewParseError:'Não foi possível ler o conteúdo desta cópia.',
+    historicoPreviewCoupleLabel:'Noivos',
+    historicoPreviewDateLabel:'Data',
+    historicoPreviewVenueLabel:'Local',
+    historicoPreviewGuestsLabel:'Convidados',
+    historicoPreviewBudgetLabel:'Orçamento total',
+
+    excelFileTitle:'Ficheiro Excel',
+    excelFileText:'Uma folha para cada área — fácil de abrir, filtrar e editar no telemóvel ou computador.',
+    btnDownloadExcel:'Descarregar Excel (.xlsx)',
+    pdfDocTitle:'Documento PDF',
+    pdfDocText:'Um resumo pronto a imprimir ou a partilhar — ideal para guardar ou levar contigo no grande dia.',
+    btnDownloadPDF:'Descarregar PDF (.pdf)',
+
+    aboutOneSpaceTitle:'Um só lugar para tudo',
+    aboutOneSpaceText:'Sem folhas soltas, sem grupos de WhatsApp perdidos, sem cinco apps diferentes. Orçamento, convidados, mesas e fornecedores — tudo junto.',
+    aboutRealtimeTitle:'Em tempo real, a dois',
+    aboutRealtimeText:'Tudo o que guardas sincroniza logo com quem convidares — o teu par, os pais, quem ajudar a planear. Cada um vê sempre a versão mais recente.',
+    aboutMadeForCouplesTitle:'Feita para casais',
+    aboutMadeForCouplesText:'Sem anúncios, sem venda de dados. Se um dia existirem fornecedores recomendados na app, será sempre claramente identificado como tal.',
+    aboutFeedbackTitle:'Diz-nos o que achas',
+    aboutFeedbackText:'Alguma sugestão, problema ou ideia? Escreve para geral@weddy.pt — lemos tudo.',
+    aboutVersionLabel:'Weddy · versão 1.0',
+
+    reportIntroText:'Encontraste um bug, um erro ou algo que não funciona bem? Descreve aqui o que aconteceu — a mensagem é enviada diretamente para nós, sem sair da app.',
+    reportWhatHappenedLabel:'O que aconteceu?',
+    phReportDescribe:'Descreve o problema, o que esperavas que acontecesse e em que ecrã da app estavas…',
+    reportEmailLabel:'Email para resposta',
+    phReportEmail:'oteuemail@exemplo.com',
+    reportScreenshotsLabel:'Imagens (opcional)',
+    reportScreenshotsHint:'Anexa prints do erro — até 5 imagens, 5 MB no total.',
+    reportRemoveImageAlt:'Remover imagem',
+    reportTooManyImages:'Só podes anexar até 5 imagens.',
+    reportImagesTooLarge:'As imagens em conjunto não podem passar de 5 MB. Remove alguma ou tenta imagens mais pequenas.',
+    btnSend:'Enviar',
+
+    // Sheets e avisos estáticos (fora do #app-body, nunca reconstruídos por
+    // render()) — ver applyStaticSheetTranslations().
+    rotateLockTitle:'Roda o telemóvel',
+    rotateLockText:'A Weddy foi pensada para seres usada na vertical. Volta a rodar o teu telemóvel para continuares.',
+    iabWarningTitle:'Quase lá! ✨',
+    iabWarningP1:'Estás a abrir a Weddy dentro do Instagram, e por aqui não é possível instalar a app no teu telemóvel.',
+    iabWarningP2:'<b>Toca nos "•••" ou "⋮" no canto superior direito</b> e escolhe <b>"Abrir no navegador"</b> (Safari ou Chrome).',
+    iabWarningNote:'Depois, no Safari, toca no ícone de partilha e em "Adicionar ao ecrã principal" — fica com um atalho como uma app a sério.',
+    btnOk:'Ok',
+    paymentAlertTitle:(n)=>`${n} pagamento${n>1?'s':''} a terminar o prazo`,
+    paymentOverdueSuffix:(d)=>`(atrasado ${d}d)`,
+    paymentDueInSuffix:(d)=>`(em ${d}d)`,
+    defaultExpenseLabel:'Gasto',
+    sheetTitleMyNotes:'As minhas notas',
+    phMyNotes:'Escreve aqui as tuas notas…',
+    btnDeleteNotes:'Apagar notas',
+    labelTcLabel:'Etiqueta (ex: Flores)',
+    phTcLabelExample:'Ex: Flores',
+    labelTcTitle:'Título',
+    phTcTitleExample:'Ex: Decoração floral',
+    labelTcDesc:'Descrição',
+    phTcDescExample:'Ex: As flores para o altar e as mesas.',
+    labelHmName:'Nome',
+    phHmNameExample:'Ex: Maldivas',
+    labelHmCategory:'Categoria',
+    labelHmPhotoTheme:'Foto (escolhe um tema)',
+    labelHmPriceMin:'Preço mínimo (€)',
+    labelHmPriceMax:'Preço máximo (€)',
+    labelHmDueDate:'Data limite de pagamento (opcional)',
+    btnDeleteIdea:'Eliminar ideia',
+    hmOptionSheetTitleNew:'Nova ideia',
+    hmOptionSheetTitleEdit:'Editar ideia',
+    sheetTitleDeleteAccount:'Eliminar a minha conta',
+    labelConfirmPassword:'Confirma a tua password',
+    phCurrentPassword:'A tua password atual',
+    labelStoreName:'Nome da loja',
+    phStoreNameExample:'Ex: Atelier Bela Noiva',
+    labelStoreAddress:'Morada',
+    phAddressExample:'Ex: Rua das Flores, Porto',
+    labelWhoWentWithYou:'Quem foi convosco',
+    phWhoWentExample:'Ex: Mãe, Joana',
+    phVisitNotesExample:'O que acharam, preços…',
+    visitSheetTitleNew:'Nova visita',
+    visitSheetTitleEdit:'Editar visita',
+    sheetTitleAddGuest:'Adicionar convidado',
+    labelGuestName:'Nome',
+    phGuestNameExample:'Ex: Maria Santos',
+    sheetTitleGuestPhone:'Telefone e comunicações',
+    labelPhoneOptional:'Telefone (opcional)',
+    phGuestPhoneExample:'Ex: +351 912 345 678',
+    labelWhatsappConsent:'Pode receber comunicações da Weddy por WhatsApp',
+    subWhatsappConsent:'Vais enviar-lhe lembretes e informações do casamento por WhatsApp. Pode deixar de receber a qualquer momento respondendo STOP.',
+    labelSide:'Lado',
+    labelEventName:'Nome',
+    phEventNameExample:'Ex: Cerimónia, Cocktail, Jantar…',
+    labelTime:'Hora',
+    labelPlaceOptional:'Local (opcional)',
+    phEventPlaceExample:'Ex: Igreja de Aldreu',
+    labelShowToGuests:'Mostrar aos convidados',
+    subShowToGuests:'Aparece no "Programa do dia" do link de RSVP de cada um',
+    eventSheetTitleNew:'Novo momento',
+    eventSheetTitleEdit:'Editar momento',
+    sheetTitleNewExpense:'Novo movimento',
+    labelExpenseDescription:'Descrição',
+    phExpenseDescExample:'Ex: Sinal do fotógrafo',
+    labelDateRequired:'Data *',
+    labelTotalValueRequired:'Valor total (€) *',
+    labelAlreadyPaidRequired:'Já pago (€) *',
+    labelPayByDateOptional:'Data limite para pagar o resto (opcional)',
+    labelPaymentMethod:'Método de pagamento',
+    paymentMethodNone:'Não definido',
+    paymentMethodTransfer:'Transferência',
+    paymentMethodCash:'Dinheiro',
+    paymentMethodCard:'Cartão',
+    seatSheetTitleDefault:'Atribuir lugar',
+    phSearchGuestGeneric:'Procurar convidado',
+    mesa3dHint:'arrasta para rodar · toca num lugar para atribuir',
+    weekAgendaTitle:'Calendário da semana',
+    weekAgendaSeeAll:'Ver todas',
+    agendaEmptyDay:'Sem tarefas neste dia',
+    weekDayAbbrevs:['seg','ter','qua','qui','sex','sáb','dom'],
+    monthNamesFull:['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'],
+    monthNamesShort:['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'],
+    dateNotSet:'Data por definir',
+    dateAtTimeSeparator:'às',
+    genericName1:'Nome 1', genericName2:'Nome 2',
+    genericVenueTBD:'Local por definir',
+    cpPermDenied:'Não consigo fazer isso por aqui.',
+    cpTaskCreated:(value,label)=>`Criei a tarefa "${value}" em Tarefas → ${label}. Já a consegues ver e editar lá.`,
+    cpTaskCreateFailed:(value)=>`Não consegui guardar a tarefa "${value}" — houve um problema a gravar agora. Tenta outra vez daqui a pouco.`,
+    cpNoUpcomingTasks:'Não tens tarefas com prazo nos próximos 7 dias.',
+    cpUpcomingTasksList:(lista,extra)=>`Esta semana tens: ${lista}${extra}.`,
+    cpAndMore:(n)=>`, e mais ${n}`,
+    cpAllRSVPResponded:'Todos os convidados com link de RSVP já responderam — não falta ninguém.',
+    cpPendingRSVPList:(lista,extra)=>`Ainda falta responder: ${lista}${extra}.`,
+    cpNoLateRSVP:'Não há ninguém atrasado — ou ainda não definiste um prazo de RSVP em Definições → RSVP.',
+    cpLateRSVPList:(lista,extra)=>`Estão atrasados: ${lista}${extra}.`,
+    cpNoReminderNeeded:'Neste momento ninguém precisa de um lembrete novo.',
+    cpReminderList:(lista,extra)=>`Precisam de um lembrete: ${lista}${extra}. Podes prepará-lo em Definições → RSVP.`,
+    cpNoDietaryInfo:'Ainda não há nenhuma restrição alimentar registada nas respostas de RSVP.',
+    cpDietaryList:(lista)=>`Convidados com restrições alimentares: ${lista}.`,
+    cpAllPaid:'Não há nenhum pagamento pendente neste momento — está tudo pago. 🎉',
+    cpRemainingTotal:(x)=>`Falta pagar ${x} no total.`,
+    cpToday:'hoje',
+    cpInDays:(n)=>`em ${n} dia${n===1?'':'s'}`,
+    cpRemainingNext15:(base,lista)=>`${base} Nos próximos 15 dias: ${lista}.`,
+    cpRSVPInfoExplain:(n)=>`Em Definições → Convites RSVP consegues gerar um link individual para cada convidado — ele responde lá se vai, a refeição e restrições, sem ver a lista toda nem o orçamento. Neste momento tens ${n} convidado${n===1?'':'s'} por responder.`,
+    cpGuestCount:(total,confirmed)=>`Tens ${total} convidados na lista, dos quais ${confirmed} já confirmaram presença (contando pelo peso de cada um — crianças e staff podem contar meio ou nada, consoante o que definiste).`,
+    cpBudgetSummary:(orc,gasto,pago)=>`O orçamento definido é de ${orc}. Já tens ${gasto} em despesas registadas, das quais ${pago} já foram pagas.`,
+    cpCountdownFuture:(dias,date)=>`Faltam ${dias} dias para o grande dia (${date}).`,
+    cpCountdownPast:(date)=>`O casamento foi a ${date}. Espero que tenha corrido tudo lindamente!`,
+    cpTableCount:(n)=>`Tens ${n} mesas configuradas na secção de Mesas.`,
+    cpDocFound:(doc,snippet)=>`Encontrei isto em "${doc}":\n\n"${snippet}"`,
+    cpDemoFallback:'Ainda estou em modo de demonstração (sem ligação a um modelo de IA real), mas já consigo responder sobre convidados, orçamento, datas, mesas, pagamentos, tarefas da semana e procurar nos documentos que carregaste — pergunta-me, por exemplo, "quantos convidados já confirmaram?".',
+    cpSupplierPaymentNotFound:'Não encontrei nenhum fornecedor que corresponda a essa pergunta — tenta usar o nome dele ou a categoria (ex: "fotógrafo", "espaço").',
+    cpPaidSoFar:(name,paid)=>`${name} — já pago: ${paid}`,
+    cpOfContracted:(x)=>` de ${x} contratados`,
+    cpNextPayment:(amount,date)=>` Próximo pagamento: ${amount} em ${date}.`,
+    cpNextPaymentNoDate:(amount)=>` Tens um próximo pagamento de ${amount} sem data definida.`,
+    cpSourceContract:' (Fonte: contrato + orçamento.)',
+    cpSourceBudgetOnly:' (Fonte: orçamento — ainda sem contrato carregado.)',
+    cpAllContracted:'Todos os fornecedores já estão contratados. 🎉',
+    cpUncontractedList:(lista)=>`Ainda faltam contratar: ${lista}.`,
+    cpNoPaymentsThisMonth:'Não tens nenhum pagamento previsto para este mês.',
+    cpPaymentsThisMonthList:(lista,extra)=>`Este mês tens: ${lista}${extra}.`,
+    cpContractSupplierNotFound:'Não encontrei nenhum fornecedor que corresponda a essa pergunta — tenta usar o nome dele ou a categoria.',
+    cpContractLegacyOnly:(name)=>`O contrato de ${name} ainda só está guardado neste telemóvel (não sincronizado) — não consigo pesquisar o texto dele a partir daqui. Carrega-o novamente na ficha do fornecedor para o sincronizar.`,
+    cpContractNotUploaded:(name)=>`Ainda não tenho o contrato de ${name} carregado — podes adicioná-lo na ficha dele, em Fornecedores.`,
+    cpContractNoMatch:(name)=>`Tenho o contrato de ${name}, mas não encontrei nada sobre isso no texto dele.`,
+    cpContractFound:(name,snippet)=>`No contrato de ${name}:\n\n"${snippet}"`,
+    cpNoBudgetMismatch:'Não encontrei nenhuma discrepância — o que está registado no Budget para cada fornecedor bate certo com o valor contratado.',
+    cpBudgetMismatchList:(lista)=>`Encontrei diferenças em: ${lista}.`,
+    cpMoreWord:'a mais',
+    cpLessWord:'a menos',
+    cpAllGuestsHaveTable:'Todos os convidados confirmados já têm mesa atribuída.',
+    cpGuestsWithoutTableList:(lista,extra)=>`Ainda sem mesa: ${lista}${extra}.`,
+    cpContractedLabel:'contratado',
+    cpInBudgetLabel:'no Budget',
+    cpSuggestPendingRSVP:(n)=>`${n} convidado${n===1?'':'s'} ainda ${n===1?'não respondeu':'não responderam'} ao RSVP.`,
+    cpSuggestRSVPDeadlineToday:'O prazo para responder ao RSVP é hoje.',
+    cpSuggestRSVPDeadlineDays:(days)=>`O prazo para responder ao RSVP é daqui a ${days} dia${days===1?'':'s'}.`,
+    cpSuggestOverBudget:(x)=>`Já ultrapassaste o orçamento em ${x}.`,
+    mesa3dModeTableByTable:'Mesa a mesa',
+    mesa3dModeRoomView:'Visão da sala',
+    mesa3dSyncBtn:'Sincronizar lugares com os convidados',
+    mesa3dTablesCount:(n)=>`${n} mesas`,
+    alertSeatingSyncPartialFailure:(failed,total)=>`A mesa foi sincronizada, mas ${failed} de ${total} convite(s) de convidados não foram atualizados agora. Tenta sincronizar de novo daqui a pouco.`,
+    salaLegendFree:'Livre',
+    salaViewHint:'toca numa mesa para ver os nomes · arrasta para a mover',
+    seatFreeLabel:'Lugar livre',
+    childLabel:'Criança',
+    childAgeYears:(age)=>`${age} anos`,
+    alreadyAtLabel:(loc)=>`já em ${loc}`,
+    seatLabelFormat:(t,s)=>`Mesa ${t} · lugar ${s}`,
+    recCatEntertainment:'Entretenimento',
+    recCatInvitations:'Convites e papelaria',
+    recCatPhotoVideo:'Fotografia e Vídeo',
+    recCatVenueCatering:'Espaço e Catering',
+    checklistPhasesData: CHECKLIST_PHASES_PT,
+    weddingDayChecklistData: WEDDING_DAY_CHECKLIST_PT,
+    themeRust:'Terracota', themeNavy:'Azul-marinho', themeOlive:'Verde-oliva', themeBlush:'Rosa-antigo', themeGold:'Dourado-clássico',
+    alertSettingsSyncPartialFailure:(failed,total)=>`As definições foram guardadas, mas ${failed} de ${total} convite(s) de convidados não foram atualizados agora (podem ficar com informação desatualizada). Tenta sincronizar de novo daqui a pouco.`,
+    svcNoConnection:'Sem ligação à Weddy neste momento.',
+    svcNoConnectionAI:'Sem ligação à Weddy AI neste momento.',
+    svcEmptyResponse:'A Weddy não devolveu resposta.',
+    svcAIRateLimited:'Limite diário de pedidos à Weddy AI atingido para este casamento. Tenta de novo amanhã.',
+    svcAIGenericError:'Não foi possível gerar a proposta agora. Tenta novamente.',
+    gcalErrNoAuthUrl:'A Weddy não devolveu um link de autorização.',
+    gpErrAlreadyExists:'Este número já está associado a outro convidado.',
+    gpErrInvalidArgument:'Número inválido — usa o formato internacional, ex: +351912345678.',
+    gpErrNotFound:'Não foi possível encontrar este convidado.',
+    gpErrGeneric:'Não foi possível guardar. Tenta novamente.',
+    gcalErrSyncTooSoon:'Acabaste de sincronizar — espera um bocadinho antes de tentar outra vez.',
+    gcalErrSyncRunning:'Já há uma sincronização em curso — aguarda que termine.',
+    gcalErrReauth:'A ligação ao Google Calendar expirou. Volta a ligar a tua conta Google.',
+    gcalErrNotConnected:'Ainda não ligaste o Google Calendar.',
+    gcalErrPermissionDenied:'A Weddy não tem permissão para editar este calendário. Escolhe outro calendário.',
+    gcalErrRateLimited:'O Google Calendar está temporariamente a limitar pedidos. Tenta novamente dentro de alguns minutos.',
+    gcalErrSessionExpired:'A tua sessão expirou — entra novamente.',
+    gcalErrGeneric:'Não foi possível sincronizar o Google Calendar. Os teus dados na Weddy não foram alterados.',
+    notIdentifiedLabel:'não identificado',
+    qrCodeAltText:'Código QR do convite',
+    qrCodeGenErrorText:'Não foi possível gerar o código QR.',
+    btnPrint:'Imprimir',
+    inviteWordLabel:'Convite',
+    deleteAccountSoleOwnerHtml:'Ao eliminar a tua conta, todos os dados deste casamento serão <b>permanentemente apagados</b>, incluindo orçamento, convidados, mesas, fornecedores, documentos e memórias. Esta ação não pode ser desfeita.',
+    deleteAccountSharedHtml:'Ao eliminar a tua conta, deixarás de ter acesso a este casamento. Os dados partilhados mantêm-se para os outros utilizadores com acesso. Esta ação não pode ser desfeita.',
+    toastSaveFailed:'Não foi possível guardar',
+    toastSaved:'Guardado',
+    xlDefaultCoupleTitle:'O nosso casamento',
+    xlSheetBudget:'Orçamento',
+    xlBudgetSubtitle:(subInfo,total)=>`Orçamento · ${subInfo} · Orçamento total: ${total}`,
+    xlColCategory:'Categoria',
+    xlColBudgeted:'Orçamentado',
+    xlSheetExpenses:'Gastos',
+    xlExpensesSubtitle:(subInfo)=>`Gastos · ${subInfo}`,
+    xlColDescription:'Descrição',
+    xlColDate:'Data',
+    xlColTotalValue:'Valor total',
+    xlColValue:'Valor',
+    xlColPaid:'Pago',
+    xlColRemaining:'Falta pagar',
+    xlColDueDate:'Data limite',
+    xlColMethod:'Método',
+    xlSheetGuests:'Convidados',
+    xlGuestsSubtitle:(total,confirmed)=>`Convidados · ${total} convidados · ${confirmed} confirmados`,
+    xlColName:'Nome',
+    xlColSide:'Lado',
+    xlColGroup:'Grupo',
+    xlColStatus:'Estado',
+    xlColAge:'Idade',
+    xlColPaying:'Pagante',
+    xlStatusConfirmed:'Confirmado',
+    xlStatusPending:'Por confirmar',
+    xlSheetTables:'Mesas',
+    xlTablesSubtitle:(n)=>`Mesas e lugares · ${n} mesas`,
+    xlColTable:'Mesa',
+    xlColShape:'Forma',
+    xlColSeat:'Lugar',
+    xlColGuest:'Convidado',
+    xlSheetSuppliers:'Fornecedores',
+    xlSuppliersSubtitle:(n)=>`Fornecedores · ${n} guardados`,
+    xlColContact:'Contacto',
+    xlColPrice:'Preço',
+    xlColNotes:'Notas',
+    xlTotalLabel:'TOTAL',
+    xlLoadExcelError:'Não foi possível carregar o gerador de Excel. Confirma que tens internet e tenta novamente.',
+    xlLoadPdfError:'Não foi possível carregar o gerador de PDF. Confirma que tens internet e tenta novamente.',
+    xlDownloadSuccess:'Descarregado com sucesso!',
+    xlGenericFileError:'Não foi possível gerar o ficheiro. Tenta novamente.',
+    xlDefaultFilenameSlug:'casamento',
+    xlPdfSectionBudget:'Orçamento por categoria',
+    xlEmptyExpenses:'Ainda sem gastos registados.',
+    xlEmptyGuests:'Ainda sem convidados.',
+    xlEmptySuppliers:'Ainda sem fornecedores.',
+  },
+  en: {
+    tabHome:'Home', tabBudget:'Budget', tabGuests:'Guests', tabExpenses:'Expenses', tabTables:'Tables', tabSeating:'Seating',
+    defTitle:'Settings', defSubtitle:'Customize your Weddy experience<br>and manage your wedding.',
+    sectionPremium:'Weddy Premium', sectionWedding:'The wedding', sectionData:'Your data', sectionAccess:'Access & account', sectionInfo:'Information', sectionHelp:'Help',
+    subscriptionTitle:'Manage subscription', subscriptionDesc:'Your Weddy Premium plan status',
+    subscriptionActiveStatus:'Weddy Premium is active', subscriptionActiveText:"You have access to every Premium feature — RSVP, Wedding Health, Memories, Documents and Google Calendar.",
+    subscriptionPlanLabel:'Plan', subscriptionManageNote:'(Prototype — real billing management is not connected to any payment yet.)',
+    subscriptionStartedLabel:'Started', subscriptionExpiresLabel:'Valid until',
+    btnCancelSubscription:'Cancel subscription', btnCancelingEllipsis:'Cancelling…',
+    subscriptionSubtitleText:'More features. A more complete wedding.',
+    subscriptionActiveBadge:'Active',
+    subscriptionFeatureGuests:'Unlimited guests', subscriptionFeatureAISeating:'AI Seating', subscriptionFeatureWeddingHealth:'Wedding Health',
+    subscriptionFeatureMemories:'Memories', subscriptionFeatureRSVP:'Advanced RSVP', subscriptionFeatureMore:'And much more…',
+    subscriptionCurrentPlanLabel:'Current plan', subscriptionDefaultPlanName:'Premium — 24 months', subscriptionPriceText:'€29.99 / 24 months',
+    subscriptionRenewsOnLabel:(d)=>`Renews on ${d}`,
+    subscriptionNeedHelpTitle:'Need help?', subscriptionNeedHelpDesc:'Get in touch with our support team.',
+    confirmCancelSubscriptionText:'This cancels your Weddy Premium subscription right away — every Premium feature (RSVP, Wedding Health, Memories, Documents, Google Calendar, Assistant) is locked immediately. Confirm?',
+    alertSubscriptionCancelError:'Could not cancel the subscription right now — check your connection and try again.',
+    homePremiumSectionLabel:'Weddy Premium',
+    premiumHubTitle:'Weddy tools', premiumHubDesc:'Everything you need to plan the big day, all in one place.',
+    premiumHubBadge:'Weddy Premium',
+    premiumHubCtaTitle:'Unlock every tool', premiumHubCtaDesc:'Make your planning even more complete.',
+    premiumTileRSVP:"Confirm attendance and your guests' responses.",
+    premiumTileChatbot:'Chatbot', premiumTileChatbotDesc:'Get your questions answered in real time.',
+    premiumTileHealthDesc:'A quick check-up on your wedding.',
+    premiumTileAISeatingDesc:'Weddy AI arranges your guests across the tables for you.',
+    premiumTileMemoriesDesc:'Relive the best moments of the big day.',
+    premiumTileDocumentosDesc:'Check your contracts and documents.',
+    premiumTileGoogleCalDesc:'Sync your wedding calendar.',
+    rsvpTitle:'RSVP invitations', rsvpDesc:"Send and track your guests' responses",
+    rsvpRespostasNavTitle:'Guest responses', rsvpRespostasNavDesc:"See, search and group who's already replied",
+    rsvpDeadlineNavDesc:'Set the deadline for guests to respond',
+    rsvpFaqNavTitle:'Custom questions', rsvpFaqNavDesc:'What the assistant answers to guests',
+    rsvpDeadlineUnset:'Not set yet',
+    btnAddFaq:'Add question', faqEmptyState:"You don't have any custom questions yet. Add the first one.",
+    faqQuestionPlaceholder:'Question (e.g. Can I bring a plus one?)', faqAnswerPlaceholder:'Answer the assistant should give',
+    btnEditFaq:'Edit', btnDeleteFaq:'Delete', confirmDeleteFaq:'Delete this question?',
+    faqToggleHint:"Turn a question off for the assistant to stop using it, without deleting it.",
+    rsvpInfoSeeFaqLink:'Manage custom questions',
+    healthTitle:'Wedding Health', healthDesc:"A quick check-up on how your wedding is going",
+    healthAllGood:'Everything looks good! 🎉',
+    healthAllGoodDesc:"Nothing needs your attention right now — check back every now and then.",
+    healthSummaryRed: n => `${n} thing${n===1?'':'s'} need${n===1?'s':''} your attention.`,
+    healthSummaryYellow: n => `${n} thing${n===1?'':'s'} worth a look, nothing urgent.`,
+    healthConfirmedPct: pct => `${pct}% of guests have confirmed attendance.`,
+    healthCheckPendingRSVP: n => `${n} guest${n===1?'':'s'} ${n===1?"hasn't":"haven't"} responded to the RSVP yet.`,
+    healthCheckPaymentsSoon: n => `You have ${n} payment${n===1?'':'s'} due in the next 7 days.`,
+    healthCheckPaymentsUpcoming: n => `You have ${n} payment${n===1?'':'s'} due in the next 15 days.`,
+    healthCheckBudgetOver: pct => `The budget is ${pct}% over what you planned.`,
+    healthCheckNoTable: n => `${n} confirmed guest${n===1?'':'s'} still without a table.`,
+    healthCheckNoMeal: n => `${n} confirmed guest${n===1?'':'s'} still without a meal choice.`,
+    healthCheckSuppliers: n => `${n} supplier${n===1?'':'s'} still not booked.`,
+    btnResolve:'Fix this',
+    memoriesTitle:'Weddy Memories', memoriesDesc:'Photos your guests have shared with you',
+    documentsTitle:'Wedding documents', documentsDesc:'Upload PDF contracts and search them through the Assistant',
+    googleCalendarTitle:'Google Calendar', googleCalendarDesc:'Bring your wedding schedule into your calendar',
+    googleCalendarConnectedDesc:'Connected — your schedule is being synced',
+    googleCalendarIntroText:"Bring your wedding schedule straight into your calendar. It creates and updates events automatically — you keep editing everything here in Weddy.",
+    googleCalendarConnect:'Connect Google Calendar', googleCalendarConnecting:'Connecting…',
+    googleCalendarConnectedTitle:'Google Calendar connected',
+    googleCalendarCalendarLabel:'Calendar', googleCalendarLastSyncLabel:'Last synced',
+    googleCalendarNeverSynced:'Not synced yet',
+    googleCalendarSyncNow:'Sync now', googleCalendarSyncing:'Syncing…',
+    googleCalendarChangeCalendar:'Change calendar',
+    googleCalendarDisconnect:'Disconnect Google Calendar',
+    googleCalendarDisconnectConfirm:'Disconnect Google Calendar? Events already created in your Google Calendar will not be deleted.',
+    googleCalendarDisconnectSuccess:'Google Calendar disconnected. Events already there stay in your Google Calendar.',
+    googleCalendarSyncSuccess:'Synced successfully.',
+    googleCalendarConnectSuccess:'Calendar chosen — syncing for the first time.',
+    googleCalendarPickCalendarText:'Choose the calendar where Weddy should create and update your wedding events.',
+    googleCalendarNoCalendars:"We couldn't find a calendar you have edit access to. Create a calendar in your Google account and try again.",
+    googleCalendarReauthText:'Your Google Calendar connection expired. Reconnect your Google account to keep syncing.',
+    googleCalendarReconnect:'Reconnect',
+    googleCalendarOAuthSuccess:'Google Calendar connected — now choose a calendar.',
+    googleCalendarOAuthCancelled:'The Google Calendar connection was cancelled.',
+    googleCalendarOAuthError:'Could not connect Google Calendar. Please try again.',
+    googleCalendarSyncErrorPrefix:'The last sync failed',
+    googleCalendarGenericSyncError:'The last sync failed. Your data in Weddy was not changed.',
+    subscriptionNeeded:'Subscription required',
+    weddingInfoTitle:'Names, date and venue', weddingInfoUnset:'Not set yet',
+    designTitle:'Design and cover photo', designDesc:'Customize your wedding\'s look',
+    categoriesTitle:'Expense categories', categoriesDesc:'Edit your budget categories',
+    exportTitle:'Export data', exportDesc:'Download everything as Excel or PDF',
+    historicoTitle:'Wedding history', historicoDesc:'Backups and restore',
+    inviteTitle:'Invite a planning partner', inviteDesc:'Share the wedding planning',
+    accessTitle:'Who has access', accessDesc:'Control who can see and edit the data',
+    privacyTitle:'Privacy & GDPR', privacyDesc:'Read our privacy policy',
+    aboutTitle:'About Weddy', aboutDesc:'Version 1.0.0',
+    reportTitle:'Report a problem', reportDesc:'Found a bug? Tell us',
+    signOut:'Sign out',
+    languageLabel:'Language',
+    catFamilia:'Family', catFriends:'Friends', catMaybe:'Maybe', catStaff:'Staff / vendors',
+    shapeRound:'Round', shapeLong:'Long', shapeSerpentine:'Serpentine',
+
+    homeSubtitle:'Your wedding,<br>all in one place',
+    homeCountdownLabel:'Countdown',
+    daysLeftLabel:(n)=>`${n} days`,
+    homeDateTBD:'Date not set yet',
+    homeQuickHoneymoon:'Honeymoon',
+    homeQuickSuppliers:'Suppliers',
+    homeProgressLabel:'Your progress',
+    lblConfirmed:'Confirmed',
+    sideBride:'Bride',
+    sideGroom:'Groom',
+    homeBudgetSpentLabel:'Budget spent',
+    homeToSpendLabel:'Left to spend',
+    homeBigDayLabel:'The big day',
+    donutAllocatedLabel:'allocated',
+
+    btnRename:'Rename',
+    btnDelete:'Delete',
+    placeholderAddItem:'Add item…',
+    placeholderAge:'Age',
+    loadingLabel:'Loading…',
+    navBudgetTitle:'Budget',
+    budgetTotalLabel:'Total budget',
+    budgetGuestsEstLabel:'Guests (est.)',
+    perGuestLabel:'€ / guest',
+    budgetBreakdownLabel:'Breakdown by category',
+    budgetCategoriesHint:'Categories · tap to see details',
+    valueEurLabel:'Amount (€)',
+    perGuestSuffix:' / guest',
+    placeholderNewCategory:'New category…',
+
+    payingNone:'Not paying',
+    paying50:'Paying 50%',
+    paying100:'Paying 100%',
+    emptyNoGuestsInCategory:'no guests in this category',
+    addToCategoryPlaceholder:(label)=>`Add to ${label}…`,
+    btnEditName:'Edit name',
+    promptNewCategoryName:'New category name:',
+    confirmDeleteCategoryWithGuests:(label,count)=>`Delete "${label}"? The ${count} guest(s) inside it will also be lost.`,
+    confirmDeleteCategorySimple:(label)=>`Delete category "${label}"?`,
+    navGuestsTitle:'Guests',
+    placeholderSearchGuest:'Search guest',
+    totalGuestsLabel:'guests in total',
+    perGuestPaidLabel:'€ / guest (paid)',
+    placeholderNewGuestCategory:'New category (e.g. Family friends)…',
+
+    placeholderDescription:'Description',
+    labelDate:'Date',
+    labelPaidColon:'Paid:',
+    labelMethod:'Method',
+    optionNotDefined:'Not set',
+    methodTransfer:'Bank transfer',
+    methodCash:'Cash',
+    methodCard:'Card',
+    remainingToPayLabel:(x)=>`${x} left to pay — by`,
+    btnSetDueDate:'+ set a due date',
+    navExpensesTitle:'Expenses',
+    lblPaid:'Paid',
+    lblToPay:'Left to pay',
+    lblOfBudget:'Of budget',
+    sectionPaidVsBudgeted:'Paid vs. budgeted',
+    sectionMovements:'Transactions',
+    emptyNoMovements:'no transactions recorded',
+
+    tapToAssign:'tap to assign',
+    labelShape:'Shape',
+    labelSeats:'Seats',
+    notesTableLabel:'Notes (e.g. don\'t seat Ana near Bruno)',
+    placeholderWriteHere:'Write here…',
+    btnDeleteTable:'Delete table',
+    tableLabel:(n)=>`Table ${n}`,
+    titleHasNotes:'Has notes',
+    navTablesTitle:'Tables',
+    totalTablesLabel:'tables in total',
+    seatsToAssignLabel:'seats left to assign',
+    tablesHint:'Tap a table to view it, edit its shape and assign seats',
+
+    aiSeatingOpenBtn:'Organize with Weddy AI',
+    aiSeatingTitle:'Organize with Weddy AI',
+    aiSeatingProposalTitle:"✨ Weddy's proposal",
+    aiSeatingLoadingText:'Weddy is preparing your seating proposal…',
+    aiSeatingIntroText:'Weddy AI arranges your guests across your tables, based on the seats available and any preferences you set below.',
+    aiSeatingConfirmedGuestsLabel:'Confirmed guests', aiSeatingTablesCountLabel:'Tables',
+    aiSeatingSeatsAvailableLabel:'Seats available',
+    sectionPreferences:'Preferences',
+    aiSeatingNoPreferencesText:"You haven't added any preferences yet — you can still generate a proposal, Weddy will just fill the tables in order, respecting capacity.",
+    aiSeatingNewPreferenceLabel:'New preference', priorityNextPrefLabel:'Priority', aiSeatingTypeStepLabel:'Type',
+    aiSeatingFreeTextLabel:'Or write it out (optional)',
+    aiSeatingFreeTextPlaceholder:'E.g.: "I want my parents near the best man and maid of honor, and I don\'t want uncle Tony near John."',
+    aiSeatingOverCapacityText:(confirmed,seats)=>`You have ${confirmed} confirmed guests but only ${seats} seats available. Adjust your tables in "Tables" before generating a proposal.`,
+    btnGenerateProposal:'Generate proposal',
+    aiSeatingSearchGuestPlaceholder:'Search guest…',
+    aiSeatingNoConfirmedGuestsText:'No confirmed guests.',
+    btnAddCount:(n)=>`Add (${n})`,
+    aiSeatingTypeTogether:'Together', aiSeatingTypeApart:'Apart', aiSeatingTypeNear:'Near',
+    aiSeatingPriorityHard:'🔴 Required', aiSeatingPriorityStrong:'🟠 Important', aiSeatingPrioritySoft:'🟡 If possible',
+    aiSeatingVerbTogether:'together', aiSeatingVerbApart:'apart', aiSeatingVerbNear:'near',
+    pctPreferencesRespectedLabel:'of requested preferences were honored',
+    requiredPreferencesNotRespectedLabel:'Required preferences not honored',
+    aiSeatingUnresolvedFreeTextText:(list)=>`I couldn't find "${list}" among the confirmed guests — that part of the text was ignored.`,
+    aiSeatingStaleProposalText:"This proposal no longer matches the current tables/guests setup (something changed meanwhile). Generate a new proposal before accepting.",
+    aiSeatingFailedCountText:(n)=>`${n} preference(s) could not be honored.`,
+    btnAcceptProposal:'Accept proposal', btnConfirmingEllipsis:'Confirming…',
+    btnAcceptAndEditManually:'Accept and edit manually',
+    btnGenerateAnother:'Generate another (same preferences)',
+    aiSeatingRsvpSyncErrorText:'The seating was saved, but there was a problem updating guests\' RSVP invites. Sync again from "Tables".',
+    aiSeatingProposalGenericErrorText:'Could not generate the proposal.',
+    aiSeatingProposalStaleErrorText:'This proposal no longer matches the current tables/guests setup. Generate a new proposal.',
+
+    navInspirationTitle:'Inspiration',
+    inspirationHint:'Save images that inspire you — dresses, decor, flowers, whatever you like (max. 6)',
+    btnAdd:'Add',
+
+    statusTodo:'To do',
+    statusInProgress:'In progress',
+    statusDone:'Done',
+    tagFinancas:'Finances', tagConvidados:'Guests', tagInspiracao:'Inspiration', tagLocal:'Venue', tagDatas:'Dates',
+    tagFornecedores:'Suppliers', tagVestido:'Dress', tagPapelaria:'Stationery', tagLuaDeMel:'Honeymoon', tagDocumentos:'Documents',
+    tagBeleza:'Beauty', tagTransporte:'Transport', tagDecoracao:'Decor', tagMusica:'Music', tagCerimonia:'Ceremony',
+    tagMesas:'Tables', tagPlaneamento:'Planning', tagGeral:'General',
+    phaseLabel:(n)=>`Phase ${n}`,
+    dueByLabel:(d)=>`by ${d}`,
+    deadlineWasLabel:(d)=>`deadline was ${d}`,
+    phasesCompletedLabel:'Phases completed',
+    planningPctSuffix:(pct)=>`${pct}% of planning`,
+    forBigDayLabel:'until the big day',
+    brideChecklistTitle:'Bride\'s checklist',
+    brideChecklistDesc:'For the night before',
+    personalChecklistTitle:'Personal checklist',
+    personalChecklistEmpty:'add anything you can\'t forget on your day',
+    checklistPageSubtitle:'Small steps, big moments.<br>Shall we?',
+
+    noNameLabel:'No name',
+    noDateLabel:'No date',
+    titleMarkChosen:'Mark as chosen',
+    labelAddress:'Address:',
+    labelWhoWent:'Who went:',
+    labelNotesColon:'Notes:',
+    btnEdit:'Edit',
+    storeVisitsTitle:'Store visits',
+    storeVisitsEmpty:'You haven\'t logged a store visit yet. Tap + to add one.',
+    inspirationPhotosLabel:'Inspiration photos (max. 6)',
+
+    filterAll:'All',
+    filterAllPlural:'All',
+    filterDone:'Done',
+    placeholderSearchGeneric:'Search…',
+    emptyNothingFound:'Nothing found.',
+    myNotesLabel:'My notes',
+    placeholderWriteNotesHere:'Write your notes here…',
+    todoPageSubtitle:'Small tasks, big moments.',
+    untilWord:'by',
+    noDueDateInsert:'no date — add one',
+    titleRemoveDeadline:'Remove deadline',
+    emptyNoItems:'no items yet',
+    placeholderAddEllipsis:'Add…',
+    btnEditCategory:'Edit category',
+    btnDeleteCategory:'Delete category',
+
+    hmTypeBeach:'Beach', hmTypeCity:'City', hmTypeMountain:'Mountain', hmTypeCruise:'Cruise', hmTypeAdventure:'Adventure', hmTypeRelax:'Relax',
+    honeymoonSubtitle:'Dream, plan, share.',
+    honeymoonBannerTitle:'Tap the ♥ on your favorite!',
+    honeymoonBannerText:'You can create several options and compare them — only one gets marked as the chosen one.',
+    honeymoonEmpty:'No honeymoon options yet. Tap + to create the first one.',
+    newOptionTitle:'New option',
+    labelOptionName:'Option name',
+    phOptionNameExample:'E.g. Honeymoon in the Maldives',
+    labelType:'Type',
+    labelNumDays:'Number of days',
+    labelEstimatedBudget:'Estimated budget (€)',
+    sectionItinerary:'Itinerary · cities to visit',
+    emptyNoCities:'no cities yet',
+    placeholderAddCity:'Add city…',
+    labelNotesHelp:'Notes / help from family and friends',
+    phNotesHelpExample:'E.g. the godparents will help with flights',
+    btnSave:'Save',
+    btnCancel:'Cancel',
+    btnDeleteThisOption:'Delete this option',
+
+    statusConsider:'Considering',
+    statusContacted:'Contacted',
+    statusHired:'Hired',
+    suppliersSubtitle:'Discover our recommended suppliers and add your own to stay organized.',
+    placeholderSearchSuppliers:'Search suppliers… (min. 2 letters)',
+    titleFilterByCategory:'Filter by category',
+    recommendedEyebrow:'Our recommendations',
+    recommendedTitle:'Suppliers<br>you can trust',
+    recommendedSub:'We\'ve selected some of our favorite suppliers for your big day.',
+    btnViewAll:'View all',
+    yourSuppliersLabel:'Your suppliers',
+    supplierNoticeHtml:'<b>New:</b> tap a supplier to open their full profile — you can track payments, contracts, next steps and more.',
+    recommendedPageTitle:'Recommended suppliers',
+    emptyNoRecommendations:'No recommendations yet.',
+    emptyNoSupplierFound:'No supplier found.',
+    addSupplierLabel:'Add supplier',
+    otherSupplierLabel:'OTHER SUPPLIER',
+    addSupplierHint:'Keep track of your own suppliers here.',
+    confirmDeleteSupplier:'Delete this supplier?',
+    supplierDetailTitle:'Supplier',
+    phSupplierName:'Supplier name',
+    labelPhone:'Phone',
+    labelPrice:'Price',
+    phPriceExample:'E.g. €1,500',
+    labelEmail:'Email',
+    labelWebsite:'Website',
+    sectionPayments:'Payments',
+    labelTotalContractedValue:'Total contracted value (€)',
+    lblPaidLower:'paid',
+    pctPaidSuffix:(pct)=>`${pct}% paid`,
+    emptyNoPayments:'No payments recorded yet.',
+    placeholderValueEuro:'Amount €',
+    labelNextPayment:'Next payment',
+    phValueExample600:'E.g. 600',
+    sectionContract:'Contract',
+    addContractLabel:'Add contract',
+    tapToView:'Tap to view',
+    contractHint:'PDF or photo of the contract',
+    sectionNotes:'Notes',
+    phSupplierNotesExample:'E.g. ask for updated quote, confirm availability…',
+    sectionNextStep:'Next step',
+    labelWhatIsLeft:'What\'s left to do',
+    phNextStepExample:'E.g. Send ceremony schedule',
+    sectionLastContact:'Last contact',
+    labelLastContactDate:'Date of last contact',
+    btnDeleteSupplier:'Delete supplier',
+    errStoragePhoto:'Could not save the photo — your phone may be out of storage space.',
+    errStorageContract:'Could not save the contract — your phone may be out of storage space.',
+    errContractUnsupportedType:'Unsupported file type. Use a PDF or an image.',
+    defaultNewSupplierName:'New supplier',
+    labelSupplierOptional:'Supplier (optional)',
+    noSupplierOption:'No supplier',
+    autoPaymentDesc:(name)=>`Payment to ${name}`,
+    contractSyncedNote:'Synced — visible on every device and searchable by the Assistant.',
+    contractLocalOnlyNote:'Saved only on this phone. Upload the contract again to sync it.',
+    statusUploadingContract:'Uploading contract…',
+    legacyPaymentTag:'migrated old payment',
+
+    premiumLockedText:(title)=>`"${title}" and the remaining Premium features become available once you have an active subscription.`,
+    premiumFeatureRSVP:'RSVP invitations with an individual link per guest',
+    premiumFeatureAssistant:'Weddy Assistant to answer questions about your wedding',
+    btnSubscribePremium:'Subscribe to Weddy Premium',
+    assistLockedText:'The Weddy Assistant and RSVP invitations become available once you have an active subscription.',
+    assistGreeting1: name => `Hi${name}! 👋 I'm the Weddy assistant and I'm here to help you with anything about your wedding.`,
+    assistGreeting2:"You can ask me about suppliers, guest lists, budget, checklist, app features and much more!\n\nHow can I help you today?",
+    assistChipSuppliers:'I want to know about suppliers', assistChipRSVP:'How does RSVP work?', assistChipQuestion:'I have a question about the app', assistChipFeatures:'I want to see new features',
+    assistHeroEyebrow:'Weddy Assistant', assistHeroTitle:'Your ally in<br>planning the wedding', assistHeroText:'Ask your questions, get suggestions<br>and make everything simpler.',
+    assistInputPlaceholder:'Type your question…', assistSendLabel:'Send', btnClose:'Close',
+    assistThinking:'Thinking…',
+    loginLoading:'Loading…',
+    loginTagSignup:'Create your couple account', loginTagLogin:'Sign in to your account',
+    btnHidePassword:'Hide password', btnShowPassword:'Show password',
+    emailPlaceholder:'your-email@example.com', passPlaceholder:'Password (min. 6 characters)', passConfirmPlaceholder:'Confirm password',
+    btnCreateAccount:'Create account', btnEnter:'Sign in', btnWait:'Please wait…',
+    forgotPassword:'Forgot your password?', toggleToLogin:'Already have an account? Sign in', toggleToSignup:"Don't have an account? Create one",
+    forgotNeedsEmail:'Enter your email above and tap "Forgot your password?" again.',
+    firebaseNotReady:'The Firebase configuration is not ready.',
+    forgotSuccess: email => `We sent an email to ${email} with instructions to reset your password.`,
+    forgotUserNotFound:'There is no account with this email.', forgotGenericError:'We could not send the email. Check that it is correct.',
+    setupNeededTitle:'Access setup is missing', setupNeededMsg:'You have not added the Firebase configuration to the <b>index.html</b> file yet. Follow the instructions in README.md.',
+    verifyEmailTitle:'Confirm your email',
+    verifyEmailMsg: email => `We sent a confirmation link to <b>${email}</b>. Open that email and tap the link before continuing — this protects your wedding.`,
+    btnResendEmail:'Resend email', btnAlreadyConfirmed:'Already confirmed, continue',
+    resendSuccess:'Email resent.', resendError:'We could not resend it. Try again shortly.',
+    verifying:'Checking…', notConfirmedYet:'Not confirmed yet. Check your email (and spam folder).',
+    fillEmailPass:'Enter the email and password.', passwordMismatch:'The two passwords do not match.',
+    firebaseNotReadyFile:'The Firebase configuration is not ready in this file.',
+    authErrEmailInUse:'An account with this email already exists — try signing in.',
+    authErrUnauthorizedDomain:'This site is not yet authorized in Firebase (Authentication → Settings → Authorized domains).',
+    authErrBadCredentials:'Incorrect email or password. Please try again.',
+    authErrWeakPassword:'The password needs at least 6 characters.',
+    authErrInvalidEmail:'That email does not look valid.',
+    authErrAccountExistsDifferentCred:'An account already exists with this email, created a different way (e.g. with a password). Sign in with that option instead.',
+    authErrPopupBlocked:'Your browser blocked the Google sign-in window. Allow pop-ups for this site and try again.',
+    btnContinueGoogle:'Continue with Google',
+    orSeparatorLabel:'or',
+    authErrGeneric: code => `We could not continue (${code}).`,
+    obTitle:"Let's set up your wedding", obName1:"Bride's name (e.g. Rita)", obName2:"Groom's name (e.g. Tiago)",
+    obDateLabel:'Wedding date', obVenue:'Venue (e.g. Quinta do Jardim, Barcelos)', obStart:'Get started',
+    obErrNames:'Enter at least both names.', obErrDate:'Choose the wedding date (you can always change it later).',
+    obCreating:'Creating your space…',
+    verifyingAccount:'Checking your account…',
+    loginErrorAccessData:'We could not access your data. Try signing out and in again.',
+    loginErrorVerifyAccount:'We could not verify your account. (permission denied — check your Firestore rules)',
+    loginErrorVerifyGeneric:'We could not verify your account.', loginErrorPermExtra:' (permission denied — check your Firestore rules)',
+    testAccountNote:'(This is a test account — no real subscription is connected to any payment yet.)',
+    rsvpSyncChanged: parts => `What changed: ${parts}.`, rsvpSyncNothing:'No new changes since last time.',
+    rsvpConfirmedChanged: n => `${n} confirmation${n===1?'':'s'} updated`,
+    rsvpSeatsFreed: n => `${n} seat${n===1?'':'s'} freed up at tables`,
+    rsvpChildrenAdded: n => `${n} new ${n===1?'child':'children'} added to "Children"`,
+    rsvpChildrenLinked: n => `${n} existing ${n===1?'child':'children'} linked to RSVP`,
+    rsvpChildrenUnlinked: n => `${n} ${n===1?'child':'children'} unlinked from RSVP`,
+
+    rsvpStatusGoing:'Going',
+    rsvpStatusNotGoing:'Not going',
+    rsvpStatusMaybe:'Not sure yet',
+    rsvpStatusOpened:'Seen, thinking',
+    rsvpStatusPending:'Awaiting reply',
+    btnCopyLink:'Copy link',
+    btnGenerateLink:'Generate link',
+    titleRemoveInvite:'Remove invite (deletes the response and disables the link)',
+    labelChildrenColon:'Children:',
+    yearsOldSuffix:(a)=>` (${a} years old)`,
+    notGoingSuffix:' — not going',
+    needsTransport:'needs transport',
+    needsAccommodation:'needs accommodation',
+    rsvpFilterConfirmed:'Confirmed',
+    rsvpFilterMaybe:'Maybe',
+    rsvpFilterPending:'Awaiting reply',
+    rsvpFilterNotGoing:'Not going',
+    deadlinePassedWarn:(dateStr,count)=>`The deadline (${dateStr}) has passed and ${fmtGuestCount(count)} guest${count===1?'':'s'} still ${count===1?'hasn\'t':'haven\'t'} answered. It might be worth sending a reminder.`,
+    respondedLabel:'Responded',
+    maybeCountLabel:(n)=>`${fmtGuestCount(n)} still ${n===1?'isn\'t':'aren\'t'} sure`,
+    transportCountLabel:(n)=>`${fmtGuestCount(n)} need${n===1?'s':''} transport`,
+    accommodationCountLabel:(n)=>`${fmtGuestCount(n)} need${n===1?'s':''} accommodation`,
+    labelRSVPDeadline:'Deadline to respond',
+    guestInfoLabel:'Information for guests',
+    guestInfoSubLabel:'(shown on each guest\'s link, under "FAQ")',
+    phDressCode:'e.g. Formal attire, colors to avoid…',
+    phGuestNotes:'e.g. how to get there, transport, nearby accommodation…',
+    btnSaveInfo:'Save information',
+    conciergeLabel:'Weddy Concierge (guest chat)',
+    conciergeSubLabel:'(what each guest\'s assistant will know how to answer)',
+    phParking:'e.g. free on-site, parking lot 200m away…',
+    phTransport:'e.g. shuttle at 6pm from hotel X…',
+    phAccommodation:'e.g. recommended hotels, discount code X…',
+    phGifts:'e.g. IBAN, honeymoon fund, no gifts please…',
+    phContact:'e.g. couple\'s phone or email',
+    labelDressCode:'Dress code',
+    labelGuestNotes:'Other notes',
+    labelParking:'Parking',
+    labelTransport:'Transport',
+    labelAccommodation:'Accommodation',
+    labelGifts:'Gifts / registry',
+    labelContact:'Contact for questions',
+    btnAddInfoField:'+ Add',
+    guestInfoAddSectionLabel:'You can add:',
+    conciergeFaqLabel:'Custom questions and answers',
+    phConciergeFaq:'Q: Can we bring kids?\nA: Yes, we\'d love to have them there!\n\nQ: Is there a vegetarian option?\nA: Yes, just mention it in your RSVP.',
+    conciergeFaqHint:'Write "Q:" (question) and "A:" (answer) pairs, separated by a blank line. The chat only answers based on what you write here.',
+    updatingLabel:'Updating…',
+    btnUpdateResponses:'Update responses',
+    lastUpdateLabel:(x)=>`Last updated: ${x}.`,
+    neverUpdatedLabel:'You haven\'t updated the responses yet.',
+    btnCopyReminders:(n)=>`Copy reminders (${n})`,
+    autopilotTitle:'Weddy Autopilot',
+    autopilotLateCount:(n)=>`🔴 ${n} late`,
+    autopilotDueCount:(n)=>`🟠 ${n} need${n===1?'s':''} a reminder`,
+    autopilotAllOnTime:'No one needs a reminder right now — everyone is still on time.',
+    autopilotPrepareBtn:(n)=>n>0 ? `Prepare reminder (${n})` : 'Prepare reminder',
+    autopilotModalTitle:(n)=>`Review reminder for ${n} guest${n===1?'':'s'}`,
+    autopilotModalHint:'Weddy prepares the text with each guest\'s link. Confirm to copy — sending is always up to you (email, WhatsApp, whatever you prefer).',
+    autopilotConfirmBtn:'Confirm and copy',
+    reminderChannelLabel:'Channel', reminderMsgLabel:'Message',
+    reminderCharCount: n => `${n} character${n===1?'':'s'}`,
+    reminderRecipientsLabel: n => `Going to ${n} guest${n===1?'':'s'}`,
+    reminderDefaultGreeting:"Hi! Just a friendly reminder to confirm you're coming 💌",
+    autopilotBadgeLate:'Late — the deadline has passed',
+    autopilotBadgeDue:'Needs a reminder',
+    btnExportCSV:'Export CSV',
+    phSearchGuestEllipsis:'Search guest…',
+    emptyNoMatchSearch:'No guest matches the search/filter.',
+    emptyNoGuestsSaved:'You don\'t have any guests saved in "Guests" yet.',
+    rsvpNoteLinkPrivate:'Each link belongs only to that guest — it never shows the full list or the wedding budget.',
+    rsvpNoteAutoFree:'When someone answers "Not going", their seat (if already assigned) is automatically freed. Children declared through the link appear in "Guests → Children", already counted and ready to be seated at tables.',
+    rsvpNoteAutoFreeTitle:'All automatic',
+    rsvpRespostasNotesShort:'Each link is private. Anyone who answers "Not going" frees their seat automatically, and children are counted in "Guests → Children".',
+    rsvpRefreshErrorNote:'Could not update responses right now.',
+    btnReportProblem:'Report a problem',
+    rsvpTabSendInvites:'Send invites', rsvpTabGuestList:'Guest list',
+    rsvpHubSubtitle:'Choose how to set up and track your guests\' invitations.',
+    securityHeroTitle:'Your data is safe with us',
+    btnGroupFamily:'Group as family',
+    btnCancelGroup:'Cancel',
+    groupModeHint:'Select 2 or more guests who should share the same RSVP link (e.g. a couple or a whole family).',
+    btnCreateFamilyLink: n=>`Create family link (${n})`,
+    familyBadge:'Family',
+    familyLinkCreated:'Family link created successfully.',
+    familyGroupTooFew:'Select at least 2 guests to group them.',
+    phGuestEmail:'Email for automatic reminders (optional)',
+    relTimeNow:'just now',
+    relTimeFewMinutes:'a few minutes ago',
+    relTimeMinutes: n=>`${n} minutes ago`,
+    relTimeOneHour:'1 hour ago',
+    relTimeHours: n=>`${n} hours ago`,
+    relTimeOneDay:'1 day ago',
+    relTimeDays: n=>`${n} days ago`,
+    confirmRemoveContract:'Remove the saved contract?',
+    confirmRemoveGuestInfoField:'Remove this information? The text already written will also be deleted.',
+    confirmDeleteSupplier:'Delete this supplier? This action cannot be undone.',
+    confirmDeleteMemory:"Delete this photo? This can't be undone.",
+    alertDeleteMemoryError:'Could not delete this photo. Please try again.',
+    confirmRemoveRSVPInvite: name=>`Remove ${name}'s RSVP invite? This deletes the response they gave and disables the link — it will no longer be possible to respond through it. The guest stays on your list, just without an RSVP link.`,
+    alertRemoveInviteError:'Could not remove the invite. Please try again.',
+    alertSaveNoConnection:'Could not save (no connection).',
+    alertSaveError:'Could not save. Please try again.',
+    alertNoConnectionRetry:'No connection — please try again.',
+    alertSubscriptionActivateError:'Could not activate the subscription. Please try again.',
+    confirmDeleteVisit:'Delete this visit?',
+    confirmDeleteTodoCategory: title=>`Delete "${title}"? The items inside will be lost.`,
+    confirmDeleteHoneymoonOption:'Delete this honeymoon option?',
+    sectionHoneymoonAttachments:'Attachments',
+    honeymoonAttachmentsIntroText:'Hotel reservations, flights, vouchers, passports or other documents for this option — PDF or photo.',
+    honeymoonAttachmentsEmptyText:'No attachments on this option yet.',
+    honeymoonAttachmentsSaveFirstText:'Save this option first so you can attach documents.',
+    btnAddHoneymoonAttachment:'Add attachment (PDF or photo)',
+    errAttachmentUnsupportedType:'Unsupported file type. Use a PDF or an image, up to 15MB.',
+    errOpenAttachmentFailed:'Could not open this attachment. Please try again.',
+    btnOpenInNewTab:'Open in a new tab',
+    confirmDeleteHoneymoonAttachment:'Delete this attachment?',
+    confirmSignOut:'Are you sure you want to sign out?',
+    alertOnlyCreatorCanRemoveAccess:'Only the person who created the wedding can remove their own access.',
+    confirmRemoveAccess: email=>`Remove ${email}'s access?`,
+    alertRemoveAccessError:'Could not remove. Please try again.',
+    alertGuestNotFound:'Could not find this guest (the list may have changed). Try refreshing the page.',
+    alertGenerateLinkError:'Could not generate the link. Make sure the Firestore rules have already been updated and try again.',
+    confirmDeleteDocument:'Delete this document? The Assistant will no longer be able to search it.',
+    alertNoPendingWithLink:'There are no guests still to respond with a link already generated.',
+    alertFamilyLinkError:'Could not create the family link. Please try again.',
+    confirmDeleteMoment:'Delete this moment?',
+    alertCategoryInUse: name=>`The category "${name}" has expenses linked to it. Remove or move those expenses first.`,
+    confirmDeleteCategory: name=>`Delete the category "${name}"?`,
+    confirmDeleteTable:'Delete this table? Assigned seats will be freed.',
+    alertSyncNoConnection:'Could not sync (no connection).',
+    alertPhotoSaveError:'Could not save the photo — your phone may be low on storage. Try deleting an old photo.',
+    confirmDeleteNotes:'Delete the notes?',
+    confirmDeleteHmIdea:'Delete this idea?',
+    alertDataAnomaly:"Weddy detected an unusual read of your data (it looked like it had disappeared) and avoided overwriting what you already have. Close and reopen the app on a good internet connection to confirm everything is fine. If the warning appears again, contact support before continuing to use the app.",
+    btnSavingEllipsis:'Saving…',
+    btnSavedCheck:'Saved ✓',
+    savedSuccessMsg:'Saved successfully.',
+    btnGeneratingEllipsis:'Generating…',
+    copiedCheck:'Copied!',
+    promptCopyLinkManually:'Copy this link manually:',
+    promptCopyReminderManually:'Copy this message manually:',
+    promptRenameBudgetCategory:'New category name:',
+    btnActivatingEllipsis:'Activating…',
+    statusPdfOnly:'Only PDF files can be uploaded.',
+    statusFileTooLarge:'File too large (max 15MB).',
+    statusReadingPdf:'Reading the PDF…',
+    statusUploadingFile: (name)=>`Uploading "${name}"…`,
+    statusPdfReadError:'Could not read this PDF. Try another file.',
+    tcSheetTitleNew:'New category',
+    tcSheetTitleEdit:'Edit category',
+    msgWriteDescriptionFirst:'Write a description before sending.',
+    msgEmailServiceError:'Could not connect to the email service.',
+    msgSendingEllipsis:'Sending…',
+    msgReportThanks:'Issue reported — thank you!',
+    msgSendError:'Could not send. Please try again.',
+    msgInvalidEmail:'Enter a valid email.',
+    msgInvitingEllipsis:'Inviting…',
+    msgInviteSuccess: email=>`Access granted. No email was sent — ${email} just needs to create an account in the app with this same email.`,
+    msgInviteError: code=>`Could not invite (${code}).`,
+    unknownErrorLabel:'unknown error',
+    seatSheetTitle: (t,s)=>`Table ${t} · Seat ${s}`,
+    btnSyncedCheck:'Synced ✓',
+    msgInvalidSession:'Invalid session. Please sign in again.',
+    btnDeletingEllipsis:'Deleting…',
+    btnDeletePermanently:'Delete permanently',
+    msgWrongPassword:'Incorrect password.',
+    msgTooManyAttempts:'Too many attempts. Wait a moment and try again.',
+    msgDeleteAccountError:'Could not delete the account. Please try again.',
+    msgAccountDeletedSuccess:'Your account and your data have been deleted. Thank you for trying Weddy.',
+    msgExcelLoadError:'Could not load the Excel generator. Make sure you have internet and try again.',
+    msgDownloadedSuccess:'Downloaded successfully!',
+    msgFileGenError:'Could not generate the file. Please try again.',
+    msgPdfLoadError:'Could not load the PDF generator. Make sure you have internet and try again.',
+
+    defMenuLangLabel:'Language',
+    defCasamentoTitle:'Wedding',
+    labelBrideName:'Bride\'s name',
+    labelGroomName:'Groom\'s name',
+    labelWeddingDate:'Wedding date',
+    labelVenue:'Venue',
+    defDesignTitle:'Design',
+    weddingColorLabel:'Wedding color',
+    coverPhotoLabel:'Cover photo (Home)',
+    editCoverPhotoAlt:'Change cover photo',
+    dragToRecenterHint:'drag to recenter',
+    noCoverPhotoNote:'You haven\'t chosen a cover photo yet — a nice gradient is used by default.',
+    btnChangePhoto:'Change photo',
+    btnAddPhoto:'Add photo',
+    btnRemovePhoto:'Remove photo (use gradient)',
+    defCategoriasTitle:'Categories',
+    defConvidarTitle:'Invite',
+    inviteParticipantLabel:'Invite a planning participant',
+    labelInviteEmail:'Email of the person to invite',
+    inviteNoEmailNote:'This doesn\'t send any email — it just grants access. Just let the person know (via WhatsApp, for example) to create an account in the app with this same email.',
+    btnInvite:'Invite',
+    neverLoggedIn:'Hasn\'t logged in yet',
+    defSegurancaTitle:'Security',
+    whoHasAccessLabel:'Who has access',
+    createdWeddingTag:'(created the wedding)',
+    lastSessionLabel:(x)=>`Last session: ${x}`,
+    btnRemoveAccess:'Remove access',
+    onlyAccessNote:'You\'re the only one with access — invite someone in "Invite" if you\'d like to share it.',
+    onlyCreatorCanRemoveNote:'Only whoever created the wedding can remove their own access.',
+    exportDataLabel:'Your data',
+    exportDataTitle:'Export my data',
+    exportDataNote:'Download a copy of everything Weddy stores about this wedding — guests, budget, expenses, tables, RSVP responses — as a file you can keep or take elsewhere.',
+    btnExportData:'Export my data',
+    exportDataPreparing:'Preparing…',
+    exportDataError:'Could not prepare the export. Please try again.',
+    dangerZoneLabel:'Danger zone',
+    deleteMyAccountTitle:'Delete my account',
+    deleteAccountNoteShared:'Your account loses access. The wedding data continues to exist for anyone else who still has access.',
+    deleteAccountNoteSolo:'Permanently deletes all data for this wedding — guests, budget, expenses, tables, everything. This cannot be undone.',
+    btnDeleteMyAccount:'Delete my account',
+    memoriesLoadingText:'Loading photos…',
+    memoriesEmptyText:'No photos shared yet. As soon as a guest adds one through the RSVP link, it will appear here.',
+    memoriesIntroText:'Photos your guests have shared through their own RSVP link. Only you can see them.',
+    memoriesPrivateTitle:'Your memories are private.', memoriesPrivateDesc:'Only you can see them.',
+    btnRefresh:'Refresh',
+    charsExtractedLabel:(n)=>`${n} characters extracted`,
+    docsEmptyText:'You haven\'t uploaded any documents yet.',
+    docsCardTitle:'Keep your documents organized', uploadedDocumentsLabel:'Uploaded documents',
+    docsIntroText:'Upload contracts or PDF documents — the Weddy Assistant will then be able to search and show you the relevant excerpt when you ask about them (e.g. "what does the venue contract say about the final payment?"). Everything is processed here on your phone/computer, with no AI or external server — it\'s just a keyword search, not a made-up answer.',
+    btnUploadPDF:'Upload PDF',
+
+    privacyIntro:'Read our Privacy, Security and Cookies Policy.',
+    privacyWhoWeAreTitle:'Who we are',
+    privacyWhoWeAreText:'Weddy is a personal project run by Rita Matos Oliveira. For any question about your data, you can write to geral@weddy.pt.',
+    privacyControllerTitle:'Who is responsible for processing your personal data',
+    privacyControllerText:'Weddy is the controller responsible for processing the personal data collected through this app, within the scope of organizing your wedding.',
+    privacyCollectTitle:'How we collect your personal data',
+    privacyCollectText:'We collect data when you create an account (email), when you fill in your wedding information (names, date, venue), when you add guests, expenses or tables, and when you invite someone else to join your wedding.',
+    privacyPurposeTitle:'For what purposes and on what basis your personal data may be used',
+    privacyPurposeText:'Your data is used exclusively to organize your wedding within the app and to sync that information between you and the people you invite — based on the performance of the service the app provides you. We do not use your data for marketing, advertising or any commercial purpose, and we never sell it to third parties.',
+    privacyWhatDataTitle:'What personal data may be collected',
+    privacyWhatDataText:'Your access email; the couple\'s names and the wedding date; the venue; the guest list and their confirmations; the budget and expenses you record; the seating plan; and, if you upload one, the cover photo or custom icon for your wedding.',
+    privacySecurityTitle:'How we keep your personal data secure',
+    privacySecurityText:'Data is stored on Firebase (Google Cloud) servers, protected by access rules that ensure only the people whose email you explicitly invite can read or change your wedding\'s data.',
+    privacyRetentionTitle:'How long we keep your personal data',
+    privacyRetentionText:'We keep your data for as long as your account and your wedding exist in the app. If you request account deletion, the data is permanently erased.',
+    privacyRightsTitle:'Right to information and to correction, erasure or restriction of personal data',
+    privacyRightsText:'You can access, correct or delete most of your data at any time directly in the app (under "Security" and the other screens). If you want to delete your account and all associated data entirely, restrict processing, or have any other question about your data, write to geral@weddy.pt — we reply as quickly as possible.',
+    privacyPhotosTitle:'Note about photos',
+    privacyPhotosText:'Photos you add in sections like "Inspiration" or "Dress" are stored only on your phone, never sent to any server — if you uninstall the app or switch phones, you lose those photos.',
+    privacyWhoSeesTitle:'Note about who sees your data',
+    privacyWhoSeesText:'Only the people whose email you\'ve invited (in "Invite"), listed in "Security", can see your wedding\'s data. You can remove someone\'s access at any time.',
+    privacyGuestsTitle:'Note about your guests (RSVP invitations)',
+    privacyGuestsText:'When you generate an RSVP link for a guest, we create a separate, independent record just for that person — with the name you gave them, the wedding date and venue, and (once they respond) their attendance, meal choice, dietary restrictions or allergies, and whether they need transport or accommodation. That guest never sees the full guest list or the wedding budget — only their own information. They can view, update or delete their response at any time through their own link, without creating an account. As the controller of this data, you can remove a guest\'s link at any time in "RSVP invitations"; doing so makes it impossible to respond to or view that response through the link any longer. When you group several guests from the same family into one shared link, that record keeps each family member\'s response separately (in its own field) — but it is still a single link, so anyone who has it can see and change every family member\'s response; only whoever has the link can access this data. It is your responsibility to inform your guests that the data they share with you through this link is used solely to organize the wedding.',
+    privacyAssistantTitle:'Note about the Weddy Assistant (couple Copilot)',
+    privacyAssistantText:"The Weddy Assistant answers questions about your own wedding (guests, budget, payments, tasks) and only carries out simple, low-risk actions when you explicitly ask for them (like creating a task) — it never changes guest data or payments through the chat. Answers always come from this wedding's real data, never invented: when your question isn't recognized by simple rules, it may be sent (just the question's text, never wedding data) to an AI model only to work out what kind of request it is — never to generate the final answer. The conversation is saved in your wedding's document (like the rest of your data), only so you can see the history across sessions.",
+    privacyConciergeTitle:'Note about the chat assistant (Weddy Concierge)',
+    privacyConciergeText:"Each guest link includes a small chat assistant that answers questions about the wedding (venue, schedule, dress code, parking, transport, accommodation, gifts, and any other questions and answers you write yourself in Settings → RSVP invitations → Weddy Concierge). If the guest says, for example, that they can no longer attend or that they have a dietary restriction, the assistant always asks for confirmation before changing the saved response — it never changes anything without that explicit confirmation. Answers always come from the information you filled in, never invented: when a guest's message isn't recognized by simple rules, it may be sent (just the question's text, never wedding data) to an AI model only to work out what kind of request it is — never to generate the final answer or to decide on a change by itself. The conversation itself stays on the guest's own device — it is not saved or visible to you, only the result of a change the guest confirms (just as if they had used the regular form).",
+
+    // Consent phase — round 2 (Sep 2026): points added at Rita's request
+    // after reviewing a competitor app's Privacy Policy as a reference
+    // ("don't change anything we already have, just add what's missing").
+    // Nothing above this line was touched.
+    privacySubprocessorsTitle:'Who we share your data with (sub-processors)',
+    privacySubprocessorsText:'We don\'t sell your data or share it with third parties for marketing purposes. To run Weddy, we rely on the following providers, who process data on our behalf, under contract: Firebase / Google Cloud — database, authentication, file storage, and the Cloud Functions that process requests like account deletion; GitHub Pages — hosting of the app\'s files; EmailJS — sending the email we receive when you use "Report a problem"; and, only if you connect that feature, the Google Calendar API (see next point). We also use content delivery networks (such as cdnjs and jsDelivr) only to load technical browser libraries (like the Excel/PDF generator) — no data of yours is sent to them.',
+    privacyGCalTitle:'Google Calendar and Google APIs',
+    privacyGCalText:'If you connect your Google account in Settings, we access your Google Calendar only to create, update and delete the events you choose to sync from the Agenda — never your other calendar events. Use of this information complies with the Google API Services User Data Policy, including the Limited Use requirements. You can revoke this access at any time at myaccount.google.com/permissions or by disconnecting the account under Settings → Google Calendar.',
+    privacyIntlTransferTitle:'International transfers',
+    privacyIntlTransferText:'Some of the providers above (namely Firebase/Google Cloud) may process data on servers outside the European Economic Area. When that happens, it is always under adequate safeguards, such as the Standard Contractual Clauses approved by the European Commission.',
+    privacyComplaintTitle:'Right to complain',
+    privacyComplaintText:'In addition to the rights already listed above, you always have the right to lodge a complaint with a supervisory authority — in Portugal, the Comissão Nacional de Proteção de Dados (CNPD), at www.cnpd.pt.',
+    privacyCookiesTitle:'Cookies and local storage',
+    privacyCookiesText:'Weddy does not use cookies or local storage for advertising or to track you across other sites. We only use your own device\'s local storage (localStorage) for preferences and conveniences — such as your chosen language, inspiration photos not yet synced, or having already dismissed a notice — never for marketing or profiling purposes.',
+    privacyMinorsTitle:'Minors',
+    privacyMinorsText:'Weddy is not intended for account holders under 16. We do not intentionally collect data from minors for account purposes. Any children\'s data included as guests (for example, in the "Children" category) is entered by the couple themselves, under their own responsibility — see "Note about your guests" above.',
+    privacyConsentRecordTitle:'Record of your acceptance',
+    privacyConsentRecordText:'Alongside your wedding\'s data, we keep a record of which version of the Terms and Conditions and of this Privacy Policy you accepted, and when — this lets us ask you to accept again whenever a significant change justifies it (see "Changes to this policy" below), and serves as proof that you accepted. This record is deleted along with the rest of your wedding\'s data if you delete your account.',
+    privacyChangesTitle:'Changes to this policy',
+    privacyChangesText:'We may update this Privacy Policy from time to time. When the change is significant, you will see a screen ("Before you continue") asking you to re-read and accept it before continuing to use the app.',
+
+    termsTitle:'Terms and Conditions',
+    termsDesc:'Read our Terms and Conditions',
+    termsDraftNotice:'Working draft — still to be reviewed before going live with real payments.',
+    termsUpdatedLabel:(dateStr,version)=>`Last updated: ${dateStr} (version ${version}).`,
+    termsIntro:'These Terms and Conditions govern the use of Weddy. By creating an account, or by continuing to use it after the terms are updated, you confirm that you have read them and that you accept them.',
+    termsScopeTitle:'1. Scope and who this is for',
+    termsScopeText:'Weddy is a wedding-planning app, meant for couples planning their own wedding. Some screens also show a list of recommended suppliers, for information only (see point 8) — Weddy is not a marketplace and does not act as an intermediary in any contract between the couple and those suppliers.',
+    termsAcceptanceTitle:'2. Acceptance of the terms',
+    termsAcceptanceText:'By creating a Weddy account you confirm that you have read, understood and accept these Terms and Conditions and our Privacy Policy. If you disagree with any part of them, you should not use the app. Whenever we make a significant change to these terms, you will see a screen ("Before you continue") asking you to re-read and accept the new version before continuing.',
+    termsAccountTitle:'3. Your account',
+    termsAccountText:'You are responsible for keeping your account password secure and for everything that happens through it. Signing up requires confirming your email through a verification link. You can invite other people (for example, your partner) to access the same wedding, under "Security" — each one gets full access to that wedding\'s data.',
+    termsSubscriptionTitle:'4. Weddy Premium and payments',
+    termsSubscriptionText:'Some features are part of the Weddy Premium plan, with a 24-month access period from the activation date. The exact details — features included, duration and price — are always shown inside the app before you subscribe, and may be revised over time, with no retroactive effect on periods already paid for. You can cancel your subscription at any time in Settings — Premium access stays active until the end of the period already paid for. Note: as of these terms, Weddy does not yet have any real payment method connected — this section describes how the plan will work once that happens.',
+    termsWithdrawalTitle:'5. Right of withdrawal',
+    termsWithdrawalText:'Once real payments exist, and as a consumer, you will have a 14-day period to withdraw from the purchase without giving a reason (Decree-Law no. 24/2014, Portugal). Since Premium access is activated immediately, completing the purchase will let you request that immediate access — being digital content supplied immediately with your express consent, this ends the right of withdrawal as soon as access is activated, as the law provides.',
+    termsContentTitle:'6. Your content',
+    termsContentText:'The data you enter (guests, budget, tables, photos, documents) is yours. Weddy only uses it to provide you the service — to do that, we host and process it on our servers (see Privacy Policy), but we never sell it or use it for advertising. You can export or delete your data at any time, under "Export data" and "Delete account".',
+    termsIPTitle:'7. Intellectual property',
+    termsIPText:'The Weddy app — its code, design, structure, and the name "Weddy" — belong to Weddy and may not be copied, decompiled or reused without written permission. This does not affect your own data (point 6) in any way, which always remains yours.',
+    termsSuppliersTitle:'8. Recommended suppliers',
+    termsSuppliersText:'Some Weddy screens show a list of recommended suppliers, for information only. Weddy is not a party to any contract, quote or booking you make with those suppliers, does not guarantee their services, prices or availability, and any question about a contracted service should be resolved directly with the supplier.',
+    termsGuestsTitle:'9. Guests and RSVP',
+    termsGuestsText:'When you invite someone through an RSVP link, you decide what information to ask for and how to use it — Weddy only processes that data at your request, never on its own (see "Note about your guests" in the Privacy Policy). It is your responsibility to inform your guests about what they share with you through the app.',
+    termsAcceptableUseTitle:'10. Acceptable use',
+    termsAcceptableUseText:'You agree to use Weddy only to organize your own wedding, lawfully, without trying to access other accounts\' data or disrupt the service.',
+    termsAvailabilityTitle:'11. Service availability and continuity',
+    termsAvailabilityText:'Weddy is a personal project run by a single person (see Privacy Policy) — we do our best to keep the service available at all times, but we cannot guarantee uninterrupted operation. We depend on third-party services essential to the app\'s operation (such as Firebase, Google Calendar or email delivery) — failures or unavailability of those services are outside our control. Your data is the most important thing you have here: we recommend using "Export data" regularly to also keep a copy of your own.',
+    termsFutureFeaturesTitle:'12. Future features and beta versions',
+    termsFutureFeaturesText:'Any feature announced as "coming soon", experimental or "beta" is provided without guarantees — it may have bugs, change significantly, or be discontinued, including with deletion of the data entered into it.',
+    termsLiabilityTitle:'13. Limitation of liability',
+    termsLiabilityText:'Weddy is provided "as is". To the extent permitted by law, we are not liable for indirect losses arising from your use of the app — we always recommend keeping an external copy of your wedding\'s most important decisions and dates too (see "Export data"). Nothing in these terms removes liability that the law does not allow to be removed, nor reduces the rights the law guarantees to consumers.',
+    termsIndemnityTitle:'14. Indemnity',
+    termsIndemnityText:'You agree to hold Weddy harmless from any claim, damage or expense arising from content you enter into the app, from violating these terms or the law, or from violating third parties\' rights — for example, by uploading a photo of someone without their permission.',
+    termsTerminationTitle:'15. Termination',
+    termsTerminationText:'You can stop using Weddy and delete your account at any time, under Settings → Delete account. We reserve the right to suspend accounts that violate these terms. If Weddy ever stops operating, we will give as much advance notice as possible and keep data export available for as long as that remains possible.',
+    termsChangesTitle:'16. Changes to these terms',
+    termsChangesText:'We may update these Terms and Conditions from time to time. When the change is significant, you will see a notice ("Before you continue") asking you to re-read and accept the new version before continuing to use the app.',
+    termsCommunicationsTitle:'17. Communications',
+    termsCommunicationsText:'We send you the service communications needed to manage your account — email confirmation, password recovery and notices about your wedding. We do not send newsletters or marketing communications.',
+    termsLawTitle:'18. Governing law',
+    termsLawText:'These terms are governed by Portuguese law.',
+    termsContactTitle:'19. Contact',
+    termsContactText:'For any question about these terms, write to geral@weddy.pt.',
+    consentCheckboxHtml:()=>'I have read and accept the <a href="#" data-openprivacy style="color:var(--rust); font-weight:600;">Privacy Policy</a> and the <a href="#" data-openterms style="color:var(--rust); font-weight:600;">Terms and Conditions</a>.',
+    consentRequiredError:'You need to accept the Privacy Policy and the Terms and Conditions to continue.',
+    reconsentTitle:'Before you continue',
+    reconsentPrivacyRowTitle:'Privacy Policy',
+    reconsentIntro:'We\'ve updated our Terms and Conditions and/or our Privacy Policy. To keep using Weddy, please read and accept the latest version.',
+    btnAcceptContinue:'I accept — continue',
+    btnReadTerms:'Read Terms and Conditions',
+    btnReadPrivacy:'Read Privacy Policy',
+
+    defExportTitle:'Export data',
+    exportIncludesLabel:'What\'s included',
+    exportIncludesText:'Budget by category, all expenses, the guest list with confirmations, the seating plan and your suppliers — exactly as they currently stand in the app.',
+
+    historicoIntroText:'Weddy automatically keeps backups of your wedding, and you can also create your own at any time (for example, before reorganizing your tables). Restoring a backup always creates a backup of the current state first — you never lose data without a safety net.',
+    snapshotLabelInputLabel:'Give this backup a name (optional)',
+    phSnapshotLabel:'E.g.: Before reorganizing tables',
+    btnCreateManualSnapshot:'Create backup now',
+    creatingBackupLabel:'Creating backup…',
+    historicoListLabel:'Saved backups',
+    historicoLoadError:'Could not load the history. Please try again.',
+    historicoEmptyText:'No backups yet. Weddy creates one automatically as you use the app.',
+    snapshotManualBadge:'Manual',
+    snapshotAutoBadge:'Automatic',
+    btnViewSnapshot:'View',
+    btnRestoreSnapshot:'Restore',
+    restoringLabel:'Restoring…',
+    snapshotAutoLabel:'Automatic backup',
+    snapshotBeforeRestoreLabel:'Before restoring',
+    confirmRestoreSnapshotText:'Are you sure you want to restore this backup? We\'ll first save a backup of the current state, then replace the wedding data with this one.',
+    alertSnapshotCreateError:'Could not create the backup. Check your connection and try again.',
+    alertRestoreError:'Could not restore this backup. Your current data was not changed — please try again.',
+    historicoPreviewTitle:'Backup summary',
+    historicoPreviewParseError:'Could not read the contents of this backup.',
+    historicoPreviewCoupleLabel:'Couple',
+    historicoPreviewDateLabel:'Date',
+    historicoPreviewVenueLabel:'Venue',
+    historicoPreviewGuestsLabel:'Guests',
+    historicoPreviewBudgetLabel:'Total budget',
+
+    excelFileTitle:'Excel file',
+    excelFileText:'One sheet per area — easy to open, filter and edit on your phone or computer.',
+    btnDownloadExcel:'Download Excel (.xlsx)',
+    pdfDocTitle:'PDF document',
+    pdfDocText:'A ready-to-print or share summary — perfect to keep or bring with you on the big day.',
+    btnDownloadPDF:'Download PDF (.pdf)',
+
+    aboutOneSpaceTitle:'Everything in one place',
+    aboutOneSpaceText:'No loose sheets, no lost WhatsApp groups, no five different apps. Budget, guests, tables and suppliers — all together.',
+    aboutRealtimeTitle:'Real-time, together',
+    aboutRealtimeText:'Everything you save syncs instantly with whoever you invite — your partner, your parents, anyone helping to plan. Everyone always sees the latest version.',
+    aboutMadeForCouplesTitle:'Made for couples',
+    aboutMadeForCouplesText:'No ads, no selling of data. If recommended suppliers ever appear in the app, it will always be clearly labeled as such.',
+    aboutFeedbackTitle:'Tell us what you think',
+    aboutFeedbackText:'Any suggestion, issue or idea? Write to geral@weddy.pt — we read everything.',
+    aboutVersionLabel:'Weddy · version 1.0',
+
+    reportIntroText:'Found a bug, an error or something that isn\'t working well? Describe what happened here — the message is sent directly to us, without leaving the app.',
+    reportWhatHappenedLabel:'What happened?',
+    phReportDescribe:'Describe the problem, what you expected to happen and which screen of the app you were on…',
+    reportEmailLabel:'Reply email',
+    phReportEmail:'youremail@example.com',
+    reportScreenshotsLabel:'Images (optional)',
+    reportScreenshotsHint:'Attach screenshots of the issue — up to 5 images, 5 MB total.',
+    reportRemoveImageAlt:'Remove image',
+    reportTooManyImages:'You can attach up to 5 images.',
+    reportImagesTooLarge:'Combined images can\'t exceed 5 MB. Remove one or try smaller images.',
+    btnSend:'Send',
+
+    // Static sheets and warnings (outside #app-body, never rebuilt by
+    // render()) — see applyStaticSheetTranslations().
+    rotateLockTitle:'Rotate your phone',
+    rotateLockText:'Weddy was designed to be used in portrait mode. Rotate your phone back to continue.',
+    iabWarningTitle:'Almost there! ✨',
+    iabWarningP1:"You're opening Weddy inside Instagram, and from here it isn't possible to install the app on your phone.",
+    iabWarningP2:'<b>Tap the "•••" or "⋮" in the top-right corner</b> and choose <b>"Open in browser"</b> (Safari or Chrome).',
+    iabWarningNote:'Then, in Safari, tap the share icon and "Add to Home Screen" — you\'ll get a shortcut just like a real app.',
+    btnOk:'Ok',
+    paymentAlertTitle:(n)=>`${n} payment${n>1?'s':''} coming due`,
+    paymentOverdueSuffix:(d)=>`(${d}d overdue)`,
+    paymentDueInSuffix:(d)=>`(in ${d}d)`,
+    defaultExpenseLabel:'Expense',
+    sheetTitleMyNotes:'My notes',
+    phMyNotes:'Write your notes here…',
+    btnDeleteNotes:'Delete notes',
+    labelTcLabel:'Label (e.g. Flowers)',
+    phTcLabelExample:'E.g. Flowers',
+    labelTcTitle:'Title',
+    phTcTitleExample:'E.g. Floral decoration',
+    labelTcDesc:'Description',
+    phTcDescExample:'E.g. Flowers for the altar and tables.',
+    labelHmName:'Name',
+    phHmNameExample:'E.g. Maldives',
+    labelHmCategory:'Category',
+    labelHmPhotoTheme:'Photo (pick a theme)',
+    labelHmPriceMin:'Minimum price (€)',
+    labelHmPriceMax:'Maximum price (€)',
+    labelHmDueDate:'Payment deadline (optional)',
+    btnDeleteIdea:'Delete idea',
+    hmOptionSheetTitleNew:'New idea',
+    hmOptionSheetTitleEdit:'Edit idea',
+    sheetTitleDeleteAccount:'Delete my account',
+    labelConfirmPassword:'Confirm your password',
+    phCurrentPassword:'Your current password',
+    labelStoreName:'Store name',
+    phStoreNameExample:'E.g. Atelier Bela Noiva',
+    labelStoreAddress:'Address',
+    phAddressExample:'E.g. Rua das Flores, Porto',
+    labelWhoWentWithYou:'Who went with you',
+    phWhoWentExample:'E.g. Mom, Joana',
+    phVisitNotesExample:'What you thought, prices…',
+    visitSheetTitleNew:'New visit',
+    visitSheetTitleEdit:'Edit visit',
+    sheetTitleAddGuest:'Add guest',
+    labelGuestName:'Name',
+    phGuestNameExample:'E.g. Maria Santos',
+    sheetTitleGuestPhone:'Phone and communications',
+    labelPhoneOptional:'Phone (optional)',
+    phGuestPhoneExample:'E.g. +351 912 345 678',
+    labelWhatsappConsent:'Can receive communications from Weddy by WhatsApp',
+    subWhatsappConsent:'You\'ll be sending reminders and wedding info by WhatsApp. They can stop receiving these at any time by replying STOP.',
+    labelSide:'Side',
+    labelEventName:'Name',
+    phEventNameExample:'E.g. Ceremony, Cocktail, Dinner…',
+    labelTime:'Time',
+    labelPlaceOptional:'Place (optional)',
+    phEventPlaceExample:'E.g. Aldreu Church',
+    labelShowToGuests:'Show to guests',
+    subShowToGuests:'Shows up in each guest\'s RSVP link, under "Day\'s schedule"',
+    eventSheetTitleNew:'New moment',
+    eventSheetTitleEdit:'Edit moment',
+    sheetTitleNewExpense:'New expense',
+    labelExpenseDescription:'Description',
+    phExpenseDescExample:'E.g. Photographer deposit',
+    labelDateRequired:'Date *',
+    labelTotalValueRequired:'Total amount (€) *',
+    labelAlreadyPaidRequired:'Already paid (€) *',
+    labelPayByDateOptional:'Deadline to pay the rest (optional)',
+    labelPaymentMethod:'Payment method',
+    paymentMethodNone:'Not set',
+    paymentMethodTransfer:'Bank transfer',
+    paymentMethodCash:'Cash',
+    paymentMethodCard:'Card',
+    seatSheetTitleDefault:'Assign seat',
+    phSearchGuestGeneric:'Search guest',
+    mesa3dHint:'drag to rotate · tap a seat to assign',
+    weekAgendaTitle:'This week\'s calendar',
+    weekAgendaSeeAll:'See all',
+    agendaEmptyDay:'No tasks on this day',
+    weekDayAbbrevs:['mon','tue','wed','thu','fri','sat','sun'],
+    monthNamesFull:['January','February','March','April','May','June','July','August','September','October','November','December'],
+    monthNamesShort:['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'],
+    dateNotSet:'Date to be set',
+    dateAtTimeSeparator:'at',
+    genericName1:'Name 1', genericName2:'Name 2',
+    genericVenueTBD:'Venue to be set',
+    cpPermDenied:"I can't do that from here.",
+    cpTaskCreated:(value,label)=>`I created the task "${value}" in Tasks → ${label}. You can already see and edit it there.`,
+    cpTaskCreateFailed:(value)=>`I couldn't save the task "${value}" — there was a problem saving it just now. Try again in a bit.`,
+    cpNoUpcomingTasks:'You have no tasks due in the next 7 days.',
+    cpUpcomingTasksList:(lista,extra)=>`This week you have: ${lista}${extra}.`,
+    cpAndMore:(n)=>`, and ${n} more`,
+    cpAllRSVPResponded:'Everyone with an RSVP link has already responded — no one is missing.',
+    cpPendingRSVPList:(lista,extra)=>`Still waiting on: ${lista}${extra}.`,
+    cpNoLateRSVP:"No one is late — or you haven't set an RSVP deadline yet in Settings → RSVP.",
+    cpLateRSVPList:(lista,extra)=>`Running late: ${lista}${extra}.`,
+    cpNoReminderNeeded:'No one needs a new reminder right now.',
+    cpReminderList:(lista,extra)=>`These need a reminder: ${lista}${extra}. You can prepare it in Settings → RSVP.`,
+    cpNoDietaryInfo:'There are no dietary restrictions recorded in RSVP responses yet.',
+    cpDietaryList:(lista)=>`Guests with dietary restrictions: ${lista}.`,
+    cpAllPaid:'There are no pending payments right now — everything is paid. 🎉',
+    cpRemainingTotal:(x)=>`${x} left to pay in total.`,
+    cpToday:'today',
+    cpInDays:(n)=>`in ${n} day${n===1?'':'s'}`,
+    cpRemainingNext15:(base,lista)=>`${base} In the next 15 days: ${lista}.`,
+    cpRSVPInfoExplain:(n)=>`In Settings → RSVP Invites you can generate an individual link for each guest — they respond there whether they're coming, their meal and restrictions, without seeing the full list or the budget. Right now you have ${n} guest${n===1?'':'s'} yet to respond.`,
+    cpGuestCount:(total,confirmed)=>`You have ${total} guests on the list, of which ${confirmed} have already confirmed attendance (counted by each one's weight — children and staff can count as half or nothing, depending on what you set).`,
+    cpBudgetSummary:(orc,gasto,pago)=>`The budget you set is ${orc}. You already have ${gasto} in recorded expenses, of which ${pago} have been paid.`,
+    cpCountdownFuture:(dias,date)=>`${dias} days left until the big day (${date}).`,
+    cpCountdownPast:(date)=>`The wedding was on ${date}. I hope it all went beautifully!`,
+    cpTableCount:(n)=>`You have ${n} tables set up in the Tables section.`,
+    cpDocFound:(doc,snippet)=>`I found this in "${doc}":\n\n"${snippet}"`,
+    cpDemoFallback:'I\'m still in demo mode (not connected to a real AI model), but I can already answer about guests, budget, dates, tables, payments, this week\'s tasks, and search the documents you\'ve uploaded — ask me, for example, "how many guests have confirmed?".',
+    cpSupplierPaymentNotFound:'I couldn\'t find a supplier matching that question — try using their name or category (e.g. "photographer", "venue").',
+    cpPaidSoFar:(name,paid)=>`${name} — paid so far: ${paid}`,
+    cpOfContracted:(x)=>` of ${x} contracted`,
+    cpNextPayment:(amount,date)=>` Next payment: ${amount} on ${date}.`,
+    cpNextPaymentNoDate:(amount)=>` You have an upcoming payment of ${amount} with no date set.`,
+    cpSourceContract:' (Source: contract + budget.)',
+    cpSourceBudgetOnly:' (Source: budget — no contract uploaded yet.)',
+    cpAllContracted:'All suppliers are already contracted. 🎉',
+    cpUncontractedList:(lista)=>`Still to contract: ${lista}.`,
+    cpNoPaymentsThisMonth:'You have no payments due this month.',
+    cpPaymentsThisMonthList:(lista,extra)=>`This month you have: ${lista}${extra}.`,
+    cpContractSupplierNotFound:'I couldn\'t find a supplier matching that question — try using their name or category.',
+    cpContractLegacyOnly:(name)=>`${name}'s contract is still only stored on this phone (not synced) — I can't search its text from here. Upload it again on the supplier's page to sync it.`,
+    cpContractNotUploaded:(name)=>`I don't have ${name}'s contract uploaded yet — you can add it on their page, under Suppliers.`,
+    cpContractNoMatch:(name)=>`I have ${name}'s contract, but couldn't find anything about that in its text.`,
+    cpContractFound:(name,snippet)=>`In ${name}'s contract:\n\n"${snippet}"`,
+    cpNoBudgetMismatch:'I didn\'t find any mismatch — what\'s recorded in the Budget for each supplier matches the contracted amount.',
+    cpBudgetMismatchList:(lista)=>`I found differences in: ${lista}.`,
+    cpMoreWord:'more',
+    cpLessWord:'less',
+    cpAllGuestsHaveTable:'All confirmed guests already have a table assigned.',
+    cpGuestsWithoutTableList:(lista,extra)=>`Still without a table: ${lista}${extra}.`,
+    cpContractedLabel:'contracted',
+    cpInBudgetLabel:'in Budget',
+    cpSuggestPendingRSVP:(n)=>`${n} guest${n===1?'':'s'} ${n===1?'has':'have'} not responded to the RSVP yet.`,
+    cpSuggestRSVPDeadlineToday:'The RSVP deadline is today.',
+    cpSuggestRSVPDeadlineDays:(days)=>`The RSVP deadline is in ${days} day${days===1?'':'s'}.`,
+    cpSuggestOverBudget:(x)=>`You've gone over budget by ${x}.`,
+    mesa3dModeTableByTable:'Table by table',
+    mesa3dModeRoomView:'Room view',
+    mesa3dSyncBtn:'Sync seats with guests',
+    mesa3dTablesCount:(n)=>`${n} tables`,
+    alertSeatingSyncPartialFailure:(failed,total)=>`The table was synced, but ${failed} of ${total} guest invite(s) weren't updated just now. Try syncing again in a bit.`,
+    salaLegendFree:'Free',
+    salaViewHint:'tap a table to see the names · drag to move it',
+    seatFreeLabel:'Empty seat',
+    childLabel:'Child',
+    childAgeYears:(age)=>`${age} years old`,
+    alreadyAtLabel:(loc)=>`already at ${loc}`,
+    seatLabelFormat:(t,s)=>`Table ${t} · seat ${s}`,
+    recCatEntertainment:'Entertainment',
+    recCatInvitations:'Invitations & stationery',
+    recCatPhotoVideo:'Photography & Video',
+    recCatVenueCatering:'Venue & Catering',
+    checklistPhasesData: CHECKLIST_PHASES_EN,
+    weddingDayChecklistData: WEDDING_DAY_CHECKLIST_EN,
+    themeRust:'Terracotta', themeNavy:'Navy blue', themeOlive:'Olive green', themeBlush:'Antique pink', themeGold:'Classic gold',
+    alertSettingsSyncPartialFailure:(failed,total)=>`Settings were saved, but ${failed} of ${total} guest invite(s) weren't updated just now (they may show outdated info). Try syncing again in a bit.`,
+    svcNoConnection:'No connection to Weddy right now.',
+    svcNoConnectionAI:'No connection to Weddy AI right now.',
+    svcEmptyResponse:'Weddy didn\'t return a response.',
+    svcAIRateLimited:'Daily limit of Weddy AI requests reached for this wedding. Try again tomorrow.',
+    svcAIGenericError:'Couldn\'t generate the proposal right now. Try again.',
+    gcalErrNoAuthUrl:'Weddy didn\'t return an authorization link.',
+    gpErrAlreadyExists:'This number is already linked to another guest.',
+    gpErrInvalidArgument:'Invalid number — use the international format, e.g. +351912345678.',
+    gpErrNotFound:'Couldn\'t find this guest.',
+    gpErrGeneric:'Couldn\'t save. Try again.',
+    gcalErrSyncTooSoon:'You just synced — wait a bit before trying again.',
+    gcalErrSyncRunning:'A sync is already running — wait for it to finish.',
+    gcalErrReauth:'The Google Calendar connection expired. Reconnect your Google account.',
+    gcalErrNotConnected:'You haven\'t connected Google Calendar yet.',
+    gcalErrPermissionDenied:'Weddy doesn\'t have permission to edit this calendar. Choose another calendar.',
+    gcalErrRateLimited:'Google Calendar is temporarily rate-limiting requests. Try again in a few minutes.',
+    gcalErrSessionExpired:'Your session expired — sign in again.',
+    gcalErrGeneric:'Couldn\'t sync Google Calendar. Your data in Weddy wasn\'t changed.',
+    notIdentifiedLabel:'not identified',
+    qrCodeAltText:'Invite QR code',
+    qrCodeGenErrorText:'Could not generate the QR code.',
+    btnPrint:'Print',
+    inviteWordLabel:'Invite',
+    deleteAccountSoleOwnerHtml:'Deleting your account will <b>permanently erase</b> all data for this wedding, including budget, guests, tables, suppliers, documents and memories. This action cannot be undone.',
+    deleteAccountSharedHtml:'Deleting your account will remove your access to this wedding. Shared data remains for other users with access. This action cannot be undone.',
+    toastSaveFailed:'Could not save',
+    toastSaved:'Saved',
+    xlDefaultCoupleTitle:'Our wedding',
+    xlSheetBudget:'Budget',
+    xlBudgetSubtitle:(subInfo,total)=>`Budget · ${subInfo} · Total budget: ${total}`,
+    xlColCategory:'Category',
+    xlColBudgeted:'Budgeted',
+    xlSheetExpenses:'Expenses',
+    xlExpensesSubtitle:(subInfo)=>`Expenses · ${subInfo}`,
+    xlColDescription:'Description',
+    xlColDate:'Date',
+    xlColTotalValue:'Total value',
+    xlColValue:'Value',
+    xlColPaid:'Paid',
+    xlColRemaining:'Remaining',
+    xlColDueDate:'Due date',
+    xlColMethod:'Method',
+    xlSheetGuests:'Guests',
+    xlGuestsSubtitle:(total,confirmed)=>`Guests · ${total} guests · ${confirmed} confirmed`,
+    xlColName:'Name',
+    xlColSide:'Side',
+    xlColGroup:'Group',
+    xlColStatus:'Status',
+    xlColAge:'Age',
+    xlColPaying:'Paying',
+    xlStatusConfirmed:'Confirmed',
+    xlStatusPending:'Pending',
+    xlSheetTables:'Tables',
+    xlTablesSubtitle:(n)=>`Tables and seats · ${n} tables`,
+    xlColTable:'Table',
+    xlColShape:'Shape',
+    xlColSeat:'Seat',
+    xlColGuest:'Guest',
+    xlSheetSuppliers:'Suppliers',
+    xlSuppliersSubtitle:(n)=>`Suppliers · ${n} saved`,
+    xlColContact:'Contact',
+    xlColPrice:'Price',
+    xlColNotes:'Notes',
+    xlTotalLabel:'TOTAL',
+    xlLoadExcelError:'Could not load the Excel generator. Check your internet connection and try again.',
+    xlLoadPdfError:'Could not load the PDF generator. Check your internet connection and try again.',
+    xlDownloadSuccess:'Downloaded successfully!',
+    xlGenericFileError:'Could not generate the file. Try again.',
+    xlDefaultFilenameSlug:'wedding',
+    xlPdfSectionBudget:'Budget by category',
+    xlEmptyExpenses:'No expenses recorded yet.',
+    xlEmptyGuests:'No guests yet.',
+    xlEmptySuppliers:'No suppliers yet.',
+  }
+};
+function ta(key){
+  const dict = APP_I18N[appLang] || APP_I18N.pt;
+  return (key in dict) ? dict[key] : APP_I18N.pt[key];
+}
+// As "sheets" (modais de fundo: nova categoria, nova visita, novo momento,
+// eliminar conta, etc.) e alguns avisos (rodar o telemóvel, aviso do
+// Instagram, alerta de pagamentos) vivem FORA do #app-body — nunca são
+// reconstruídos por render(), por isso precisam da sua própria passagem de
+// tradução, à parte, tal como o rsvp.html já faz. Corre uma vez no arranque
+// e sempre que o idioma muda. data-t-html é só para os poucos casos com
+// <b> dentro do texto (conteúdo fixo nosso, nunca dados do utilizador).
+function applyStaticSheetTranslations(){
+  document.querySelectorAll('[data-t]').forEach(el=>{
+    const val = ta(el.dataset.t);
+    if(typeof val === 'string') el.textContent = val;
+  });
+  document.querySelectorAll('[data-t-html]').forEach(el=>{
+    const val = ta(el.dataset.tHtml);
+    if(typeof val === 'string') el.innerHTML = val;
+  });
+  document.querySelectorAll('[data-t-placeholder]').forEach(el=>{
+    const val = ta(el.dataset.tPlaceholder);
+    if(typeof val === 'string') el.placeholder = val;
+  });
+}
+function setAppLang(lang){
+  appLang = lang==='en' ? 'en' : 'pt';
+  try{ localStorage.setItem('weddy_app_lang', appLang); }catch(e){}
+  updateLoginLangSwitch();
+  applyStaticSheetTranslations();
+  if(typeof lastLoginRender==='function') lastLoginRender();
+  if(typeof firstSyncDone!=='undefined' && firstSyncDone) render();
+}
+applyStaticSheetTranslations();
+// O seletor de idioma do ecrã de login vive fora do que render() reconstrói
+// (mesma lógica do chat-fab) — atualiza-se aqui, sempre que o idioma muda.
+function updateLoginLangSwitch(){
+  document.querySelectorAll('#login-lang-switch [data-loginlang]').forEach(btn=>{
+    btn.classList.toggle('active', btn.getAttribute('data-loginlang')===appLang);
+  });
+}
+(function bindLoginLangSwitchOnce(){
+  document.querySelectorAll('#login-lang-switch [data-loginlang]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{ setAppLang(btn.getAttribute('data-loginlang')); });
+  });
+  updateLoginLangSwitch();
+})();
+
+function renderTabbar(){
+  const bar = document.getElementById('tabbar');
+  const TAB_LABELS = { inicio:ta('tabHome'), orcamento:ta('tabBudget'), convidados:ta('tabGuests'), gastos:ta('tabExpenses'), mesas:ta('tabTables'), mesa3d:ta('tabSeating') };
+  bar.innerHTML = TABS.map(t=>{
+    const isActive = t.id===activeTab;
+    const glyph = TAB_ICONS[t.icon][isActive?'fill':'line'];
+    return `<button data-goto="${t.id}" class="${isActive?'active':''}">
+      <span class="tab-icon-wrap">${glyph}</span>
+      <span>${TAB_LABELS[t.id]||t.label}</span>
+    </button>`;
+  }).join('');
+  // Rede de segurança: a tabbar é escondida enquanto se escreve num campo
+  // (para dar espaço ao teclado) e devolvida ao fechar esse campo. Mas
+  // alguns telemóveis não disparam esse "fechar" quando o foco é roubado
+  // por um alerta nativo (ex: confirm() ao apagar algo) — sem isto, a
+  // tabbar podia ficar escondida para sempre depois disso.
+  const activeTag = document.activeElement && document.activeElement.tagName;
+  if(activeTag!=='INPUT' && activeTag!=='TEXTAREA' && activeTag!=='SELECT'){
+    bar.style.display = '';
+  }
+  // Nota: os cliques nestes botões são tratados em bindHandlers() através do
+  // seletor [data-goto] — não voltar a ligar addEventListener aqui, ou cada
+  // toque na tabbar dispara dois renders seguidos.
+}
+
+function render(){
+  applyTheme(weddingSettings.accentColor);
+  renderTabbar();
+  const body = document.getElementById('app-body');
+  const prevScroll = document.querySelector('.tabpanel.active .scroll');
+  const savedScrollTop = prevScroll ? prevScroll.scrollTop : 0;
+  body.innerHTML =
+    panel('inicio', viewInicio()) +
+    panel('orcamento', viewOrcamento()) +
+    panel('convidados', viewConvidados()) +
+    panel('gastos', viewGastos()) +
+    panel('mesas', viewMesas()) +
+    panel('inspiracao', viewInspiracao()) +
+    panel('checklist', viewChecklist()) +
+    panel('vestido', viewVestido()) +
+    panel('todo', viewTodo()) +
+    panel('luademel', viewLuademel()) +
+    panel('fornecedores', viewFornecedores()) +
+    panel('definicoes', viewDefinicoes());
+  bindHandlers();
+  syncMesa3DPanel();
+  maybeShowPaymentAlert();
+  updateChatFab();
+  const newScroll = document.querySelector('.tabpanel.active .scroll');
+  if(newScroll && savedScrollTop) newScroll.scrollTop = savedScrollTop;
+}
+// O botão do Assistente Weddy vive fora dos separadores (ver HTML), para se
+// manter sempre no mesmo sítio do ecrã por cima de qualquer página, mesmo a
+// dar scroll — só o seu conteúdo/estado é que é atualizado aqui, a cada
+// render. Só aparece depois de haver sessão com dados carregados.
+function updateChatFab(){
+  const fab = document.getElementById('chat-fab');
+  if(!fab) return;
+  fab.hidden = !(typeof firstSyncDone!=='undefined' && firstSyncDone);
+  fab.classList.toggle('locked', !hasActiveSubscription());
+  fab.innerHTML = ICONS.chat;
+  const headerTitle = document.querySelector('#chat-panel .chat-panel-header span');
+  if(headerTitle) headerTitle.textContent = ta('assistHeroEyebrow');
+  fab.setAttribute('aria-label', ta('assistHeroEyebrow'));
+  const closeBtnEl = document.getElementById('chat-panel-close');
+  if(closeBtnEl) closeBtnEl.setAttribute('aria-label', ta('btnClose'));
+  const panel = document.getElementById('chat-panel');
+  if(panel && !panel.hidden) renderChatPanelBody();
+}
+// Este botão vive fora do que render() reconstrói a cada vez (ver HTML), por
+// isso o clique é ligado UMA ÚNICA VEZ aqui — nunca dentro de bindHandlers(),
+// que corre a cada render e duplicaria o listener no mesmo elemento.
+(function bindChatFabOnce(){
+  const fab = document.getElementById('chat-fab');
+  if(fab) fab.addEventListener('click', ()=>{ openChatPanel(); });
+  const backdrop = document.getElementById('chat-panel-backdrop');
+  if(backdrop) backdrop.addEventListener('click', ()=>{ closeChatPanel(); });
+  const closeBtn = document.getElementById('chat-panel-close');
+  if(closeBtn) closeBtn.addEventListener('click', ()=>{ closeChatPanel(); });
+})();
+let paymentAlertDismissed = false;
+try{ paymentAlertDismissed = localStorage.getItem('weddy-payment-alert-dismissed-date') === new Date().toDateString(); }catch(e){}
+function maybeShowPaymentAlert(){
+  const popup = document.getElementById('payment-alert-popup');
+  if(!popup) return;
+  try{
+    if(localStorage.getItem('weddy-payment-alert-dismissed-date') !== new Date().toDateString()) paymentAlertDismissed = false;
+  }catch(e){}
+  if(paymentAlertDismissed || activeTab!=='inicio'){ popup.classList.remove('show'); return; }
+  const upcoming = getUpcomingPayments();
+  if(!upcoming.length){ popup.classList.remove('show'); return; }
+  document.getElementById('payment-alert-title').textContent = ta('paymentAlertTitle')(upcoming.length);
+  document.getElementById('payment-alert-body').innerHTML = upcoming.map(u=>
+    `<p>${escapeHTML(u.label)} — <b>${fmtEUR(u.amount)}</b> ${u.overdue?ta('paymentOverdueSuffix')(Math.abs(u.days)):ta('paymentDueInSuffix')(u.days)}</p>`
+  ).join('');
+  popup.classList.add('show');
+}
+function panel(id, html){
+  return `<div class="tabpanel ${id===activeTab?'active':''}" data-panel="${id}"><div class="scroll">${html}</div></div>`;
+}
+
+/* ============================================================
+   VIEW: Início
+============================================================ */
+function getUpcomingPayments(){
+  const now = new Date(new Date().toDateString());
+  const list = [];
+  state.expenses.forEach((e,i)=>{
+    const remaining = Math.max(0, Number(e.value)-Number(e.paid||0));
+    if(remaining>0 && e.dueDate){
+      const days = Math.ceil((new Date(e.dueDate+'T00:00:00')-now)/86400000);
+      if(days>=0 && days<=15) list.push({ label:e.desc||ta('defaultExpenseLabel'), amount:remaining, days, overdue:false });
+    }
+  });
+  return list.sort((a,b)=>a.days-b.days);
+}
+// ============================================================
+// WEDDY WEDDING HEALTH (Fase 4 do roadmap) — nenhuma IA, só regras sobre
+// os dados reais deste casamento (RSVP, pagamentos, mesas, fornecedores,
+// orçamento). Cada regra devolve um "check" com uma gravidade (vermelho/
+// amarelo) só quando há algo a assinalar — sem problemas, a lista fica
+// vazia e o resumo mostra "tudo controlado". Tal como o resto da app, uma
+// futura IA poderia um dia explicar isto por palavras próprias, mas nunca
+// substitui as regras que decidem O QUE é ou não um problema.
+// ============================================================
+// Fase 8.0: o valor de cada lugar (state.seating.assignments["t{id}-s{n}"])
+// passou a ser diretamente o guestId do convidado sentado ali (antes era
+// uma string composta "lado|categoria|índice::Nome"), por isso já não é
+// preciso extrair nada — só juntar todos os valores num Set.
+function assignedGuestKeysSet(){
+  const out = new Set();
+  Object.values((state.seating && state.seating.assignments) || {}).forEach(v=>{
+    if(v) out.add(v);
+  });
+  return out;
+}
+// Cada regra é uma função independente que só olha para o estado do
+// casamento e devolve UM check (ou null se não houver nada a assinalar).
+// Isto é o que o documento da Fase 3B pede em concreto: acrescentar uma
+// regra nova no futuro (ex: "fornecedor sem contrato assinado") é escrever
+// mais uma função e um item neste array — o ecrã (viewDefWeddingHealth) e
+// o Copilot dos noivos nunca precisam de saber quantas regras existem nem
+// o que cada uma verifica.
+// Fase 4C da auditoria (RSVP-COUNT-01, P2): fonte única de verdade para
+// "este convidado está pendente de RSVP". Antes, o Wedding Health
+// (checkPendingRSVP) e o Copilot (WeddyActions.read.getPendingRSVPs)
+// tinham cada um a sua própria cópia desta regra, e discordavam
+// especificamente para convidados sem link de RSVP (rsvpToken) que já
+// tinham sido confirmados à mão — o Wedding Health excluía-os
+// corretamente (já não estão "pendentes"), o Copilot incluía-os sempre.
+// Confirmado ao vivo na Fase 2 (22 vs 19 convidados pendentes, para os
+// mesmos dados). Agora as duas funções chamam esta mesma regra.
+function isRsvpPending(g){
+  if(!g.entry.rsvpToken) return !isConfirmed(g.side, g.catId, g.idx);
+  return !rsvpHasResponded(memberRSVPResponse(g));
+}
+function checkPendingRSVP(){
+  const pendentes = flattenAllGuestsForRSVP().filter(isRsvpPending).length;
+  if(pendentes<=0) return null;
+  return { id:'rsvp-pending', severity: pendentes>10?'red':'yellow', text: ta('healthCheckPendingRSVP')(pendentes), goto:{ def:'rsvp' } };
+}
+function checkUpcomingPayments(){
+  const upcoming = getUpcomingPayments();
+  if(!upcoming.length) return null;
+  const soon = upcoming.filter(u=>u.days<=7).length;
+  return {
+    id:'payments',
+    severity: soon>0 ? 'red' : 'yellow',
+    text: soon>0 ? ta('healthCheckPaymentsSoon')(soon) : ta('healthCheckPaymentsUpcoming')(upcoming.length),
+    goto:{ tab:'gastos' }
+  };
+}
+function checkBudget(){
+  const gasto = totalExpenseValue();
+  const orcamento = state.budget && state.budget.total ? state.budget.total : 0;
+  if(!(orcamento>0 && gasto>orcamento)) return null;
+  const pct = Math.round(((gasto-orcamento)/orcamento)*100);
+  if(pct<=0) return null;
+  return { id:'budget-over', severity: pct>=10?'red':'yellow', text: ta('healthCheckBudgetOver')(pct), goto:{ tab:'orcamento' } };
+}
+function checkUnseatedGuests(){
+  if(!(state.seating && state.seating.tables && state.seating.tables.length)) return null;
+  const assignedKeys = assignedGuestKeysSet();
+  const semMesa = flattenAllGuestsForRSVP().filter(g=>{
+    if(!isConfirmed(g.side, g.catId, g.idx)) return false;
+    return !assignedKeys.has(g.guestId);
+  }).length;
+  if(semMesa<=0) return null;
+  return { id:'no-table', severity:'yellow', text: ta('healthCheckNoTable')(semMesa), goto:{ tab:'mesas' } };
+}
+function checkMissingMeals(){
+  // Só é possível saber isto de quem respondeu pelo link de RSVP.
+  const semMenu = flattenAllGuestsForRSVP().filter(g=>{
+    if(!g.entry.rsvpToken) return false;
+    const resp = memberRSVPResponse(g);
+    return resp && resp.attending===true && !(resp.meal && resp.meal.trim());
+  }).length;
+  if(semMenu<=0) return null;
+  return { id:'no-meal', severity:'yellow', text: ta('healthCheckNoMeal')(semMenu), goto:{ def:'rsvp' } };
+}
+function checkUnbookedVendors(){
+  // Só relevante quando o casamento já está perto (senão é normal ainda
+  // se estar a comparar opções).
+  if(!weddingSettings.weddingDate) return null;
+  const diasFalta = daysUntil(weddingSettings.weddingDate);
+  if(!(diasFalta!==null && diasFalta>=0 && diasFalta<=60)) return null;
+  const porContratar = (state.suppliers||[]).filter(s=>s.status!=='contratado').length;
+  if(porContratar<=0) return null;
+  return { id:'suppliers', severity: diasFalta<=14?'red':'yellow', text: ta('healthCheckSuppliers')(porContratar), goto:{ tab:'fornecedores' } };
+}
+// Ordem = prioridade por defeito quando duas regras têm a mesma gravidade
+// (a ordenação final por vermelho/amarelo acontece em getWeddingHealthChecks).
+const healthRules = [
+  checkPendingRSVP,
+  checkUpcomingPayments,
+  checkBudget,
+  checkUnseatedGuests,
+  checkMissingMeals,
+  checkUnbookedVendors
+];
+const HEALTH_SEVERITY_ORDER = { red:0, yellow:1 };
+function getWeddingHealthChecks(){
+  return healthRules
+    .map(rule=>rule())
+    .filter(Boolean)
+    .sort((a,b)=> HEALTH_SEVERITY_ORDER[a.severity] - HEALTH_SEVERITY_ORDER[b.severity]);
+}
+function viewInicio(){
+  const totalGuests = countGuests('noiva')+countGuests('noivo');
+  const totalConfirmed = countConfirmed('noiva')+countConfirmed('noivo');
+  const totalValue = totalExpenseValue();
+  const budgetTotal = state.budget.total;
+  const spentPct = budgetTotal ? Math.round((totalValue/budgetTotal)*100) : 0;
+  const name1 = escapeHTML(weddingSettings.coupleName1 || ta('genericName1'));
+  const name2 = escapeHTML(weddingSettings.coupleName2 || ta('genericName2'));
+  const initials = (name1[0]||'?') + (name2[0]||'?');
+  const hasDate = !!weddingSettings.weddingDate;
+  const days = hasDate ? daysUntil(weddingSettings.weddingDate) : null;
+  const venue = escapeHTML(weddingSettings.venue || ta('genericVenueTBD'));
+  const events = (state.daySchedule||[]).slice().sort((a,b)=>(a.time||'99:99').localeCompare(b.time||'99:99'));
+  const eventsHTML = events.length ? `
+    <div class="timeline-card">
+      <div class="timeline-scroll">
+        ${events.map(ev=>`
+          <div class="timeline-item" data-editevent="${ev.id}">
+            <button class="timeline-del" data-delevent="${ev.id}">✕</button>
+            <div class="timeline-time">${ev.time||'--:--'}</div>
+            <div class="timeline-dot"></div>
+            <div class="timeline-stem"></div>
+            <div class="timeline-label">${escapeHTML(ev.label||'')}${ev.place?`<span>${escapeHTML(ev.place)}</span>`:''}</div>
+          </div>`).join('')}
+      </div>
+    </div>` : `
+    <div class="day-card">
+      <div class="icon-chip" style="${chipStyle(3)}">${ICONS.calendar||ICONS.checklist}</div>
+      <div class="day-card-text">
+        <div class="day-card-date">${formatDatePT(weddingSettings.weddingDate)}</div>
+        <div class="day-card-venue">${venue}</div>
+      </div>
+      <div class="day-card-botanical">${ICONS.botanical}</div>
+    </div>`;
+
+  const upcoming = getUpcomingPayments();
+
+  return `
+  <div class="home-header-v2">
+    <div>
+      <div class="weddy-wordmark">weddy<span class="wm-heart">${ICONS.heart}</span></div>
+      <div class="weddy-subtitle">${ta('homeSubtitle')}</div>
+    </div>
+    <div style="display:flex; gap:8px;">
+      <button class="home-icon-btn" data-goto="inspiracao">${ICONS.heart}</button>
+      <button class="home-icon-btn" data-goto="definicoes">${ICONS.gear}</button>
+    </div>
+  </div>
+
+  <div class="hero-photo-card">
+    <div class="hero-photo" ${weddingSettings.heroPhotoUrl?`style="background-image:url('${weddingSettings.heroPhotoUrl}'); background-position:${weddingSettings.heroPhotoPosX??50}% ${weddingSettings.heroPhotoPosY??50}%; background-size:${weddingSettings.heroPhotoZoom??100}%;"`:''}></div>
+    <div class="hero-scrim"></div>
+    <button type="button" class="hero-edit-photo-btn" data-premiumgoto="design" aria-label="${ta('editCoverPhotoAlt')}" title="${ta('editCoverPhotoAlt')}">${ICONS.pencil}</button>
+    <div class="hero-overlay">
+      <div class="hero-names-row">${name1.toUpperCase()} &amp; ${name2.toUpperCase()}</div>
+      <div class="hero-date-row">${formatDatePT(weddingSettings.weddingDate)}</div>
+      <div class="hero-thin-divider"></div>
+      <div class="hero-thin-divider"></div>
+      <div class="hero-eyebrow">${hasDate ? ta('homeCountdownLabel') : ''}</div>
+      <div class="hero-heading" style="${hasDate?'':'font-size:26px;'}">${hasDate ? ta('daysLeftLabel')(days) : ta('homeDateTBD')}</div>
+      <div class="hero-venue">${venue}</div>
+    </div>
+  </div>
+
+  ${weekAgendaHTML()}
+
+  <div class="quicklink-grid quicklink-grid-top">
+    <button class="quicklink-card ql-peach" data-goto="vestido">
+      <div class="quicklink-icon">${ICONS.dress}</div>
+      <div class="quicklink-bottom">
+        <div class="quicklink-label">Dress</div>
+      </div>
+    </button>
+    <button class="quicklink-card ql-sage" data-goto="todo">
+      <div class="quicklink-icon">${ICONS.todo}</div>
+      <div class="quicklink-bottom">
+        <div class="quicklink-label">To-do</div>
+      </div>
+    </button>
+    <button class="quicklink-card ql-taupe" data-goto="luademel">
+      <div class="quicklink-icon">${ICONS.honeymoon}</div>
+      <div class="quicklink-bottom">
+        <div class="quicklink-label">${ta('homeQuickHoneymoon')}</div>
+      </div>
+    </button>
+  </div>
+  <div class="quicklink-grid quicklink-grid-bottom">
+    <button class="quicklink-card quicklink-card-lg ql-peach2" data-goto="checklist">
+      <div class="quicklink-icon">${ICONS.checklist}</div>
+      <div class="quicklink-bottom">
+        <div class="quicklink-label">Checklist</div>
+      </div>
+    </button>
+    <button class="quicklink-card quicklink-card-lg ql-blush" data-goto="fornecedores">
+      <div class="quicklink-icon">${ICONS.briefcase}</div>
+      <div class="quicklink-bottom">
+        <div class="quicklink-label">${ta('homeQuickSuppliers')}</div>
+      </div>
+    </button>
+  </div>
+
+  <div class="section-label-v2">${ta('homeProgressLabel')}</div>
+  <div class="ring-row">
+    <div class="ring-card tappable" data-goto="convidados" style="cursor:pointer;">
+      <div class="ring-label">${ta('lblConfirmed')}</div>
+      <div class="ring-wrap">
+        ${donutSVG(totalGuests? totalConfirmed/totalGuests : 0, 'var(--sage-dark)', 92, 9)}
+        <div class="ring-center"><span class="num">${fmtGuestCount(totalConfirmed)}</span><span class="sub">de ${fmtGuestCount(totalGuests)}</span></div>
+      </div>
+      <div class="ring-breakdown">
+        <div><div class="n">${fmtGuestCount(countConfirmed('noiva'))}</div><div class="l">${ta('sideBride')}</div></div>
+        <div><div class="n">${fmtGuestCount(countConfirmed('noivo'))}</div><div class="l">${ta('sideGroom')}</div></div>
+      </div>
+    </div>
+    <div class="ring-card tappable" data-goto="orcamento" style="cursor:pointer;">
+      <div class="ring-label">${ta('homeBudgetSpentLabel')}</div>
+      <div class="ring-wrap" id="inicio-orc-ring-wrap">
+        ${donutSVG(budgetTotal? totalValue/budgetTotal : 0, 'var(--blush-dark)', 92, 9)}
+        <div class="ring-center"><span class="num">${fmtPct(spentPct)}</span><span class="sub">${fmtEUR(totalValue)}</span></div>
+      </div>
+      <div class="ring-breakdown">
+        <div><div class="n" id="inicio-porgastar">${fmtEUR(budgetTotal-totalValue)}</div><div class="l">${ta('homeToSpendLabel')}</div></div>
+      </div>
+    </div>
+  </div>
+
+  ${premiumFeatureGrid()}
+
+  <div class="section-label-row-v2">
+    <span class="section-label-v2" style="margin:0; flex:1;">${ta('homeBigDayLabel')}</span>
+    <button class="nav-action" id="add-event-btn" style="width:26px;height:26px;">${ICONS.plus}</button>
+  </div>
+  ${eventsHTML}
+
+  `;
+}
+// Reorganização (Set 2026): cartão "hub" das áreas Premium na página
+// principal — cópia fiel (mesmo layout, só cores/ícones/textos da Weddy) de
+// um mockup que a Rita mandou: cabeçalho com selo "Weddy Premium", grelha
+// de azulejos (RSVP, Chatbot, Wedding Health, Memórias, Documentos, Google
+// Calendar) com cadeado por cima de quem ainda não é Premium, e uma faixa
+// "Tornar Premium" por baixo que só aparece enquanto não houver subscrição
+// ativa — desaparece e os azulejos ficam normais assim que ficar ativa.
+function premiumHubTile(key, icon, title, desc, locked){
+  return `
+  <button class="premium-hub-tile${locked?' locked':''}" data-premiumgoto="${key}">
+    <div class="premium-hub-tile-top">
+      <div class="premium-hub-tile-icon">${icon}</div>
+      ${locked ? `<div class="premium-hub-tile-lock">${ICONS.lock}</div>` : ''}
+    </div>
+    <div class="premium-hub-tile-title">${title}</div>
+    ${desc? `<div class="premium-hub-tile-desc">${desc}</div>` : ''}
+  </button>`;
+}
+function premiumFeatureGrid(){
+  const subscribed = hasActiveSubscription();
+  return `
+  <div class="premium-hub-card">
+    <button class="premium-hub-header" data-premiumgoto="subscricao">
+      <div class="premium-hub-header-icon">${ICONS.rings}</div>
+      <div class="premium-hub-header-mid">
+        <div class="premium-hub-header-title">${ta('premiumHubTitle')}</div>
+        <div class="premium-hub-header-desc">${ta('premiumHubDesc')}</div>
+      </div>
+      <div style="display:flex; flex-direction:column; align-items:flex-end; gap:8px; flex-shrink:0;">
+        <span class="premium-hub-badge">${ICONS.sparkle} ${ta('premiumHubBadge')}</span>
+        <span class="premium-hub-header-chev">${ICONS.chev}</span>
+      </div>
+    </button>
+    <div class="premium-hub-grid">
+      ${premiumHubTile('rsvp', ICONS.mail, ta('rsvpTitle'), ta('premiumTileRSVP'), !subscribed)}
+      ${premiumHubTile('chatbot', ICONS.chat, ta('premiumTileChatbot'), ta('premiumTileChatbotDesc'), !subscribed)}
+      ${premiumHubTile('health', ICONS.warn||ICONS.checklist, ta('healthTitle'), ta('premiumTileHealthDesc'), !subscribed)}
+      ${premiumHubTile('memories', ICONS.camera, ta('memoriesTitle'), ta('premiumTileMemoriesDesc'), !subscribed)}
+      ${premiumHubTile('documentos', ICONS.docnote||ICONS.checklist, ta('documentsTitle'), ta('premiumTileDocumentosDesc'), !subscribed)}
+      ${premiumHubTile('googlecalendar', ICONS.calendar, ta('googleCalendarTitle'), ta('premiumTileGoogleCalDesc'), !subscribed)}
+    </div>
+    ${subscribed ? '' : `
+    <div class="premium-hub-cta">
+      <div class="premium-hub-cta-icon">${ICONS.sparkle}</div>
+      <div class="premium-hub-cta-text">
+        <div class="premium-hub-cta-title">${ta('premiumHubCtaTitle')}</div>
+        <div class="premium-hub-cta-desc">${ta('premiumHubCtaDesc')}</div>
+      </div>
+      <button class="premium-hub-cta-btn js-premium-subscribe">${ta('btnSubscribePremium')} ${ICONS.chev}</button>
+    </div>`}
   </div>`;
 }
 
-async function sendReminderEmail(transporter, job) {
-  const html = reminderEmailHtml({
-    guestName: job.name,
-    coupleName1: job.data.coupleName1,
-    coupleName2: job.data.coupleName2,
-    deadline: job.data.rsvpDeadline,
-    link: RSVP_BASE_URL + '?g=' + job.docId,
-    daysLeft: job.daysLeft,
-  });
-  await transporter.sendMail({
-    from: SMTP_FROM.value(),
-    to: job.email,
-    subject: `Lembrete: confirma a tua presença — ${job.data.coupleName1 || ''} & ${job.data.coupleName2 || ''}`,
-    html,
-  });
+/* ============================================================
+   VIEW: Orçamento
+============================================================ */
+function buildDonutSection(){
+  const total = state.budget.total;
+  const pctOf = c => total ? Number(c.value)/total : 0;
+  const pctSum = state.categories.reduce((s,c)=>s+pctOf(c),0);
+  const legend = state.categories.map((c,i)=>`<span class="legend-item"><span class="legend-dot" style="background:${CAT_COLORS[i%CAT_COLORS.length]}"></span>${escapeHTML(c.name)} · ${Math.round(pctOf(c)*1000)/10}%</span>`).join('');
+  return `
+  <div class="donut-chart-card">
+    <div class="ring-wrap" style="width:118px;height:118px;flex-shrink:0;">
+      ${multiDonutSVG(state.categories.map((c,i)=>({pct:pctOf(c), color:CAT_COLORS[i%CAT_COLORS.length]})), 118, 15)}
+      <div class="ring-center"><span class="num" style="font-size:18px;">${Math.round(pctSum*1000)/10}%</span><span class="sub">${ta('donutAllocatedLabel')}</span></div>
+    </div>
+    <div class="legend-wrap" style="margin:0; padding-left:4px;">${legend}</div>
+  </div>`;
+}
+function softUpdateCategoryValue(id, newValue){
+  const cat = state.categories.find(c=>c.id===id);
+  if(!cat) return;
+  const total = state.budget.total;
+  newValue = Math.max(0, Math.min(newValue, total));
+  cat.value = newValue;
+  const guests = state.budget.guestsEstimate;
+  const pctDisplay = total ? Math.round(newValue/total*1000)/10 : 0;
+  const catPerGuest = guests ? newValue/guests : 0;
+
+  const pctEl = document.querySelector(`[data-catpctdisplay="${id}"]`);
+  if(pctEl) pctEl.textContent = pctDisplay+'%';
+  const totalEl = document.querySelector(`[data-cattotal="${id}"]`);
+  if(totalEl) totalEl.textContent = fmtEUR(newValue);
+  const barEl = document.querySelector(`[data-catbar="${id}"]`);
+  if(barEl) barEl.style.width = pctDisplay+'%';
+  const perGuestEl = document.querySelector(`[data-catperguest="${id}"]`);
+  if(perGuestEl) perGuestEl.textContent = fmtEUR(catPerGuest)+ta('perGuestSuffix');
+
+  const donutWrap = document.getElementById('donut-section');
+  if(donutWrap) donutWrap.innerHTML = buildDonutSection();
+  pushRemote();
 }
 
-// Corre todos os dias às 09:00 (hora de Lisboa). Ajusta a expressão cron
-// se quiseres outra hora/frequência.
-exports.sendRsvpReminders = onSchedule(
-  { schedule: '0 9 * * *', timeZone: 'Europe/Lisbon', region: 'europe-west1' },
-  async () => {
-    const snap = await db.collection('guests').get();
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const jobs = [];
+function viewOrcamento(){
+  const total = state.budget.total;
+  const guests = state.budget.guestsEstimate;
+  const perGuest = guests? total/guests : 0;
 
-    snap.forEach((doc) => {
-      const data = doc.data();
-      if (!data.rsvpDeadline) return;
-      const deadline = new Date(data.rsvpDeadline + 'T00:00:00');
-      const daysLeft = Math.ceil((deadline - today) / 86400000);
-      if (daysLeft < 0 || !REMINDER_DAYS_BEFORE.includes(daysLeft)) return;
+  const rows = state.categories.map((c,i)=>{
+    const catTotal = Number(c.value)||0;
+    const catPerGuest = guests? catTotal/guests : 0;
+    const open = !!openDesc[c.id];
+    const pctDisplay = total ? Math.round(catTotal/total*1000)/10 : 0;
+    const pair = CAT_COLOR_PAIRS[i%CAT_COLOR_PAIRS.length];
+    return `
+    <div class="cat-row-v2">
+      <div class="cat-row-head tappable" data-toggledesc="${c.id}">
+        <div class="icon-chip" style="${chipStyle(i)}">${ICONS.budget}</div>
+        <div class="cat-row-mid">
+          <div class="cat-row-name">${escapeHTML(c.name)}</div>
+          <div class="cat-row-bar-track"><div class="cat-row-bar-fill" data-catbar="${c.id}" style="width:${pctDisplay}%; background:${pair.fg};"></div></div>
+        </div>
+        <div class="cat-row-vals">
+          <div class="cat-row-total" data-cattotal="${c.id}">${fmtEUR(catTotal)}</div>
+          <div class="cat-row-pct" data-catpctdisplay="${c.id}">${pctDisplay}%</div>
+        </div>
+        <span class="chev-toggle ${open?'open':''}" style="display:inline-flex;">${ICONS.chev}</span>
+      </div>
+      ${open? `
+      <div class="cat-row-expand">
+        <div class="cat-row-perguest" data-catperguest="${c.id}">${fmtEUR(catPerGuest)}${ta('perGuestSuffix')}</div>
+        <div class="table-config-row" style="padding:6px 0;">
+          <span class="title" style="flex:none; font-size:12.5px; color:var(--ink-soft);">${ta('valueEurLabel')}</span>
+          <input type="number" class="field-input" data-catvalue="${c.id}" min="0" max="${Math.round(total)}" value="${Math.round(catTotal)}" style="max-width:110px; text-align:right; font-size:14px;">
+        </div>
+        <div style="display:flex; gap:9px; padding:6px 0 12px;">
+          <button class="visit-action-btn" data-renamecat="${c.id}">${ICONS.pencil} ${ta('btnRename')}</button>
+          <button class="visit-action-btn danger" data-delcat="${c.id}">${ICONS.trash} ${ta('btnDelete')}</button>
+        </div>
+        <div class="cat-desc" style="padding:0;"><ul>${c.desc.map((d,di)=>`<li>${d}<button class="desc-del" data-deldesc="${c.id}|${di}">✕</button></li>`).join('')}</ul>
+          <div class="add-row" style="margin-top:8px;">
+            <input type="text" placeholder="${ta('placeholderAddItem')}" data-adddesc="${c.id}">
+            <button class="add-circle" data-adddescbtn="${c.id}">${ICONS.plus}</button>
+          </div>
+        </div>
+      </div>` : ''}
+    </div>`;
+  }).join('');
 
-      if (data.isFamily) {
-        const members = Array.isArray(data.members) ? data.members : [];
-        const responses = data.responses || {};
-        const emails = data.emails || {};
-        const reminders = data.reminders || {};
-        members.forEach((m) => {
-          const r = responses[m.guestId];
-          const answered = r && (r.attending === true || r.attending === false);
-          if (answered) return;
-          const email = emails[m.guestId];
-          if (!email) return;
-          const rem = reminders[m.guestId] || { remindersSent: 0, lastReminderDay: null };
-          if ((rem.remindersSent || 0) >= MAX_REMINDERS) return;
-          if (rem.lastReminderDay === daysLeft) return;
-          jobs.push({ docId: doc.id, isFamily: true, memberId: m.guestId, name: m.name, email, daysLeft, data });
-        });
-      } else {
-        const answered = data.attending === true || data.attending === false;
-        if (answered) return;
-        const email = data.email;
-        if (!email) return;
-        if ((data.remindersSent || 0) >= MAX_REMINDERS) return;
-        if (data.lastReminderDay === daysLeft) return;
-        jobs.push({ docId: doc.id, isFamily: false, name: data.name, email, daysLeft, data });
+  return `
+  <div class="navbar"><h1>${ta('navBudgetTitle')}</h1><div class="navbar-botanical">${ICONS.botanical}</div></div>
+
+  <div class="stats-row">
+    <div class="stat-card" style="background:#E7EBE1; border-color:#DCE2D3;">
+      <div class="l" style="margin:0 0 4px;">${ta('budgetTotalLabel')}</div>
+      <div style="display:flex; align-items:baseline; gap:3px;"><span style="font-family:'Cormorant Garamond',serif;font-weight:600;color:var(--heading);">€</span><input class="field-input big" id="in-total" type="number" min="0" value="${total}" style="text-align:left;"></div>
+      <div class="stat-card-icon">${ICONS.budget}</div>
+    </div>
+    <div class="stat-card" style="background:#F3E2D6; border-color:#EAD3C2;">
+      <div class="l" style="margin:0 0 4px;">${ta('budgetGuestsEstLabel')}</div>
+      <input class="field-input big" id="in-guests" type="number" min="0" value="${guests}" style="text-align:left;">
+      <div class="stat-card-icon">${ICONS.guests}</div>
+    </div>
+    <div class="stat-card" style="background:#F3E2D6; border-color:#EAD3C2;">
+      <div class="l" style="margin:0 0 4px;">${ta('perGuestLabel')}</div>
+      <div class="n" id="perguest-display" style="font-size:21px;">${fmtEUR(perGuest)}</div>
+      <div class="stat-card-icon">${ICONS.tag||ICONS.budget}</div>
+    </div>
+  </div>
+
+  <div class="section-label" style="display:flex; align-items:center; gap:10px;">${ta('budgetBreakdownLabel')}<span style="flex:1; height:1px; background:var(--line);"></span></div>
+  <div id="donut-section">${buildDonutSection()}</div>
+
+  <div class="section-label">${ta('budgetCategoriesHint')}</div>
+  ${rows}
+  <div class="cat-row-v2" style="padding:4px 4px;">
+    <div class="add-row" style="margin:0;">
+      <input type="text" placeholder="${ta('placeholderNewCategory')}" id="add-cat-name">
+      <button class="add-circle" id="addbtn-cat">${ICONS.plus}</button>
+    </div>
+  </div>
+  <div style="height:8px;"></div>
+  `;
+}
+
+/* ============================================================
+   VIEW: Convidados
+============================================================ */
+function guestGroupHTML(side, catKey, catLabel, icon, colorIdx, isCustom){
+  const items = getGuestNames(side, catKey) || [];
+  const key = side+'|'+catKey;
+  const isSearching = !!guestFilter;
+  const open = isSearching || !!openGuestGroup[key];
+  const isChildren = catKey==='criancas';
+  const hasPayment = isPaymentTrackingCat(catKey);
+  const nameOf = n => (typeof n==='string') ? n : (n.name||'');
+  const weightOf = n => hasPayment ? guestWeight(n) : 1;
+  const confirmedWeight = items.reduce((s,n,idx)=> s + (isConfirmed(side,catKey,idx) ? weightOf(n) : 0), 0);
+  const totalWeight = items.reduce((s,n)=> s + weightOf(n), 0);
+  const rows = items.map((n,idx)=>{
+    const name = nameOf(n);
+    if(guestFilter && !name.toLowerCase().includes(guestFilter.toLowerCase())) return '';
+    const conf = isConfirmed(side,catKey,idx);
+    const age = isChildren ? ((n&&n.age)||'') : '';
+    const payingPct = hasPayment ? guestWeight(n) : 1;
+    return `
+    <div class="list-row guest-row ${hasPayment?'child-row':''} ${conf?'confirmed':''}" data-rowidx="${idx}">
+      ${!isSearching ? `<button class="drag-handle" data-draghandle="${side}|${catKey}">${ICONS.draghandle}</button>` : '<span style="width:20px;flex-shrink:0;"></span>'}
+      <div class="check tappable" data-confirm="${side}|${catKey}|${idx}">${ICONS.check}</div>
+      <input type="text" class="title-input-inline" style="flex:1; min-width:0;" data-editguest="${side}|${catKey}|${idx}" value="${escapeHTML(name)}">
+      <button class="remove-x" style="${(typeof n==='object'&&n&&n.phone)?'color:var(--rust,#B5654B);opacity:1;':'opacity:.35;'}" data-editphone="${side}|${catKey}|${idx}" title="${ta('labelPhoneOptional')}">${ICONS.phone}</button>
+      <button class="remove-x" data-remove="${side}|${catKey}|${idx}">✕</button>
+      ${hasPayment ? `
+      <div class="child-extra-row">
+        ${isChildren ? `<input type="number" min="0" max="17" class="child-age-input" placeholder="${ta('placeholderAge')}" data-editchildage="${side}|${catKey}|${idx}" value="${escapeHTML(age)}">` : ''}
+        <select class="payment-pct-select" data-editpaypct="${side}|${catKey}|${idx}">
+          <option value="0" ${payingPct===0?'selected':''}>${ta('payingNone')}</option>
+          <option value="0.5" ${payingPct===0.5?'selected':''}>${ta('paying50')}</option>
+          <option value="1" ${payingPct===1?'selected':''}>${ta('paying100')}</option>
+        </select>
+      </div>` : ''}
+    </div>`;
+  }).join('');
+  return `
+  <div class="guest-group-card">
+    <div class="guest-group-head" data-togglegroup="${key}">
+      <div class="icon-chip" style="${chipStyle(colorIdx)}">${icon}</div>
+      <div class="ggtitle">${escapeHTML(catLabel)}</div>
+      <span class="ggcount">${hasPayment ? `${fmtGuestCount(confirmedWeight)}/${fmtGuestCount(totalWeight)}` : `${confirmedWeight}/${totalWeight}`}</span>
+      <span class="chev-toggle ${open?'open':''}" style="display:inline-flex;">${ICONS.chev}</span>
+    </div>
+    ${open? `
+    <div class="guest-group-body" data-draglist="${side}|${catKey}">
+      ${rows || `<div class="empty-note">${ta('emptyNoGuestsInCategory')}</div>`}
+      <div class="add-row">
+        <input type="text" placeholder="${ta('addToCategoryPlaceholder')(escapeHTML(catLabel.toLowerCase()))}" data-addname="${side}|${catKey}">
+        <button class="add-circle" data-addbtn="${side}|${catKey}">${ICONS.plus}</button>
+      </div>
+      ${isCustom ? `<div style="display:flex; gap:9px; padding:0 14px 12px;">
+        <button class="visit-action-btn" data-renameguestcat="${side}|${catKey}">${ICONS.pencil} ${ta('btnEditName')}</button>
+        <button class="visit-action-btn danger" data-delguestcat="${side}|${catKey}">${ICONS.trash} ${ta('btnDelete')}</button>
+      </div>` : ''}
+    </div>` : ''}
+  </div>`;
+}
+
+function initDragReorder(list, onDrop){
+  // "list" é o container (.guest-group-body) que tem TODAS as linhas
+  // irmãs deste grupo. Cada linha sabe o seu próprio índice via
+  // data-rowidx — arrastar move-a fisicamente com o dedo e, ao soltar,
+  // calcula quantas posições andou (com base na altura das linhas) e
+  // chama onDrop(fromIdx, toIdx) para atualizar os dados a sério.
+  list.querySelectorAll('[data-draghandle], [data-draghandlechild]').forEach(handle=>{
+    handle.addEventListener('pointerdown', e=>{
+      const row = handle.closest('.guest-row');
+      if(!row) return;
+      e.preventDefault();
+      const rows = Array.from(list.querySelectorAll('.guest-row'));
+      const fromIdx = Number(row.dataset.rowidx);
+      const rowHeight = row.offsetHeight;
+      const startY = e.clientY;
+      let currentTarget = fromIdx;
+      handle.setPointerCapture(e.pointerId);
+      row.classList.add('dragging');
+
+      function onMove(ev){
+        const dy = ev.clientY - startY;
+        row.style.transform = `translateY(${dy}px)`;
+        const rawTarget = Math.round(fromIdx + dy/rowHeight);
+        currentTarget = Math.max(0, Math.min(rows.length-1, rawTarget));
+      }
+      function onUp(){
+        document.removeEventListener('pointermove', onMove);
+        document.removeEventListener('pointerup', onUp);
+        row.classList.remove('dragging');
+        row.style.transform = '';
+        if(currentTarget !== fromIdx) onDrop(fromIdx, currentTarget);
+      }
+      document.addEventListener('pointermove', onMove);
+      document.addEventListener('pointerup', onUp);
+    });
+  });
+}
+function bindGuestGroupHandlers(scope){
+  scope.querySelectorAll('[data-draglist]').forEach(list=>{
+    const [side,cat] = list.dataset.draglist.split('|');
+    initDragReorder(list, (fromIdx,toIdx)=>{
+      moveGuestToIndex(side, cat, fromIdx, toIdx);
+      softUpdateConvidados();
+    });
+  });
+  scope.querySelectorAll('[data-togglegroup]').forEach(el=>{
+    el.addEventListener('click', e=>{
+      const key = e.currentTarget.dataset.togglegroup;
+      openGuestGroup[key] = !openGuestGroup[key];
+      softUpdateConvidados(false);
+    });
+  });
+  scope.querySelectorAll('[data-confirm]').forEach(el=>{
+    el.addEventListener('click', e=>{
+      const [side,cat,idx] = e.currentTarget.dataset.confirm.split('|');
+      const arr = getGuestNames(side,cat);
+      const entry = arr && arr[Number(idx)];
+      if(!entry || typeof entry!=='object' || !entry.guestId) return;
+      // Fase 8.0 (Set 2026): state.confirmed passou a ser chaveado pelo
+      // guestId permanente do convidado, não pela posição na lista.
+      state.confirmed[entry.guestId] = !state.confirmed[entry.guestId];
+      softUpdateConvidados();
+    });
+  });
+  scope.querySelectorAll('[data-remove]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      const [side,cat,idx] = e.currentTarget.dataset.remove.split('|');
+      const arr = getGuestNames(side,cat);
+      if(!arr) return;
+      const removedEntry = arr[Number(idx)];
+      if(!removedEntry || typeof removedEntry!=='object' || !removedEntry.guestId) return;
+      // Fase 8.0 (Set 2026): remover um convidado passa a ser sempre feito
+      // pela operação central deleteGuest(guestId) — resolve sozinha o
+      // array local, o RSVP no Firestore, o estado de confirmação e o
+      // lugar à mesa, em vez de cada botão saber, ele próprio, tudo o que
+      // precisa de limpar (era exatamente esse tipo de esquecimento que a
+      // auditoria de segurança encontrou nos outros caminhos de remoção).
+      deleteGuest(removedEntry.guestId).catch(err=>{
+        console.error('Weddy: falha a apagar o convite RSVP associado ao convidado removido.', err && err.code, err && err.message);
+      });
+      softUpdateConvidados();
+    });
+  });
+  scope.querySelectorAll('[data-editphone]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      const [side,cat,idx] = e.currentTarget.dataset.editphone.split('|');
+      openGuestPhoneSheet(side, cat, Number(idx));
+    });
+  });
+  scope.querySelectorAll('[data-editguest]').forEach(inp=>{
+    inp.addEventListener('input', e=>{
+      const val = e.target.value;
+      if(!val.trim()){ return; } // nunca grava um nome vazio — mantém o último válido no estado
+      e.target.classList.remove('field-error');
+      const [side,cat,idx] = e.currentTarget.dataset.editguest.split('|');
+      const arr = getGuestNames(side,cat);
+      if(!arr) return;
+      const item = arr[Number(idx)];
+      if(item && typeof item==='object') item.name = val;
+      else arr[Number(idx)] = val;
+      pushRemote();
+    });
+    inp.addEventListener('blur', e=>{
+      // A pessoa saiu do campo com o nome apagado — o nome é obrigatório.
+      // Não repomos nada sozinhos: o campo fica só com o contorno vermelho,
+      // e o nome anterior continua guardado por trás (nunca gravámos o
+      // vazio) até a pessoa escrever um nome novo.
+      if(!e.target.value.trim()) e.target.classList.add('field-error');
+    });
+  });
+  scope.querySelectorAll('[data-editchildage]').forEach(inp=>{
+    inp.addEventListener('input', e=>{
+      const [side,cat,idx] = e.currentTarget.dataset.editchildage.split('|');
+      const arr = getGuestNames(side,cat);
+      if(arr && arr[Number(idx)]) arr[Number(idx)].age = e.target.value;
+      pushRemote();
+    });
+    // Só mostra o "Guardado" quando a pessoa termina de escrever (sai do
+    // campo), não a cada tecla — para não aparecer o aviso constantemente.
+    inp.addEventListener('blur', ()=>{ pushRemote(true); });
+  });
+  scope.querySelectorAll('[data-editpaypct]').forEach(sel=>{
+    sel.addEventListener('change', e=>{
+      const [side,cat,idx] = e.currentTarget.dataset.editpaypct.split('|');
+      const arr = getGuestNames(side,cat);
+      if(!arr || !arr[Number(idx)]) return;
+      arr[Number(idx)].payingPct = Number(e.currentTarget.value);
+      softUpdateConvidados(false);
+      pushRemote(true);
+    });
+  });
+  scope.querySelectorAll('[data-addbtn]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      const [side,cat] = e.currentTarget.dataset.addbtn.split('|');
+      const input = scope.querySelector(`[data-addname="${side}|${cat}"]`) || document.querySelector(`[data-addname="${side}|${cat}"]`);
+      const name = input.value.trim();
+      const arr = getGuestNames(side,cat);
+      if(name && arr){ arr.push(newGuestEntry(cat, name)); softUpdateConvidados(); }
+    });
+  });
+  scope.querySelectorAll('[data-addname]').forEach(inp=>{
+    inp.addEventListener('keydown', e=>{
+      if(e.key==='Enter'){
+        const [side,cat] = e.currentTarget.dataset.addname.split('|');
+        const name = e.currentTarget.value.trim();
+        const arr = getGuestNames(side,cat);
+        if(name && arr){ arr.push(newGuestEntry(cat, name)); softUpdateConvidados(); }
       }
     });
-
-    if (!jobs.length) {
-      logger.info('Lembretes de RSVP: nada para enviar hoje.');
-      return;
+  });
+  scope.querySelectorAll('[data-renameguestcat]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      const [side,cat] = e.currentTarget.dataset.renameguestcat.split('|');
+      const entry = (state.guests[side].custom||[]).find(c=>c.id===cat);
+      if(!entry) return;
+      const novo = prompt(ta('promptNewCategoryName'), entry.label);
+      if(novo && novo.trim()){ entry.label = novo.trim(); render(); }
+    });
+  });
+  scope.querySelectorAll('[data-delguestcat]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      const [side,cat] = e.currentTarget.dataset.delguestcat.split('|');
+      const label = getGuestCatLabel(side,cat);
+      const arr = getGuestNames(side,cat) || [];
+      const msg = arr.length
+        ? ta('confirmDeleteCategoryWithGuests')(label, arr.length)
+        : ta('confirmDeleteCategorySimple')(label);
+      if(!confirm(msg)) return;
+      // Fase 8.0 (Set 2026): limpa primeiro o estado local de CADA
+      // convidado (deleteGuestLocalOnly) e só depois trata do RSVP no
+      // Firestore de todos ao mesmo tempo, em lote
+      // (deleteGuestRSVPDocsBatch) — nunca uma chamada deleteGuest() por
+      // convidado em paralelo. Corrige o bug encontrado no teste de
+      // aceitação da 8.0: apagar uma categoria com 2+ convidados do
+      // MESMO link de família deixava esse documento órfão no Firestore
+      // (nunca era apagado, e perdia respostas), porque cada chamada
+      // concorrente calculava "quem sobra" a partir da mesma cópia local
+      // desatualizada do documento.
+      const removedEntries = arr.slice()
+        .map(entry => (entry && typeof entry==='object' && entry.guestId) ? deleteGuestLocalOnly(entry.guestId) : null)
+        .filter(Boolean);
+      deleteGuestRSVPDocsBatch(removedEntries).catch(()=>{});
+      state.guests[side].custom = state.guests[side].custom.filter(c=>c.id!==cat);
+      render();
+    });
+  });
+  const addGuestCatBtn = scope.querySelector('#addbtn-guestcat');
+  if(addGuestCatBtn) addGuestCatBtn.addEventListener('click', ()=>{
+    const input = document.getElementById('add-guestcat-name');
+    const label = input.value.trim();
+    if(!label) return;
+    const id = 'gcat'+Date.now()+Math.random().toString(36).slice(2,6);
+    if(!state.guests[guestSeg].custom) state.guests[guestSeg].custom = [];
+    state.guests[guestSeg].custom.push({ id, label, names:[] });
+    openGuestGroup[guestSeg+'|'+id] = true;
+    render();
+  });
+  const addGuestCatInput = scope.querySelector('#add-guestcat-name');
+  if(addGuestCatInput) addGuestCatInput.addEventListener('keydown', e=>{
+    if(e.key==='Enter'){
+      const label = e.currentTarget.value.trim();
+      if(!label) return;
+      const id = 'gcat'+Date.now()+Math.random().toString(36).slice(2,6);
+      if(!state.guests[guestSeg].custom) state.guests[guestSeg].custom = [];
+      state.guests[guestSeg].custom.push({ id, label, names:[] });
+      openGuestGroup[guestSeg+'|'+id] = true;
+      render();
     }
+  });
+}
+function buildGuestBody(){
+  let body = '';
+  body = allGuestCategoriesOf(guestSeg).map(c=>
+    guestGroupHTML(guestSeg, c.id, c.isCustom ? c.label : ta(FIXED_GUEST_CAT_KEY[c.id]), c.icon, c.colorIdx, c.isCustom)
+  ).join('');
+  body += `
+  <div class="add-row" style="margin:0 16px 16px; background:var(--card); border:1px dashed var(--line); border-radius:14px;">
+    <input type="text" placeholder="${ta('placeholderNewGuestCategory')}" id="add-guestcat-name">
+    <button class="add-circle" id="addbtn-guestcat">${ICONS.plus}</button>
+  </div>`;
+  return body;
+}
+function buildConvidadosDynamic(){
+  const totalGuests = countGuests('noiva')+countGuests('noivo');
+  const totalConfirmed = countConfirmed('noiva')+countConfirmed('noivo');
+  const perGuest = state.budget.guestsEstimate ? totalExpensePaid()/state.budget.guestsEstimate : 0;
+  return `
+  <div class="ring-stat-card">
+    <div class="ring-wrap" style="width:78px;height:78px;flex-shrink:0;">
+      ${donutSVG(totalGuests? totalConfirmed/totalGuests : 0, 'var(--dusty-dark)', 78, 8)}
+      <div class="ring-center"><span class="num" style="font-size:17px;">${fmtGuestCount(totalConfirmed)}</span></div>
+    </div>
+    <div class="ring-stat-list">
+      <div class="ring-stat-item"><span class="n">${fmtGuestCount(totalGuests)}</span><span class="l">${ta('totalGuestsLabel')}</span></div>
+      <div class="ring-stat-item"><span class="n">${fmtEUR(perGuest)}</span><span class="l">${ta('perGuestPaidLabel')}</span></div>
+    </div>
+  </div>
+  <div id="guest-groups-container">${buildGuestBody()}</div>`;
+}
+function softUpdateConvidados(save){
+  const el = document.getElementById('convidados-dynamic');
+  if(!el) return;
+  el.innerHTML = buildConvidadosDynamic();
+  bindGuestGroupHandlers(el);
+  if(save!==false) pushRemote();
+}
+function viewConvidados(){
+  return `
+  <div class="navbar"><h1>${ta('navGuestsTitle')}</h1><div class="navbar-botanical">${ICONS.botanical}</div></div>
 
-    const transporter = buildTransporter();
-    let sent = 0;
-    for (const job of jobs) {
-      try {
-        await sendReminderEmail(transporter, job);
-        if (job.isFamily) {
-          await db.collection('guests').doc(job.docId).update({
-            [`reminders.${job.memberId}.remindersSent`]: admin.firestore.FieldValue.increment(1),
-            [`reminders.${job.memberId}.lastReminderDay`]: job.daysLeft,
-            [`reminders.${job.memberId}.lastReminderAt`]: admin.firestore.FieldValue.serverTimestamp(),
-          });
-        } else {
-          await db.collection('guests').doc(job.docId).update({
-            remindersSent: admin.firestore.FieldValue.increment(1),
-            lastReminderDay: job.daysLeft,
-            lastReminderAt: admin.firestore.FieldValue.serverTimestamp(),
-          });
-        }
-        sent++;
-      } catch (err) {
-        logger.error(`Erro ao enviar lembrete para ${job.email} (convite ${job.docId}):`, err);
-      }
-    }
-    logger.info(`Lembretes de RSVP: ${sent}/${jobs.length} enviados com sucesso.`);
-  }
-);
+  <div class="segmented">
+    <button data-seg="noiva" class="${guestSeg==='noiva'?'active':''}">${ta('sideBride')}</button>
+    <button data-seg="noivo" class="${guestSeg==='noivo'?'active':''}">${ta('sideGroom')}</button>
+  </div>
 
-/**
- * ========================================================
- * classifyWeddyIntent — classificador de intenção por IA (Fase 3B.1)
- * ========================================================
- *
- * O QUE ISTO FAZ
- * O Weddy Concierge (rsvp.html) e o Assistente Weddy (index.html) já
- * respondem a tudo por regras (regex/keywords) sobre os dados reais do
- * casamento — isso não muda aqui. Esta função só entra quando essas
- * regras NÃO reconhecem a mensagem: recebe o texto da pergunta e devolve
- * qual das intenções já existentes melhor a descreve (ex: "GET_VENUE",
- * "CONFIRM_ATTENDANCE"), usando a OpenAI (modelo "Luna") só para essa
- * classificação.
- *
- * A IA NUNCA vê os dados do casamento (nem os recebe, nem os pode
- * inventar) e NUNCA escreve a resposta final — isso continua a ser
- * sempre feito no frontend, a partir do WeddyActions, com os dados reais.
- * Esta função também não escreve nada no Firestore por si própria, a não
- * ser o próprio contador de utilização (ver "LIMITE DE UTILIZAÇÃO" abaixo).
- *
- * PERMISSÕES — "guest" só pode receber intenções da lista de convidado,
- * "couple" só as do lado dos noivos, e isso NUNCA depende do que o
- * cliente diz que é: só é tratado como "couple" quem chamar esta função
- * com uma sessão Firebase Auth válida (o rsvp.html nunca faz login, por
- * isso um convidado não consegue fingir ser o casal só mudando o valor
- * enviado no pedido). A própria lista de intenções permitidas (enviada à
- * OpenAI como "enum" no schema da resposta) é outra camada da mesma
- * proteção: o modelo não consegue devolver uma intenção fora da lista.
- *
- * PRÉ-REQUISITOS PARA ISTO FUNCIONAR
- * 1) Uma API key da OpenAI (platform.openai.com/api-keys — precisa de
- *    faturação ativa na tua conta OpenAI; consulta os preços atuais do
- *    modelo escolhido na própria consola antes de usar isto a sério).
- * 2) A mesma pasta "functions" e o mesmo ficheiro ".env.<project-id>" que
- *    já usas para os lembretes de RSVP (ver topo deste ficheiro) — não é
- *    preciso nenhum projeto Firebase novo nem nenhuma função separada.
- *
- * COMO INSTALAR
- * 1) Cria a tua API key em platform.openai.com/api-keys.
- * 2) No ficheiro ".env.weddy-premium-teste" dentro de "functions/" (o
- *    mesmo do SMTP), acrescenta uma linha nova:
- *      OPENAI_API_KEY=a-tua-chave-aqui
- *    Nunca coloques esta chave em nenhum ficheiro do frontend
- *    (index.html/rsvp.html) — só aqui, no backend.
- * 3) Deploy:
- *      firebase deploy --only functions:classifyWeddyIntent
- *
- * SEM CHAVE CONFIGURADA
- * A função devolve sempre { intent: "UNKNOWN" } sem tentar chamar a
- * OpenAI — o Concierge/Assistente continuam a funcionar exatamente como
- * hoje, só sem a segunda opinião da IA para perguntas fora das regex.
- *
- * LIMITE DE UTILIZAÇÃO (por decisão tua, adicionado nesta versão)
- * Cada casamento tem um limite diário de chamadas — ver
- * AI_DAILY_LIMIT_PER_WEDDING abaixo. O contador vive na coleção
- * "aiUsage" (um documento por weddingId) e reinicia à meia-noite UTC. Ao
- * atingir o limite, a função devolve { intent: "UNKNOWN" } em vez de
- * chamar a OpenAI — o Concierge/Assistente caem na resposta genérica de
- * sempre, sem crash nem erro visível.
- *
- * DE ONDE VEM O weddingId (Fase 3B.5 — nunca confiado ao cliente)
- * O frontend NUNCA envia um weddingId diretamente — a função deriva-o
- * sempre a partir de algo que quem chama não pode escolher:
- *   - Noivos (Assistente Weddy): do email da sessão Firebase Auth
- *     (request.auth.token.email), procurando o casamento cujo
- *     ownerEmails contém esse email. Sem sessão válida ou sem casamento
- *     encontrado, não há weddingId (e portanto não há limite aplicado —
- *     ver abaixo).
- *   - Convidados (Weddy Concierge): do guestToken que o cliente envia
- *     (o próprio ID do link de RSVP que já é público), lendo o campo
- *     weddingId do documento guests/{guestToken}. Um convidado não
- *     consegue "emprestar" quota a outro casamento porque o weddingId
- *     não vem do que ele escreve, vem do que está guardado nesse
- *     documento em concreto.
- * Sem conseguir resolver um weddingId de nenhuma destas formas, a
- * função continua a funcionar normalmente — só não há limite aplicado
- * a esse pedido (a proteção de custo cai, mas nunca a de permissões,
- * que continua a depender só de isCouple/allowedIntents acima).
- *
- * CUSTO
- * Cada chamada desta função (quando não bloqueada pelo limite acima)
- * consome a tua quota/faturação da OpenAI API — fora do controlo da
- * Firebase.
- */
+  <div class="search-bar">${ICONS.search}<input type="text" id="guest-search" placeholder="${ta('placeholderSearchGuest')}" value="${guestFilter}"></div>
 
-// Modelo da OpenAI a usar — muda aqui se quiseres experimentar outro.
-// Confirma sempre o nome exato/disponibilidade e o preço atual na
-// consola da OpenAI antes do deploy, já que isto muda com frequência.
-const OPENAI_MODEL = 'gpt-5.6-luna';
-
-// Limite diário de chamadas por casamento (soma Concierge + Assistente).
-// Ajusta este número à vontade — é só esta constante que precisas de
-// mudar. Serve para nunca teres uma surpresa na fatura da OpenAI se
-// alguém (ou um script) martelar perguntas sem parar.
-const AI_DAILY_LIMIT_PER_WEDDING = 60;
-
-// Intenções que o CONVIDADO (rsvp.html / Weddy Concierge) pode pedir.
-// Tem de bater certo com WEDDY_INTENTS em clone-app/rsvp.html.
-const GUEST_INTENTS = [
-  'GET_VENUE', 'GET_SCHEDULE', 'GET_DRESS_CODE', 'GET_PARKING', 'GET_TRANSPORT',
-  'GET_ACCOMMODATION', 'GET_GIFTS', 'GET_CONTACT', 'GET_FAQ', 'GET_TABLE', 'GET_RSVP',
-  'ASK_CHILDREN', 'CONFIRM_ATTENDANCE', 'DECLINE_ATTENDANCE', 'SET_RSVP_UNDECIDED',
-  'ADD_COMPANION', 'SET_DIETARY_RESTRICTION',
-];
-// Intenções que os NOIVOS (index.html / Assistente Weddy) podem pedir.
-// Tem de bater certo com WEDDY_COPILOT_INTENTS em clone-app/index.html.
-const COUPLE_INTENTS = [
-  'CREATE_TASK', 'GET_UPCOMING_TASKS', 'GET_PENDING_RSVPS', 'GET_DIETARY_LIST',
-  'GET_REMAINING_PAYMENTS', 'GET_RSVP_INFO', 'GET_GUEST_COUNT', 'GET_BUDGET',
-  'GET_COUNTDOWN', 'GET_TABLE_COUNT', 'SEARCH_DOCUMENTS',
-  // Fase 5 — RSVP Autopilot (v1, leitura só).
-  'GET_LATE_RSVPS', 'GET_RSVPS_NEEDING_REMINDER',
-  // Fase 7 — Wedding Brain (leitura só, cruza Vendors+Budget+Documentos ou
-  // Guests+Mesas; ver WeddyActions.read em clone-app/index.html).
-  'GET_SUPPLIER_PAYMENT_INFO', 'GET_UNCONTRACTED_SUPPLIERS', 'GET_PAYMENTS_THIS_MONTH',
-  'SEARCH_SUPPLIER_CONTRACT', 'GET_SUPPLIER_BUDGET_MISMATCHES', 'GET_GUESTS_WITHOUT_TABLE',
-];
-
-function buildClassifyPrompt(question, allowedIntents) {
-  return [
-    'Classificas mensagens de um chat de casamento numa de várias intenções pré-definidas.',
-    'Nunca respondes à pergunta nem inventas informação sobre nenhum casamento — só decides qual das intenções abaixo melhor descreve a mensagem.',
-    'Intenções possíveis: ' + allowedIntents.join(', ') + ', UNKNOWN.',
-    'Se nenhuma intenção corresponder claramente, usa UNKNOWN.',
-    'Se a intenção envolver um valor extraído da própria mensagem (por exemplo, uma restrição alimentar dita pela pessoa, ou o texto de uma tarefa a criar), inclui-o em "value", tal como a pessoa escreveu, sem reformular nem resumir. Caso contrário, não incluas "value".',
-    `Mensagem: "${String(question).replace(/"/g, '\\"').slice(0, 500)}"`,
-  ].join('\n');
+  <div id="convidados-dynamic">${buildConvidadosDynamic()}</div>
+  `;
 }
 
-async function callOpenAI(question, allowedIntents) {
-  const key = OPENAI_API_KEY.value();
-  if (!key) return { intent: 'UNKNOWN' };
-  const schema = {
-    type: 'object',
-    properties: {
-      intent: { type: 'string', enum: [...allowedIntents, 'UNKNOWN'] },
-      value: { type: 'string' },
-    },
-    required: ['intent'],
-    additionalProperties: false,
-  };
-  const body = {
-    model: OPENAI_MODEL,
-    input: [{ role: 'user', content: buildClassifyPrompt(question, allowedIntents) }],
-    text: {
-      format: {
-        type: 'json_schema',
-        name: 'weddy_intent',
-        schema,
-        strict: true,
-      },
-    },
-    temperature: 0,
-  };
-  // Usa a Responses API da OpenAI (POST /v1/responses). Se a forma exata
-  // do pedido/resposta tiver mudado entretanto, confirma na documentação
-  // atual da OpenAI (platform.openai.com/docs) antes do deploy — isto foi
-  // escrito com base no formato conhecido até início de 2026.
-  const res = await fetch('https://api.openai.com/v1/responses', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    throw new Error(`OpenAI respondeu ${res.status}: ${await res.text().catch(() => '')}`);
+/* ============================================================
+   VIEW: Gastos
+============================================================ */
+function viewGastos(){
+  const totalValue = totalExpenseValue();
+  const totalPaid = totalExpensePaid();
+  const budgetTotal = state.budget.total;
+
+  const rows = state.expenses.map((e,i)=>{
+    const cat = catById(e.category);
+    const catIdx = state.categories.findIndex(c=>c.id===e.category);
+    const pair = CAT_COLOR_PAIRS[catIdx>=0?catIdx%CAT_COLOR_PAIRS.length:0];
+    const remaining = Math.max(0, Number(e.value)-Number(e.paid||0));
+    let dueWarn = '';
+    if(remaining>0 && e.dueDate){
+      const days = Math.ceil((new Date(e.dueDate+'T00:00:00') - new Date(new Date().toDateString())) / 86400000);
+      if(days<0) dueWarn = ' overdue';
+      else if(days<=15) dueWarn = ' soon';
+    }
+    return `
+    <div class="exp-row">
+      <div class="exp-top">
+        <input class="exp-desc-input" data-exp="desc|${i}" value="${escapeHTML(e.desc)}" placeholder="${ta('placeholderDescription')}">
+        <span class="exp-val">${fmtEUR(e.value)}</span>
+        <button class="exp-del" data-delexp="${i}">✕</button>
+      </div>
+      <div class="exp-meta">
+        <span class="exp-date-label">${ta('labelDate')}</span>
+        <input class="exp-date-input" type="date" data-exp="date|${i}" value="${e.date||''}">
+        <span class="tag-pill" style="background:${pair.bg}; color:${pair.fg};">${cat?cat.name:'—'}</span>
+      </div>
+      <div class="exp-paid-row">
+        ${ta('labelPaidColon')} <input type="number" min="0" data-exp="paid|${i}" value="${e.paid||0}"> / ${fmtEUR(e.value)}
+      </div>
+      <div class="exp-method-row">
+        <span>${ta('labelMethod')}</span>
+        <select data-exp="method|${i}">
+          <option value="" ${!e.method?'selected':''}>${ta('optionNotDefined')}</option>
+          <option value="transferencia" ${e.method==='transferencia'?'selected':''}>${ta('methodTransfer')}</option>
+          <option value="dinheiro" ${e.method==='dinheiro'?'selected':''}>${ta('methodCash')}</option>
+          <option value="cartao" ${e.method==='cartao'?'selected':''}>${ta('methodCard')}</option>
+          <option value="mbway" ${e.method==='mbway'?'selected':''}>MB WAY</option>
+        </select>
+      </div>
+      <div class="exp-method-row">
+        <span>${ta('labelSupplierOptional')}</span>
+        <select data-exp="supplierId|${i}">
+          <option value="" ${!e.supplierId?'selected':''}>${ta('noSupplierOption')}</option>
+          ${state.suppliers.map(s=>`<option value="${s.id}" ${e.supplierId===s.id?'selected':''}>${escapeHTML(s.name)}</option>`).join('')}
+        </select>
+      </div>
+      ${remaining>0 && e.dueDate ? `
+      <div class="exp-due-row${dueWarn}" data-duerow="${i}">
+        <span data-dueremaining="${i}">${ta('remainingToPayLabel')(fmtEUR(remaining))}</span>
+        <input type="date" class="exp-due-input" data-exp="dueDate|${i}" value="${e.dueDate||''}">
+      </div>` : ''}
+      ${remaining>0 && !e.dueDate ? `
+      <label class="exp-due-row exp-adddue-row" data-duerow="${i}">
+        <span>${ta('btnSetDueDate')}</span>
+        <input type="date" class="exp-adddue-input" data-exp="dueDate|${i}" value="">
+      </label>` : ''}
+    </div>`;
+  }).join('');
+
+  const progress = state.categories.map((c,i)=>{
+    const catBudget = Number(c.value)||0;
+    const paid = paidByCategory(c.id);
+    const pct = catBudget? Math.min(100,(paid/catBudget)*100) : 0;
+    const over = paid>catBudget;
+    return `
+    <div class="cat-progress" data-catprogress="${c.id}">
+      <div class="cp-row"><span>${escapeHTML(c.name)}</span><span class="${over?'over':''}">${fmtEUR(paid)} / ${fmtEUR(catBudget)}</span></div>
+      <div class="cp-track"><div class="cp-fill ${over?'over':''}" style="width:${pct}%"></div></div>
+    </div>`;
+  }).join('');
+
+  return `
+  <div class="navbar navbar-row">
+    <div><h1>${ta('navExpensesTitle')}</h1></div>
+    <button class="nav-action" id="open-sheet">${ICONS.plus}</button>
+  </div>
+
+  <div class="ring-row">
+    <div class="ring-card">
+      <div class="ring-label">${ta('lblPaid')}</div>
+      <div class="ring-wrap" id="pago-ring-wrap">
+        ${donutSVG(totalValue? totalPaid/totalValue : 0, 'var(--sage-dark)', 92, 9)}
+        <div class="ring-center"><span class="num">${fmtPct(totalValue? Math.round(totalPaid/totalValue*100):0)}</span><span class="sub">${fmtEUR(totalPaid)}</span></div>
+      </div>
+      <div class="ring-breakdown">
+        <div><div class="n" id="pago-porpagar">${fmtEUR(totalValue-totalPaid)}</div><div class="l">${ta('lblToPay')}</div></div>
+      </div>
+    </div>
+    <div class="ring-card">
+      <div class="ring-label">${ta('lblOfBudget')}</div>
+      <div class="ring-wrap" id="orc-ring-wrap">
+        ${donutSVG(budgetTotal? totalPaid/budgetTotal : 0, 'var(--gold)', 92, 9)}
+        <div class="ring-center"><span class="num">${fmtPct(budgetTotal? Math.round(totalPaid/budgetTotal*100):0)}</span><span class="sub">${fmtEUR(totalPaid)}</span></div>
+      </div>
+      <div class="ring-breakdown">
+        <div><div class="n">${fmtEUR(budgetTotal)}</div><div class="l">${ta('navBudgetTitle')}</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-label">${ta('sectionPaidVsBudgeted')}</div>
+  <div class="list-group">${progress}</div>
+
+  <div class="section-label">${ta('sectionMovements')}</div>
+  <div class="list-group">${rows || `<div class="empty-note">${ta('emptyNoMovements')}</div>`}</div>
+  `;
+}
+
+/* ============================================================
+   VIEW: Mesas
+============================================================ */
+function viewMesas(){
+  // Fase 8.1 — AI Seating: quando o casal entrou no fluxo "Organizar com
+  // Weddy AI", a tab Mesas mostra esse ecrã em vez da lista de mesas
+  // normal (com um botão para voltar) — nunca uma sobreposição nova, só
+  // mais um "ramo" do mesmo render(), tal como Definições já faz com
+  // definicoesSection.
+  if(aiSeatingScreen){
+    if(!hasActiveSubscription()) return viewAISeatingLocked();
+    return viewAISeatingScreen();
   }
-  const json = await res.json();
-  let text = json.output_text;
-  if (!text && Array.isArray(json.output)) {
-    for (const item of json.output) {
-      if (Array.isArray(item.content)) {
-        const part = item.content.find((c) => typeof c.text === 'string');
-        if (part) { text = part.text; break; }
+  const tables = [...state.seating.tables].sort((a,b)=>a.id-b.id);
+  const totalSeats = totalSeatsCount();
+  const assignedCount = assignedSeatsCount();
+
+  let tablesHTML = '';
+  tables.forEach((table,ti)=>{
+    const t = table.id;
+    let filled = 0;
+    for(let s=1;s<=table.seats;s++){ if(state.seating.assignments['t'+t+'-s'+s]) filled++; }
+    const open = !!openTable[t];
+    let bodyHTML = '';
+    if(open){
+      let seatsHTML = '';
+      for(let s=1;s<=table.seats;s++){
+        const key = 't'+t+'-s'+s;
+        const val = state.seating.assignments[key] || '';
+        // Fase 8.0: "val" é agora o guestId do convidado sentado ali (não
+        // mais uma string composta com o nome embutido) — o nome resolve-se
+        // ao convidado atual, o que também garante que mostra sempre o
+        // nome correto mesmo que o convidado tenha sido editado depois.
+        const seatGuest = val ? resolveSeatGuest(val) : null;
+        const name = seatGuest ? seatGuest.name : ta('tapToAssign');
+        seatsHTML += `<div class="seat-row ${val?'filled':''}" data-openseat="${key}"><span class="seat-n">${s}</span><span class="seat-name">${escapeHTML(name)}</span>${ICONS.chev}</div>`;
       }
+      bodyHTML = `
+      <div class="table-config-row">
+        <span class="title" style="flex:none; font-size:12.5px; color:var(--ink-soft);">${ta('labelShape')}</span>
+        <div class="shape-picker">
+          ${Object.keys(TABLE_SHAPES).map(sh=>`<button class="shape-btn ${table.shape===sh?'active':''}" data-setshape="${t}|${sh}" title="${TABLE_SHAPES[sh].label}">${ICONS[TABLE_SHAPES[sh].icon]}</button>`).join('')}
+        </div>
+      </div>
+      <div class="table-config-row">
+        <span class="title" style="flex:none; font-size:12.5px; color:var(--ink-soft);">${ta('labelSeats')}</span>
+        <div class="stepper"><button data-tableseat="${t}|-1">−</button><span class="sval">${table.seats}</span><button data-tableseat="${t}|1">+</button></div>
+      </div>
+      <div style="padding:8px 14px 4px;">
+        <label style="display:block; font-size:11.5px; color:var(--ink-soft); margin-bottom:4px;">${ta('notesTableLabel')}</label>
+        <textarea data-tablenote="${t}" rows="2" placeholder="${ta('placeholderWriteHere')}" style="all:unset; box-sizing:border-box; width:100%; background:var(--card); border:1px solid var(--line); border-radius:10px; padding:9px 10px; font-family:inherit; font-size:13px; color:var(--ink); resize:vertical;">${escapeHTML(table.notes||'')}</textarea>
+      </div>
+      <div style="padding:8px 14px 12px;">
+        <button class="del-table-btn" data-deltable="${t}">${ICONS.trash} ${ta('btnDeleteTable')}</button>
+      </div>
+      <div class="seat-list">${seatsHTML}</div>`;
+    }
+    tablesHTML += `
+    <div class="table-group">
+      <div class="table-head" data-toggletable="${t}">
+        <div class="icon-chip" style="${chipStyle(ti)}">${ICONS[TABLE_SHAPES[table.shape].icon]}</div>
+        <div class="ttitle">${ta('tableLabel')(t)}<span class="phase-desc">${TABLE_SHAPES[table.shape].label}</span></div>
+        ${table.notes ? `<span title="${ta('titleHasNotes')}" style="color:var(--gold); display:flex; align-items:center; width:15px; height:15px; flex-shrink:0;">${ICONS.docnote.replace('<svg ', '<svg style="width:100%;height:100%;" ')}</span>` : ''}
+        <span class="fillcount">${filled}/${table.seats}</span>
+        <span class="chev-toggle ${open?'open':''}" style="display:inline-flex;">${ICONS.chev}</span>
+      </div>
+      ${bodyHTML}
+    </div>`;
+  });
+
+  return `
+  <div class="navbar navbar-row">
+    <div><h1>${ta('navTablesTitle')}</h1></div>
+    <button class="nav-action" id="add-table-btn">${ICONS.plus}</button>
+  </div>
+
+  <div class="ring-stat-card" style="margin-top:2px;">
+    <div class="ring-wrap" style="width:78px;height:78px;flex-shrink:0;">
+      ${donutSVG(totalSeats? assignedCount/totalSeats : 0, 'var(--blush-dark)', 78, 8)}
+      <div class="ring-center"><span class="num" style="font-size:15px;">${assignedCount}/${totalSeats}</span></div>
+    </div>
+    <div class="ring-stat-list">
+      <div class="ring-stat-item"><span class="n">${tables.length}</span><span class="l">${ta('totalTablesLabel')}</span></div>
+      <div class="ring-stat-item"><span class="n">${totalSeats-assignedCount}</span><span class="l">${ta('seatsToAssignLabel')}</span></div>
+    </div>
+  </div>
+
+  ${tables.length ? `
+  <button id="ai-seating-open-btn" class="rsvp-copy-btn" style="margin:2px 16px 14px; display:flex; align-items:center; justify-content:center; gap:8px;">
+    ${ICONS.sparkle||'✨'} ${ta('aiSeatingOpenBtn')}
+  </button>` : ''}
+
+  <div class="section-label">${ta('tablesHint')}</div>
+  ${tablesHTML}
+  <div style="height:6px;"></div>
+  `;
+}
+
+// ============================================================
+// FASE 8.1 — AI SEATING
+// ============================================================
+// Ecrã "bloqueado" (não-Premium) — versão própria do padrão de
+// viewDefPremiumLocked/defSubHeader, mas com o botão de voltar a apontar
+// para aiSeatingScreen (não para definicoesSection, que é uma coisa
+// diferente e não tem nada a ver com esta tab).
+function viewAISeatingLocked(){
+  return `
+  <div class="navbar">
+    <button class="nav-back" data-aiseatback>${ICONS.chevleft||ICONS.chev}</button>
+    <div class="navbar-titlewrap"><h1>${ta('aiSeatingTitle')}</h1></div>
+  </div>
+  <div class="premium-upsell">
+    <div class="premium-upsell-icon">${ICONS.sparkle||''}</div>
+    <div class="premium-upsell-title">Weddy Premium</div>
+    <div class="premium-upsell-text">${ta('premiumLockedText')(ta('aiSeatingTitle'))}</div>
+    <button class="login-btn js-premium-subscribe" style="max-width:none;">${ta('btnSubscribePremium')}</button>
+  </div>
+  `;
+}
+
+// Dados de entrada do solver, tal como os vê o cliente — só para a UI
+// (contagens, seletor de convidados). A Cloud Function volta a calcular
+// tudo isto sozinha do lado do servidor (nunca confia no que o cliente
+// mandar) — isto aqui é só para mostrar números corretos ANTES de pedir a
+// proposta, e para o seletor de convidados só listar quem pode mesmo ser
+// sentado.
+function aiSeatingConfirmedGuests(){
+  return allAdultGuests().filter(g=>g.guestId && state.confirmed[g.guestId]);
+}
+function aiSeatingGuestName(guestId){
+  const found = findGuestByGuestId(guestId);
+  return found ? (found.entry.name||'') : guestId;
+}
+// Em que mesa (t{id}) ficou este guestId, segundo os assignments de UMA
+// proposta específica (nunca o state.seating.assignments real — usado só
+// para desenhar o check ✓/⚠ de cada preferência no ecrã de proposta).
+function aiSeatingTableIdInAssignments(assignments, guestId){
+  for(const key in assignments){
+    if(assignments[key]===guestId){
+      const m = key.match(/^t(\d+)-s\d+$/);
+      return m ? Number(m[1]) : null;
     }
   }
-  if (!text) throw new Error('Resposta vazia da OpenAI.');
-  const parsed = JSON.parse(text);
-  // Nunca confiar cegamente no que voltou, mesmo com json_schema/strict —
-  // é a validação final antes de devolver ao frontend.
-  if (!parsed || typeof parsed.intent !== 'string' || !allowedIntents.includes(parsed.intent)) {
-    return { intent: 'UNKNOWN' };
+  return null;
+}
+// Hash simples e determinístico (DJB2-like) só para comparar "a mesma
+// string" — nunca para segurança/criptografia.
+function aiSeatingSimpleHash(str){
+  let h = 0;
+  for(let i=0;i<str.length;i++){ h = (Math.imul(31,h) + str.charCodeAt(i))|0; }
+  return (h>>>0).toString(36);
+}
+// "Fotografia" de tudo o que uma proposta depende (quem pode ser sentado,
+// que mesas/lugares existem, que preferências foram pedidas) — gravada
+// dentro da própria proposta quando é gerada, e recalculada outra vez
+// mesmo antes do commit. Se algum dos três hashes mudou entretanto (ex:
+// o casal confirmou/removeu um convidado ou editou uma mesa enquanto via
+// a proposta), a proposta está obsoleta e commitSeatingProposal() recusa
+// gravar — evita escrever por cima de um estado que já não é o que gerou
+// aquela distribuição (bug de race/stale state).
+function aiSeatingSnapshotHash(){
+  const guestSig = aiSeatingConfirmedGuests().map(g=>g.guestId).sort().join(',');
+  const tableSig = [...state.seating.tables].sort((a,b)=>a.id-b.id).map(t=>t.id+':'+t.seats).join(',');
+  const constraintSig = aiSeatingConstraints.map(c=>c.type+'|'+c.priority+'|'+[...c.guestIds].sort().join(',')).sort().join(';');
+  return {
+    guestIdsHash: aiSeatingSimpleHash(guestSig),
+    tableIdsHash: aiSeatingSimpleHash(tableSig),
+    constraintsHash: aiSeatingSimpleHash(constraintSig)
+  };
+}
+function aiSeatingProposalIsStale(proposal){
+  if(!proposal) return true;
+  const current = aiSeatingSnapshotHash();
+  return proposal.guestIdsHash!==current.guestIdsHash
+      || proposal.tableIdsHash!==current.tableIdsHash
+      || proposal.constraintsHash!==current.constraintsHash;
+}
+// Convidados confirmados > lugares disponíveis: o Constraint Engine nem
+// vale a pena chamar-se, a proposta nunca vai caber — bloqueia ANTES de
+// gerar, em vez de deixar a Cloud Function falhar lá atrás.
+function aiSeatingOverCapacity(){
+  return aiSeatingConfirmedGuests().length > totalSeatsCount();
+}
+// Único ponto de entrada para pedir uma proposta ao Constraint Engine —
+// usado tanto por "Gerar proposta" (ecrã de preferências) como por
+// "Gerar outra" (ecrã de proposta, com as mesmas preferências). Nunca
+// toca em state.seating.assignments — só em aiSeatingProposal, que é
+// sempre descartável até ao commit explícito.
+function runAISeatingGeneration(){
+  if(aiSeatingOverCapacity()){
+    aiSeatingErrorMsg = ta('aiSeatingOverCapacityText')(aiSeatingConfirmedGuests().length, totalSeatsCount());
+    aiSeatingScreen = 'prefs';
+    render();
+    return;
   }
-  const out = { intent: parsed.intent };
-  if (typeof parsed.value === 'string' && parsed.value.trim()) {
-    out.value = parsed.value.trim().slice(0, 200);
+  aiSeatingErrorMsg = null;
+  aiSeatingScreen = 'loading';
+  render();
+  const payload = aiSeatingConstraints.map(c=>({ type:c.type, priority:c.priority, guestIds:c.guestIds }));
+  AIService.generateSeatingProposal(payload, aiSeatingFreeText).then(res=>{
+    if(res && res.ok){
+      aiSeatingProposal = { ...res.proposal, generatedAt: Date.now(), ...aiSeatingSnapshotHash() };
+      aiSeatingScreen = 'proposal';
+    } else {
+      aiSeatingErrorMsg = (res && res.message) || ta('aiSeatingProposalGenericErrorText');
+      aiSeatingScreen = 'prefs';
+    }
+    render();
+  });
+}
+// Único ponto que pode alterar state.seating.assignments a partir de uma
+// proposta da Weddy AI — "Gerar"/"Regenerar" nunca lhe tocam (só escrevem
+// em aiSeatingProposal). Valida a proposta contra o estado ATUAL (nunca
+// contra o estado de quando foi gerada) antes de gravar, para nunca
+// aceitar uma proposta que ficou obsoleta enquanto estava em ecrã.
+function commitSeatingProposal(proposal){
+  if(!proposal || aiSeatingCommitting) return;
+  if(aiSeatingProposalIsStale(proposal)){
+    aiSeatingProposal = null;
+    aiSeatingScreen = 'prefs';
+    aiSeatingErrorMsg = ta('aiSeatingProposalStaleErrorText');
+    render();
+    return;
   }
+  aiSeatingCommitting = true;
+  render();
+  state.seating.assignments = { ...proposal.assignments };
+  render();
+  pushRemote(true);
+  Promise.resolve(syncSeatingToGuestDocs()).catch(()=>{
+    alert(ta('aiSeatingRsvpSyncErrorText'));
+  }).finally(()=>{
+    aiSeatingCommitting = false;
+    aiSeatingScreen = null;
+    aiSeatingProposal = null;
+    aiSeatingConstraints = [];
+    aiSeatingFreeText = '';
+    render();
+  });
+}
+
+function viewAISeatingScreen(){
+  if(aiSeatingScreen==='loading') return viewAISeatingLoading();
+  if(aiSeatingScreen==='proposal' && aiSeatingProposal) return viewAISeatingProposal();
+  return viewAISeatingPrefs();
+}
+
+function viewAISeatingLoading(){
+  return `
+  <div class="navbar navbar-row">
+    <div><h1>${ta('aiSeatingTitle')}</h1></div>
+  </div>
+  <div class="empty-note" style="margin:60px 16px; text-align:center;">
+    <div style="font-size:34px; margin-bottom:10px;">${ICONS.sparkle||'✨'}</div>
+    ${ta('aiSeatingLoadingText')}
+  </div>
+  `;
+}
+
+// Achado ao vivo da Fase 4 (Rita): eram const's fixas em português,
+// avaliadas uma única vez no arranque do script — mudar o idioma na app
+// (appLang) nunca as atualizava. Passaram a funções que leem de ta() a
+// cada chamada, para acompanharem o idioma atual tal como o resto da app.
+function AI_SEATING_TYPE_LABEL_MAP(){
+  return { TOGETHER: ta('aiSeatingTypeTogether'), APART: ta('aiSeatingTypeApart'), NEAR: ta('aiSeatingTypeNear') };
+}
+function AI_SEATING_PRIORITY_LABEL_MAP(){
+  return { HARD: ta('aiSeatingPriorityHard'), STRONG: ta('aiSeatingPriorityStrong'), SOFT: ta('aiSeatingPrioritySoft') };
+}
+
+function viewAISeatingPrefs(){
+  const confirmedGuests = aiSeatingConfirmedGuests();
+  const totalSeats = totalSeatsCount();
+  const tableCount = state.seating.tables.length;
+  const overCapacity = aiSeatingOverCapacity();
+  const TYPE_LABEL = AI_SEATING_TYPE_LABEL_MAP();
+  const PRIORITY_LABEL = AI_SEATING_PRIORITY_LABEL_MAP();
+  const constraintsHTML = aiSeatingConstraints.map((c,i)=>`
+    <div class="list-row" style="padding:10px 14px;">
+      <div class="def-row-mid" style="flex:1;">
+        <div class="def-row-title" style="font-weight:500;">${TYPE_LABEL[c.type]} <span style="font-weight:400; color:var(--ink-soft); font-size:12.5px;">${PRIORITY_LABEL[c.priority]}</span></div>
+        <div class="phase-desc">${c.names.map(escapeHTML).join(', ')}</div>
+      </div>
+      <button class="remove-x" data-aiseatrmconstraint="${i}">✕</button>
+    </div>`).join('');
+
+  // Reorganização da Fase 4 (Rita: "a página de gerar proposta está muito
+  // confusa, organiza melhor a informação"). O que mudou, comparado com a
+  // versão antiga: (1) os 3 números (convidados/mesas/lugares) passaram de
+  // 3 linhas com "·" soltas para um cartão com colunas, igual ao padrão já
+  // usado no resto da app (ex.: ring-stat-card de Mesas); (2) o bloco de
+  // "adicionar preferência" (prioridade + tipo) deixou de ser 2 filas de
+  // botões soltas a seguir a um único section-label ambíguo — passou a
+  // estar dentro do seu próprio cartão, com um título claro ("Adicionar
+  // preferência") e um rótulo por cada passo (Prioridade / Tipo), para
+  // ficar óbvio que são 2 escolhas de UM MESMO fluxo, não duas listas
+  // soltas de botões.
+  const pickerHTML = aiSeatingPicking ? `
+    <div class="visit-detail" style="margin:12px 16px 0; padding:12px 14px; background:var(--card); border:1px solid var(--line); border-radius:12px;">
+      <div style="font-weight:500; margin-bottom:8px;">${TYPE_LABEL[aiSeatingPicking.type]} — ${PRIORITY_LABEL[aiSeatingPicking.priority]}</div>
+      <input type="text" id="ai-seat-pick-query" placeholder="${ta('aiSeatingSearchGuestPlaceholder')}" value="${escapeHTML(aiSeatingPickQuery)}" style="all:unset; box-sizing:border-box; width:100%; background:var(--bg); border:1px solid var(--line); border-radius:10px; padding:9px 10px; font-size:13px; margin-bottom:8px;">
+      <div style="max-height:220px; overflow:auto;">
+        ${confirmedGuests.filter(g=>!aiSeatingPickQuery || g.name.toLowerCase().includes(aiSeatingPickQuery.toLowerCase())).map(g=>`
+          <div class="picker-row ${aiSeatingPickIds.includes(g.guestId)?'is-selected':''}" data-aiseatpick="${g.guestId}">
+            <span class="side-tag" style="background:${g.side==='noiva'?'var(--blush-dark)':'var(--dusty-dark)'};">${g.side==='noiva'?'N':'N'}</span>
+            <span class="pname">${escapeHTML(g.name)}</span>
+            ${aiSeatingPickIds.includes(g.guestId)?ICONS.check:''}
+          </div>`).join('') || `<div class="empty-note">${ta('aiSeatingNoConfirmedGuestsText')}</div>`}
+      </div>
+      <div class="sheet-btns">
+        <button class="btn-cancel" data-aiseatpickcancel>${ta('btnCancel')}</button>
+        <button class="btn-save" data-aiseatpickadd ${aiSeatingPickIds.length<2?'disabled':''}>${ta('btnAddCount')(aiSeatingPickIds.length)}</button>
+      </div>
+    </div>
+  ` : `
+    <div class="stat-card" style="margin:12px 16px 0;">
+      <div style="font-size:15px; font-weight:600; color:var(--ink); margin-bottom:10px;">${ta('aiSeatingNewPreferenceLabel')}</div>
+      <div style="font-size:11.5px; color:var(--ink-soft); margin-bottom:6px;">${ta('priorityNextPrefLabel')}</div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px;">
+        ${Object.keys(PRIORITY_LABEL).map(pr=>{
+          const dotColor = pr==='HARD' ? '#C0523F' : pr==='STRONG' ? '#D8A657' : '#D9C24B';
+          return `<button class="visit-action-btn ${aiSeatingNewPriority===pr?'is-selected':''}" data-aiseatpriority="${pr}" style="display:flex; align-items:center; gap:6px;"><span style="width:8px; height:8px; border-radius:50%; background:${dotColor}; flex-shrink:0;"></span>${PRIORITY_LABEL[pr]}</button>`;
+        }).join('')}
+      </div>
+      <div style="font-size:11.5px; color:var(--ink-soft); margin-bottom:6px;">${ta('aiSeatingTypeStepLabel')}</div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        ${Object.keys(TYPE_LABEL).map(type=>`
+          <button class="visit-action-btn" data-aiseatstart="${type}|${aiSeatingNewPriority}">+ ${TYPE_LABEL[type]}</button>
+        `).join('')}
+      </div>
+    </div>
+  `;
+
+  return `
+  ${defSubHeader(ta('aiSeatingTitle'), ta('aiSeatingIntroText'), true, 'data-aiseatback')}
+  <div class="stat-card" style="margin:0 16px 14px; display:flex; align-items:stretch;">
+    <div style="flex:1; text-align:center; padding:0 4px;">
+      <div style="color:var(--rust-dark); display:flex; justify-content:center; width:20px; height:20px; margin:0 auto 6px;">${ICONS.guests}</div>
+      <div class="n">${confirmedGuests.length}</div>
+      <div class="l" style="margin-top:2px;">${ta('aiSeatingConfirmedGuestsLabel')}</div>
+    </div>
+    <div style="width:1px; background:var(--line); margin:2px 0;"></div>
+    <div style="flex:1; text-align:center; padding:0 4px;">
+      <div style="color:var(--rust-dark); display:flex; justify-content:center; width:20px; height:20px; margin:0 auto 6px;">${ICONS.tables}</div>
+      <div class="n">${tableCount}</div>
+      <div class="l" style="margin-top:2px;">${ta('aiSeatingTablesCountLabel')}</div>
+    </div>
+    <div style="width:1px; background:var(--line); margin:2px 0;"></div>
+    <div style="flex:1; text-align:center; padding:0 4px;">
+      <div style="color:var(--rust-dark); display:flex; justify-content:center; width:20px; height:20px; margin:0 auto 6px;">${ICONS.seat}</div>
+      <div class="n" style="${overCapacity?'color:var(--danger,#b3413a);':''}">${totalSeats}</div>
+      <div class="l" style="margin-top:2px;">${ta('aiSeatingSeatsAvailableLabel')}</div>
+    </div>
+  </div>
+
+  <div class="section-label" style="display:flex; align-items:center; gap:6px;"><span style="width:14px; height:14px; display:inline-flex; color:var(--rust-dark);">${ICONS.sparkle||''}</span> ${ta('sectionPreferences')}</div>
+  ${aiSeatingConstraints.length ? `<div class="list-group" style="margin:0 16px 4px;">${constraintsHTML}</div>` : `<div class="empty-note" style="margin:0 16px 4px;">${ta('aiSeatingNoPreferencesText')}</div>`}
+  ${pickerHTML}
+
+  <div class="stat-card" style="margin:16px 16px 0;">
+    <div class="l" style="margin:0 0 12px; font-size:15px; color:var(--ink); font-weight:600;">${ta('aiSeatingFreeTextLabel')}</div>
+    <textarea id="ai-seat-freetext" rows="3" placeholder="${escapeHTML(ta('aiSeatingFreeTextPlaceholder'))}" style="all:unset; box-sizing:border-box; width:100%; background:var(--bg); border:1px solid var(--line); border-radius:12px; padding:10px 12px; font-family:inherit; font-size:13px; resize:vertical;">${escapeHTML(aiSeatingFreeText)}</textarea>
+  </div>
+
+  ${overCapacity ? `<div class="empty-note" style="margin:14px 16px 0; color:var(--danger,#b3413a);">⚠️ ${ta('aiSeatingOverCapacityText')(confirmedGuests.length, totalSeats)}</div>` : ''}
+  <div style="padding:18px 16px 8px;">
+    <button id="ai-seat-generate-btn" class="login-btn" style="max-width:none;" ${overCapacity?'disabled':''}>${ICONS.sparkle||'✨'} ${ta('btnGenerateProposal')}</button>
+  </div>
+  ${(aiSeatingErrorMsg && !overCapacity) ? `<div class="empty-note" style="margin:0 16px 16px; color:var(--danger,#b3413a);">⚠️ ${escapeHTML(aiSeatingErrorMsg)}</div>` : ''}
+  `;
+}
+
+function viewAISeatingProposal(){
+  const p = aiSeatingProposal;
+  const tables = [...state.seating.tables].sort((a,b)=>a.id-b.id);
+  const tablesHTML = tables.map(t=>{
+    const seatRows = [];
+    for(let s=1; s<=t.seats; s++){
+      const gid = p.assignments['t'+t.id+'-s'+s];
+      if(gid) seatRows.push(aiSeatingGuestName(gid));
+    }
+    if(!seatRows.length) return '';
+    return `<div class="table-group"><div class="table-head"><div class="ttitle">${ta('tableLabel')(t.id)}<span class="phase-desc">${seatRows.length}/${t.seats}</span></div></div><div class="visit-detail" style="padding:0 14px 12px;">${seatRows.map(escapeHTML).join(', ')}</div></div>`;
+  }).join('');
+
+  const violationsHTML = (p.violations||[]).length ? `
+    <div class="section-label" style="margin-top:16px; color:var(--danger,#b3413a);">${ta('requiredPreferencesNotRespectedLabel')}</div>
+    <div class="empty-note" style="margin:0 16px;">${p.violations.map(escapeHTML).join('<br>')}</div>
+  ` : '';
+  const unresolvedHTML = (p.unresolvedFreeText||[]).length ? `
+    <div class="empty-note" style="margin:8px 16px;">${ta('aiSeatingUnresolvedFreeTextText')(p.unresolvedFreeText.map(escapeHTML).join('", "'))}</div>
+  ` : '';
+
+  // Checklist ✓/⚠ por preferência pedida, calculado aqui no cliente a
+  // partir de p.assignments (mesma lógica TOGETHER/APART/NEAR do
+  // Constraint Engine) — mostra os NOMES reais de cada preferência, em
+  // vez de só a frase genérica que a Cloud Function devolve.
+  const VERB = { TOGETHER: ta('aiSeatingVerbTogether'), APART: ta('aiSeatingVerbApart'), NEAR: ta('aiSeatingVerbNear') };
+  const constraintChecks = aiSeatingConstraints.map(c=>{
+    const tids = c.guestIds.map(gid=>aiSeatingTableIdInAssignments(p.assignments, gid));
+    const allPlaced = tids.every(t=>t!=null);
+    let ok;
+    if(c.type==='APART') ok = allPlaced && new Set(tids).size===tids.length;
+    else ok = allPlaced && new Set(tids).size===1; // TOGETHER e NEAR (v1: "perto" ~ "mesma mesa")
+    return { ok, label: `${c.names.map(escapeHTML).join(' + ')} ${VERB[c.type]}` };
+  });
+  const failedCount = constraintChecks.filter(c=>!c.ok).length;
+  const constraintChecklistHTML = constraintChecks.length ? `
+    <div class="section-label" style="margin-top:16px;">${ta('sectionPreferences')}</div>
+    <div class="visit-detail" style="margin:0 16px; padding:12px 14px; background:var(--card); border:1px solid var(--line); border-radius:12px; line-height:1.9;">
+      ${constraintChecks.map(c=>`${c.ok?'✓':'⚠️'} ${c.label}`).join('<br>')}
+    </div>
+    ${failedCount ? `<div class="empty-note" style="margin:6px 16px 0; color:var(--danger,#b3413a);">⚠️ ${ta('aiSeatingFailedCountText')(failedCount)}</div>` : ''}
+  ` : '';
+
+  const stale = aiSeatingProposalIsStale(p);
+
+  return `
+  <div class="navbar">
+    <button class="nav-back" data-aiseatback ${aiSeatingCommitting?'disabled':''}>${ICONS.chevleft||ICONS.chev}</button>
+    <div class="navbar-titlewrap"><h1>${ta('aiSeatingProposalTitle')}</h1></div>
+  </div>
+  <div class="ring-stat-card" style="margin-top:2px;">
+    <div class="ring-wrap" style="width:78px;height:78px;flex-shrink:0;">
+      ${donutSVG(p.satisfiedPct/100, 'var(--blush-dark)', 78, 8)}
+      <div class="ring-center"><span class="num" style="font-size:15px;">${p.satisfiedPct}%</span></div>
+    </div>
+    <div class="ring-stat-list"><div class="ring-stat-item"><span class="l">${ta('pctPreferencesRespectedLabel')}</span></div></div>
+  </div>
+  <div class="empty-note" style="margin:0 16px 14px;">${escapeHTML(p.explanation||'')}</div>
+  ${unresolvedHTML}
+  ${violationsHTML}
+  ${constraintChecklistHTML}
+  <div class="section-label" style="margin-top:16px;">${ta('navTablesTitle')}</div>
+  ${tablesHTML}
+  ${stale ? `<div class="empty-note" style="margin:16px 16px 0; color:var(--danger,#b3413a);">⚠️ ${ta('aiSeatingStaleProposalText')}</div>` : ''}
+  <div style="display:flex; flex-direction:column; gap:8px; padding:18px 16px 10px;">
+    <button id="ai-seat-accept-btn" class="login-btn" style="max-width:none;" ${(aiSeatingCommitting||stale)?'disabled':''}>${aiSeatingCommitting?ta('btnConfirmingEllipsis'):ta('btnAcceptProposal')}</button>
+    <button id="ai-seat-edit-btn" class="visit-action-btn" ${(aiSeatingCommitting||stale)?'disabled':''}>${ta('btnAcceptAndEditManually')}</button>
+    <button id="ai-seat-regenerate-btn" class="visit-action-btn" ${aiSeatingCommitting?'disabled':''}>${ta('btnGenerateAnother')}</button>
+    <button id="ai-seat-cancel-btn" class="visit-action-btn" ${aiSeatingCommitting?'disabled':''} data-aiseatback>${ta('btnCancel')}</button>
+  </div>
+  `;
+}
+
+/* ============================================================
+   VIEW: Inspiração
+============================================================ */
+function viewInspiracao(){
+  const tiles = inspirations.map(img => `
+    <div class="insp-tile">
+      <img src="${img.dataUrl}" alt="" data-insplightbox="${img.id}">
+      <button class="insp-remove" data-insprm="${img.id}">✕</button>
+    </div>`).join('');
+
+  return `
+${pageHeader('insp-back', ta('navInspirationTitle'))}
+  <div class="section-label">${ta('inspirationHint')}</div>
+  <div class="insp-grid">
+    ${tiles}
+    ${inspirations.length<6 ? `
+    <button class="insp-add-tile" id="insp-add-btn">
+      <span class="insp-add-icon">+</span>
+      <span class="insp-add-label">${ta('btnAdd')}</span>
+    </button>` : ''}
+  </div>
+  `;
+}
+
+/* ============================================================
+   VIEW: Checklist
+============================================================ */
+const TASK_STATUS = {
+  get todo(){ return { label:ta('statusTodo'), color:'var(--ink-soft)' }; },
+  get progress(){ return { label:ta('statusInProgress'), color:'var(--gold)' }; },
+  get done(){ return { label:ta('statusDone'), color:'var(--sage-dark)' }; }
+};
+function taskStatusOptions(selected){
+  return Object.keys(TASK_STATUS).map(k=>`<option value="${k}" ${k===selected?'selected':''}>${TASK_STATUS[k].label}</option>`).join('');
+}
+function normalizeTaskStatus(item){
+  return item.status || (item.done ? 'done' : 'todo');
+}
+function guessTaskTag(text){
+  const t = text.toLowerCase();
+  const rules = [
+    [/orçamento|verba|preço|custo|budget|price|cost/, 'tagFinancas'],
+    [/convidado|lista de|guest list|guests\b/, 'tagConvidados'],
+    [/estilo|tema|moodboard|pinterest|pasta de inspira|style|theme|inspiration/, 'tagInspiracao'],
+    [/local|quinta|espaço|geografica|venue|geographically/, 'tagLocal'],
+    [/\bdata\b|\bdate\b/, 'tagDatas'],
+    [/fornecedor|contratar|reservar|pesquisar band|dj|saxofone|catering|fotógraf|videógraf|supplier|book\b|photographer|videographer/, 'tagFornecedores'],
+    [/vestido|fato|noiv[ao]|dress|suit|bride|groom/, 'tagVestido'],
+    [/convite|papelaria|design|invitation|stationery/, 'tagPapelaria'],
+    [/lua de mel|viagem|honeymoon|travel|trip/, 'tagLuaDeMel'],
+    [/documento|processo|certidão|junta|document|license/, 'tagDocumentos'],
+    [/cabel|maquilh|beleza|hair|makeup|beauty/, 'tagBeleza'],
+    [/transporte|carro|transport|car\b/, 'tagTransporte'],
+    [/decora|flor|decor|flower/, 'tagDecoracao'],
+    [/música|playlist|cântico|music|song/, 'tagMusica'],
+    [/cerimónia|igreja|celebrante|ceremony|church|officiant/, 'tagCerimonia'],
+    [/mesa|lugares|plano de sala|table|seating/, 'tagMesas'],
+    [/planeamento|coordenador|wedding planner|não negoci|planning|coordinator|non-negotiable/, 'tagPlaneamento']
+  ];
+  for(const [re,tag] of rules){ if(re.test(t)) return ta(tag); }
+  return ta('tagGeral');
+}
+const ROMAN_NUM = ['I','II','III','IV','V','VI','VII','VIII','IX','X','XI','XII'];
+// Quantas semanas antes do casamento cada fase devia estar concluída —
+// usado para sugerir um prazo automático a cada fase, com base na data real
+// do casamento. Vai ficando mais apertado perto do grande dia, tal como o
+// ritmo natural de organizar um casamento.
+const CHECKLIST_PHASE_WEEKS_BEFORE = [52, 44, 36, 30, 26, 22, 18, 14, 10, 6, 3, 1];
+function checklistPhaseDeadline(phaseIndex){
+  if(!weddingSettings.weddingDate) return null;
+  const weeks = CHECKLIST_PHASE_WEEKS_BEFORE[phaseIndex];
+  if(weeks===undefined) return null;
+  const wedding = new Date(weddingSettings.weddingDate+'T00:00:00');
+  const deadline = new Date(wedding.getTime() - weeks*7*86400000);
+  return deadline.toISOString().slice(0,10);
+}
+function viewChecklist(){
+  const CHECKLIST_PHASES = CHECKLIST_PHASES_LIST();
+  const WEDDING_DAY_CHECKLIST = WEDDING_DAY_CHECKLIST_LIST();
+  const totalTasks = CHECKLIST_PHASES.reduce((s,p)=>s+p.tasks.length,0) + WEDDING_DAY_CHECKLIST.length;
+  const doneTasks = Object.values(state.checklistDone).filter(Boolean).length + Object.values(state.dressChecklistDone).filter(Boolean).length;
+  const phasesDone = CHECKLIST_PHASES.filter(p=>p.tasks.every((task,i)=>state.checklistDone[p.id+'-'+i])).length;
+  const phasesPct = CHECKLIST_PHASES.length ? phasesDone/CHECKLIST_PHASES.length : 0;
+  const daysLeft = weddingSettings.weddingDate ? daysUntil(weddingSettings.weddingDate) : null;
+
+  const selectorHTML = CHECKLIST_PHASES.map((p,pi)=>`
+    <button class="phase-dot-btn ${openChecklistPhaseId===p.id?'active':''}" data-togglephase="${p.id}">
+      <span class="phase-dot-num">${pi+1}</span>
+      <span class="phase-dot-label">${ta('phaseLabel')(pi+1)}</span>
+    </button>`).join('');
+
+  const phasesHTML = CHECKLIST_PHASES.filter(p=>p.id===openChecklistPhaseId).map((p)=>{
+    const pi = CHECKLIST_PHASES.indexOf(p);
+    const doneCount = p.tasks.filter((task,i)=>state.checklistDone[p.id+'-'+i]).length;
+    const open = openChecklistPhaseId===p.id;
+    const deadline = checklistPhaseDeadline(pi);
+    const deadlineUrgency = (deadline && doneCount<p.tasks.length) ? dueUrgency(deadline) : '';
+    const tasksHTML = p.tasks.map((task,i)=>{
+      const key = p.id+'-'+i;
+      const done = !!state.checklistDone[key];
+      return `
+      <div class="task-row-v2 ${done?'done':''}" data-checktask="${key}">
+        <div class="check">${ICONS.check}</div>
+        <div class="task-row-text">${task.t}</div>
+        <span class="task-tag-pill">${guessTaskTag(task.t)}</span>
+        <span class="task-row-chev">${ICONS.chev}</span>
+      </div>`;
+    }).join('');
+    return `
+    <div class="phase-card-v2" data-phasecard="${p.id}">
+      <div class="phase-card-head" data-togglephase="${p.id}">
+        <div class="phase-roman">${ROMAN_NUM[pi]}</div>
+        <div class="phase-card-mid">
+          <div class="phase-card-title">${ta('phaseLabel')(pi+1)}</div>
+          <div class="phase-card-desc">${p.desc}</div>
+          ${deadline ? `<div style="margin-top:6px;"><span class="todo-cat-due-pill ${deadlineUrgency}">${doneCount<p.tasks.length ? ta('dueByLabel')(formatDateShortPT(deadline)) : ta('deadlineWasLabel')(formatDateShortPT(deadline))}</span></div>` : ''}
+        </div>
+        <div class="phase-card-right">
+          <span class="phase-card-count">${doneCount}/${p.tasks.length}</span>
+          <span class="chev-toggle ${open?'open':''}" style="display:inline-flex;">${ICONS.chev}</span>
+        </div>
+      </div>
+      ${open? `<div class="phase-card-tasks">${tasksHTML}</div>` : ''}
+    </div>`;
+  }).join('');
+
+  const noivaDone = WEDDING_DAY_CHECKLIST.filter((t,i)=>state.dressChecklistDone[i]).length;
+  const noivaOpen = openNoivaChecklist;
+  const noivaTasksHTML = WEDDING_DAY_CHECKLIST.map((t,i)=>{
+    const done = !!state.dressChecklistDone[i];
+    return `
+    <div class="task-row-v2 ${done?'done':''}" data-checkdaytask="${i}">
+      <div class="check">${ICONS.check}</div>
+      <div class="task-row-text">${t}</div>
+    </div>`;
+  }).join('');
+
+  const personalHTML = state.checklistPersonal.map((item,i)=>{
+    const status = normalizeTaskStatus(item);
+    return `
+    <div class="list-row guest-row" style="flex-wrap:wrap; row-gap:8px;">
+      <span class="task-status-dot" style="background:${TASK_STATUS[status].color};"></span>
+      <input type="text" class="title-input-inline" data-personaltext="${i}" value="${escapeHTML(item.text)}" style="flex:1; min-width:110px; ${status==='done'?'text-decoration:line-through; opacity:.6;':''}">
+      <select class="status-select" data-personalstatus="${i}">${taskStatusOptions(status)}</select>
+      <button class="remove-x" data-delpersonal="${i}">✕</button>
+    </div>`;
+  }).join('');
+
+  return `
+  ${pageHeader('checklist-back', 'Checklist', ta('checklistPageSubtitle'))}
+
+  <div class="check-progress-card">
+    <div class="ring-wrap" style="width:64px;height:64px;flex-shrink:0;">
+      ${donutSVG(phasesPct, 'var(--rust)', 64, 7)}
+      <div class="ring-center"><span class="num" style="font-size:15px;">${phasesDone}/${CHECKLIST_PHASES.length}</span></div>
+    </div>
+    <div class="check-progress-text">
+      <b>${ta('phasesCompletedLabel')}</b>
+      <span>${ta('planningPctSuffix')(Math.round(phasesPct*100))}</span>
+    </div>
+    <div class="check-progress-divider"></div>
+    <div class="check-progress-icon">${ICONS.calendar}</div>
+    <div class="check-progress-text">
+      <b>${daysLeft!==null ? ta('daysLeftLabel')(daysLeft) : '—'}</b>
+      <span>${ta('forBigDayLabel')}</span>
+    </div>
+  </div>
+
+  <div class="phase-selector-row">${selectorHTML}</div>
+
+  ${phasesHTML}
+
+  <div class="phase-card-v2">
+    <div class="phase-card-head" data-togglenoiva="1">
+      <div class="phase-roman" style="${chipStyle(2)}">${ICONS.dress}</div>
+      <div class="phase-card-mid">
+        <div class="phase-card-title">${ta('brideChecklistTitle')}</div>
+        <div class="phase-card-desc">${ta('brideChecklistDesc')}</div>
+      </div>
+      <div class="phase-card-right">
+        <span class="phase-card-count">${noivaDone}/${WEDDING_DAY_CHECKLIST.length}</span>
+        <span class="chev-toggle ${noivaOpen?'open':''}" style="display:inline-flex;">${ICONS.chev}</span>
+      </div>
+    </div>
+    ${noivaOpen? `<div class="phase-card-tasks">${noivaTasksHTML}</div>` : ''}
+  </div>
+
+  <div class="section-label">${ta('personalChecklistTitle')}</div>
+  <div class="list-group">
+    ${personalHTML || `<div class="empty-note">${ta('personalChecklistEmpty')}</div>`}
+    <div class="add-row" style="flex-wrap:wrap; row-gap:8px;">
+      <input type="text" placeholder="${ta('placeholderAddItem')}" id="add-personal-item" style="flex:1; min-width:110px;">
+      <select class="status-select" id="add-personal-status">${taskStatusOptions('todo')}</select>
+      <button class="add-circle" id="addbtn-personal">${ICONS.plus}</button>
+    </div>
+  </div>
+  `;
+}
+
+/* ============================================================
+   VIEW: Say Yes to the Dress
+============================================================ */
+function viewVestido(){
+  const visitsHTML = state.dressVisits.map(v=>`
+    <div class="guest-group-card">
+      <div class="guest-group-head" data-togglevisit="${v.id}" style="cursor:pointer;">
+        <div class="icon-chip" style="${chipStyle(2)}">${ICONS.dress}</div>
+        <div class="ggtitle">${v.loja||ta('noNameLabel')}<span class="phase-desc">${v.data? formatDatePT(v.data) : ta('noDateLabel')}</span></div>
+        <button class="visit-fav-btn ${state.favoriteVisitId===v.id?'active':''}" data-favvisit="${v.id}" title="${ta('titleMarkChosen')}">${ICONS.heart}</button>
+        <span class="chev-toggle ${openDressVisit[v.id]?'open':''}" style="display:inline-flex;">${ICONS.chev}</span>
+      </div>
+      ${openDressVisit[v.id] ? `
+      <div class="guest-group-body" style="padding:4px 16px 16px;">
+        ${v.morada? `<div class="visit-detail"><b>${ta('labelAddress')}</b> ${v.morada}</div>`:''}
+        ${v.convidados? `<div class="visit-detail"><b>${ta('labelWhoWent')}</b> ${v.convidados}</div>`:''}
+        ${v.notas? `<div class="visit-detail"><b>${ta('labelNotesColon')}</b> ${escapeHTML(v.notas)}</div>`:''}
+        <div style="display:flex; gap:10px; margin-top:10px;">
+          <button class="visit-action-btn" data-editvisit="${v.id}">${ICONS.pencil} ${ta('btnEdit')}</button>
+          <button class="visit-action-btn danger" data-delvisit="${v.id}">${ICONS.trash} ${ta('btnDelete')}</button>
+        </div>
+      </div>` : ''}
+    </div>`).join('');
+
+  const tiles = dressInspirations.map(img => `
+    <div class="insp-tile">
+      <img src="${img.dataUrl}" alt="" data-dresslightbox="${img.id}">
+      <button class="insp-remove" data-dressinsprm="${img.id}">✕</button>
+    </div>`).join('');
+
+  return `
+${pageHeader('vestido-back', 'Say Yes to the Dress')}
+
+  <div class="section-label-row">
+    <span class="section-label" style="margin:0;">${ta('storeVisitsTitle')}</span>
+    <button class="nav-action" id="add-visit-btn" style="width:28px;height:28px;">${ICONS.plus}</button>
+  </div>
+  ${visitsHTML || `<div class="empty-note" style="margin:0 16px 18px;">${ta('storeVisitsEmpty')}</div>`}
+
+  <div class="section-label">${ta('inspirationPhotosLabel')}</div>
+  <div class="insp-grid">
+    ${tiles}
+    ${dressInspirations.length<6 ? `
+    <button class="insp-add-tile" id="dress-insp-add-btn">
+      <span class="insp-add-icon">+</span>
+      <span class="insp-add-label">${ta('btnAdd')}</span>
+    </button>` : ''}
+  </div>
+  `;
+}
+
+/* ============================================================
+   VIEW: Fornecedores
+============================================================ */
+const SUPPLIER_STATUS = { get considerar(){return {label:ta('statusConsider'), color:'var(--gold)'};}, get contactado(){return {label:ta('statusContacted'), color:'var(--dusty-dark)'};}, get contratado(){return {label:ta('statusHired'), color:'var(--sage-dark)'};} };
+const EXPENSE_METHOD_LABELS = { get transferencia(){return ta('methodTransfer');}, get dinheiro(){return ta('methodCash');}, get cartao(){return ta('methodCard');}, mbway:'MB WAY' };
+function RECOMMENDED_SUPPLIERS_LIST(){ return [
+  { id:'rec1', name:'HappyBox - Photobooth para eventos', category:'entretenimento', catLabel:ta('recCatEntertainment'), phone:'+351 918 588 120', local:'Porto & Lisboa', site:'www.happybox.pt', email:'info@happybox.pt', logo:'logo-happybox.png' },
+  { id:'rec2', name:'DGPUBLICIDADE', category:'convites', catLabel:ta('recCatInvitations'), phone:'+351 910 661 210', local:'Porto', site:'www.dgpublicidade.com', email:'geral@dgpublicidade.com', logo:'logo-dgpublicidade.png' },
+  { id:'rec3', name:'JT Estudios', category:'foto', catLabel:ta('recCatPhotoVideo'), phone:'+351 935 211 420', local:'Porto', site:'www.jtestudios.com', email:'geral@jtestudios.com', logo:'logo-jtestudios.png' },
+  { id:'rec4', name:'Quinta Santo André', category:'quinta', catLabel:ta('recCatVenueCatering'), phone:'+351 965 488 896', local:'Barcelos', site:'www.quintasantoandre.com', email:'geral@quintasantoandre.com', logo:'logo-quintasantoandre.png' }
+]; }
+function supplierCardHTML(opts){
+  const { title, catLabel, phone, local, site, email, logo, price, badge, attrs, isAdd, clickable } = opts;
+  const notClickable = clickable === false;
+  return `
+  <div class="sup-card ${notClickable?'sup-card-static':''}" ${attrs||''}>
+    <div class="sup-thumb ${isAdd?'is-add':''}">${logo? `<img src="${logo}" alt="" class="sup-thumb-logo">` : (isAdd? ICONS.plus : ICONS.briefcase)}</div>
+    <div class="sup-info">
+      <div class="sup-cat">${escapeHTML(catLabel)}</div>
+      <div class="sup-name">${escapeHTML(title)}</div>
+      ${isAdd
+        ? `<div class="sup-meta-line">${ta('addSupplierHint')}</div>`
+        : `<div class="sup-meta">
+             ${phone?`<span class="sup-meta-item">${ICONS.phone} ${escapeHTML(phone)}</span>`:''}
+             ${local?`<span class="sup-meta-item">${ICONS.pin} ${escapeHTML(local)}</span>`:''}
+             ${price?`<span class="sup-meta-item">${ICONS.budget} ${escapeHTML(price)}</span>`:''}
+             ${site?`<span class="sup-meta-item">${ICONS.globe} ${escapeHTML(site)}</span>`:''}
+             ${email?`<span class="sup-meta-item">${ICONS.mail} ${escapeHTML(email)}</span>`:''}
+           </div>`}
+    </div>
+    ${badge?`<span class="sup-badge">${escapeHTML(badge)}</span>`:''}
+    ${notClickable?'':`<span class="sup-chev">${ICONS.chev}</span>`}
+  </div>`;
+}
+/* ============================================================
+   VIEW: To-do (categorias — músicas, igreja, geral)
+============================================================ */
+const TODO_ICONS = { music:'musicnote', church:'church', doc:'docnote' };
+function todoCatProgress(cat){
+  const total = cat.items.length;
+  const done = cat.items.filter(i=>i.done).length;
+  return { total, done };
+}
+function todoCatNextDue(cat){
+  const dues = cat.items.filter(i=>!i.done && i.due).map(i=>i.due).sort();
+  return dues.length ? dues[0] : null;
+}
+function todoCatStatus(cat){
+  const {total,done} = todoCatProgress(cat);
+  if(total===0 || done===0) return 'porfazer';
+  if(done===total) return 'concluidas';
+  return 'progresso';
+}
+function viewTodo(){
+  if(todoOpenCategoryId){
+    const cat = state.todoCategories.find(c=>c.id===todoOpenCategoryId);
+    if(cat) return viewTodoCategory(cat);
+    todoOpenCategoryId = null;
+  }
+  const q = todoQuery.toLowerCase();
+  const filtered = state.todoCategories.filter(cat=>{
+    if(todoFilter!=='todas' && todoCatStatus(cat)!==todoFilter) return false;
+    if(q && !cat.title.toLowerCase().includes(q) && !cat.label.toLowerCase().includes(q)) return false;
+    return true;
+  });
+  const rows = filtered.map(cat=>{
+    const {total,done} = todoCatProgress(cat);
+    const nextDue = todoCatNextDue(cat);
+    const nextDueUrgency = nextDue ? dueUrgency(nextDue) : '';
+    return `
+    <div class="todo-cat-card" data-opencat="${cat.id}">
+      <div class="todo-cat-icon">${ICONS[TODO_ICONS[cat.icon]]}</div>
+      <div class="todo-cat-mid">
+        <div class="todo-cat-toprow"><span class="todo-cat-label">${cat.label}</span><span class="todo-cat-count">${done}/${total}</span></div>
+        <div class="todo-cat-title">${cat.title}</div>
+        <div class="todo-cat-desc">${cat.desc} ${ICONS.chev}</div>
+        ${nextDue ? `<div style="margin-top:8px;"><span class="todo-cat-due-pill ${nextDueUrgency}">${ta('dueByLabel')(formatDateShortPT(nextDue))}</span></div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+
+  return `
+  ${pageHeader('todo-back', 'To-do', ta('todoPageSubtitle'), `<button class="nav-action" id="add-todocat-btn" style="flex-shrink:0;">${ICONS.plus}</button>`)}
+
+  <div class="sup-chip-row">
+    <button class="sup-chip ${todoFilter==='todas'?'active':''}" data-todofilter="todas">${ta('filterAll')}</button>
+    <button class="sup-chip ${todoFilter==='porfazer'?'active':''}" data-todofilter="porfazer">${ta('statusTodo')}</button>
+    <button class="sup-chip ${todoFilter==='progresso'?'active':''}" data-todofilter="progresso">${ta('statusInProgress')}</button>
+    <button class="sup-chip ${todoFilter==='concluidas'?'active':''}" data-todofilter="concluidas">${ta('filterDone')}</button>
+  </div>
+  <div class="search-bar" style="margin:0 16px 14px;">${ICONS.search}<input type="text" id="todo-search" placeholder="${ta('placeholderSearchGeneric')}" value="${todoQuery}"></div>
+
+  <div class="todo-cat-list">
+    ${rows || `<div class="empty-note" style="margin:0 16px;">${ta('emptyNothingFound')}</div>`}
+  </div>
+
+  <div class="section-label-v2">${ta('myNotesLabel')}</div>
+  <div class="todo-notes-card" id="open-todo-notes">
+    <div class="todo-notes-icon">${ICONS.pencil}</div>
+    <div class="todo-notes-text">${state.todoNotes ? state.todoNotes.slice(0,60)+(state.todoNotes.length>60?'…':'') : ta('placeholderWriteNotesHere')}</div>
+    ${ICONS.chev}
+  </div>
+  <div style="height:10px;"></div>
+  `;
+}
+function viewTodoCategory(cat){
+  const {total,done} = todoCatProgress(cat);
+  const rows = cat.items.map((item,i)=>{
+    const urgency = item.done ? '' : dueUrgency(item.due);
+    const dueClass = (!item.done && !item.due) ? 'nodate' : urgency;
+    return `
+    <div class="list-row guest-row ${item.done?'confirmed':''}" style="flex-wrap:wrap; row-gap:3px;">
+      <div class="check tappable" data-catitemcheck="${cat.id}|${i}">${ICONS.check}</div>
+      <div class="title tappable" data-catitemcheck="${cat.id}|${i}">${escapeHTML(item.text)}</div>
+      <button class="remove-x" data-catitemdel="${cat.id}|${i}">✕</button>
+      <div class="todo-item-due ${dueClass}">
+        <span>${item.due ? ta('untilWord') : (item.done ? ta('untilWord') : ta('noDueDateInsert'))}</span>
+        <input type="date" data-catitemdue="${cat.id}|${i}" value="${item.due||''}">
+        ${item.due ? `<input type="time" class="todo-item-time" data-catitemtime="${cat.id}|${i}" value="${item.time||''}">` : ''}
+        ${item.due ? `<button class="todo-item-due-clear" data-catitemdueclear="${cat.id}|${i}" title="${ta('titleRemoveDeadline')}">✕</button>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+  return `
+  ${pageHeader('todocat-back', cat.title)}
+  <div class="section-label">${cat.desc} (${done}/${total})</div>
+  <div class="list-group">
+    ${rows || `<div class="empty-note">${ta('emptyNoItems')}</div>`}
+    <div class="add-row" style="flex-wrap:wrap; row-gap:8px;">
+      <input type="text" placeholder="${ta('placeholderAddEllipsis')}" id="add-catitem-name" style="flex:1; min-width:110px;">
+      <span class="add-catitem-due-label">${ta('untilWord')}</span>
+      <input type="date" id="add-catitem-due" style="flex:0 0 auto; width:132px; border:none; background:rgba(20,20,20,0.06); border-radius:9px; padding:8px 10px; font-size:12.5px; font-family:inherit; color:var(--ink); outline:none;">
+      <button class="add-circle" id="addbtn-catitem" data-forcat="${cat.id}">${ICONS.plus}</button>
+    </div>
+  </div>
+  <div style="display:flex; gap:9px; margin:0 16px 20px;">
+    <button class="visit-action-btn" id="edit-todocat-btn" data-forcat="${cat.id}">${ICONS.pencil} ${ta('btnEditCategory')}</button>
+    <button class="visit-action-btn danger" id="del-todocat-btn" data-forcat="${cat.id}">${ICONS.trash} ${ta('btnDeleteCategory')}</button>
+  </div>
+  `;
+}
+
+
+/* ============================================================
+   VIEW: Lua-de-mel
+============================================================ */
+const HM_TYPES = ['Praia','Cidade','Montanha','Cruzeiro','Aventura','Relax'];
+const HM_TYPE_KEY = { Praia:'hmTypeBeach', Cidade:'hmTypeCity', Montanha:'hmTypeMountain', Cruzeiro:'hmTypeCruise', Aventura:'hmTypeAdventure', Relax:'hmTypeRelax' };
+function hmTypeLabel(t){ return HM_TYPE_KEY[t] ? ta(HM_TYPE_KEY[t]) : t; }
+function hmOptionSummary(o){
+  const bits = [];
+  if(o.days) bits.push(ta('daysLeftLabel')(o.days));
+  if(o.cities && o.cities.length) bits.push(o.cities.join(' → '));
+  return bits.join(' · ') || ta('weddingInfoUnset');
+}
+function hmOptionCardHTML(o){
+  return `
+  <div class="hm-idea-card ${o.favorite?'is-fav':''}" data-editidea="${o.id}">
+    <div class="hm-idea-photo" style="background:${HM_TYPE_GRAD[o.type]||'linear-gradient(140deg,#C9A480,#E7DCCB)'};">${ICONS[HM_TYPE_ICON[o.type]||'honeymoon']}</div>
+    <div class="hm-idea-mid">
+      <div class="hm-idea-name">${escapeHTML(o.name)}</div>
+      <div class="hm-idea-type">${hmOptionSummary(o)}</div>
+      ${o.budget ? `<div class="hm-idea-type">${fmtEUR(Number(o.budget))}</div>` : ''}
+    </div>
+    <div class="hm-idea-right">
+      <button class="hm-heart ${o.favorite?'active':''}" data-favoption="${o.id}">${ICONS.heart}</button>
+      <span class="hm-idea-chev">${ICONS.chev}</span>
+    </div>
+  </div>`;
+}
+const HM_TYPE_ICON = { Praia:'beach', Cidade:'city', Montanha:'mountain' };
+const HM_TYPE_GRAD = { Praia:'linear-gradient(140deg,#8FC1D4,#DCE9DE)', Cidade:'linear-gradient(140deg,#C9A480,#E7DCCB)', Montanha:'linear-gradient(140deg,#8FA88C,#D8E0D2)' };
+function viewLuademel(){
+  if(hmDraftOption) return viewLuademelOption(hmDraftOption);
+  if(hmOpenOptionId){
+    const o = state.honeymoon.options.find(x=>x.id===hmOpenOptionId);
+    if(o) return viewLuademelOption(o);
+    hmOpenOptionId = null;
+  }
+  const options = state.honeymoon.options;
+  const optionsHTML = options.map(hmOptionCardHTML).join('');
+  return `
+  ${pageHeader('luademel-back', ta('homeQuickHoneymoon'), ta('honeymoonSubtitle'), `<button class="nav-action" id="add-idea-btn">${ICONS.plus}</button>`)}
+
+  <div class="hm-banner">
+    <div class="hm-banner-icon">${ICONS.heart}</div>
+    <div>
+      <b>${ta('honeymoonBannerTitle')}</b>
+      <span>${ta('honeymoonBannerText')}</span>
+    </div>
+  </div>
+
+  <div class="hm-idea-list">
+    ${optionsHTML || `<div class="empty-note" style="margin:0 16px 18px;">${ta('honeymoonEmpty')}</div>`}
+  </div>
+  <div style="height:10px;"></div>
+  `;
+}
+function viewLuademelOption(o){
+  const citiesHTML = (o.cities||[]).map((c,i)=>`
+    <div class="list-row" style="padding:10px 14px;">
+      <span class="hm-city-num">${i+1}</span>
+      <div class="title" style="flex:1;">${escapeHTML(c)}</div>
+      <button class="remove-x" data-delcity="${i}">✕</button>
+    </div>`).join('');
+  return `
+  ${pageHeader('luademel-option-back', o.name||ta('newOptionTitle'))}
+
+  <div class="sheet-field" style="margin:0 16px 14px;"><label>${ta('labelOptionName')}</label><input type="text" id="hmo-name" value="${escapeHTML(o.name||'')}" placeholder="${ta('phOptionNameExample')}"></div>
+
+  <div class="sheet-field" style="margin:0 16px 14px;">
+    <label>${ta('labelType')}</label>
+    <div class="hm-theme-picker">
+      ${HM_TYPES.map(t=>`<button type="button" class="hm-theme-btn ${o.type===t?'active':''}" data-hmotype="${t}">${ICONS[HM_TYPE_ICON[t]||'honeymoon']}<span>${hmTypeLabel(t)}</span></button>`).join('')}
+    </div>
+  </div>
+
+  <div class="sheet-field" style="margin:0 16px 14px;">
+    <label>${ta('labelNumDays')}</label>
+    <div class="pct-stepper" style="width:140px;">
+      <button data-hmodays="-1">−</button>
+      <span class="pctval" id="hmo-days-val">${o.days||0}</span>
+      <button data-hmodays="1">+</button>
+    </div>
+  </div>
+
+  <div class="sheet-field" style="margin:0 16px 14px;"><label>${ta('labelEstimatedBudget')}</label><input type="number" min="0" id="hmo-budget" value="${o.budget||''}" placeholder="0"></div>
+
+  <div class="section-label">${ta('sectionItinerary')}</div>
+  <div class="list-group">
+    ${citiesHTML || `<div class="empty-note">${ta('emptyNoCities')}</div>`}
+    <div class="add-row">
+      <input type="text" placeholder="${ta('placeholderAddCity')}" id="add-hmo-city">
+      <button class="add-circle" id="addbtn-hmo-city">${ICONS.plus}</button>
+    </div>
+  </div>
+
+  <div class="sheet-field" style="margin:16px 16px 20px;"><label>${ta('labelNotesHelp')}</label><input type="text" id="hmo-notes" value="${escapeHTML(o.notes||'')}" placeholder="${ta('phNotesHelpExample')}"></div>
+
+  ${o.id ? `
+  <div class="section-label">${ta('sectionHoneymoonAttachments')}</div>
+  <p style="font-size:12.5px; color:var(--ink-soft); margin:0 16px 10px; line-height:1.5;">${ta('honeymoonAttachmentsIntroText')}</p>
+  <div class="list-group" style="margin:0 16px 6px;">
+    ${honeymoonAttachmentDocs(o.id).map(({d,i})=>hmAttachmentRowHTML(d,i)).join('') || `<div class="empty-note">${ta('honeymoonAttachmentsEmptyText')}</div>`}
+    <label class="add-row" for="hmo-attach-input" style="cursor:pointer;">
+      <span style="flex:1; color:var(--ink-soft); font-size:13.5px;">${ta('btnAddHoneymoonAttachment')}</span>
+      <span class="add-circle">${ICONS.plus}</span>
+    </label>
+  </div>
+  <input type="file" id="hmo-attach-input" accept="application/pdf,image/*" style="display:none;">
+  <div id="hmo-attach-status" class="empty-note" style="margin:0 16px 20px;"></div>
+  ` : `
+  <div class="section-label">${ta('sectionHoneymoonAttachments')}</div>
+  <div class="empty-note" style="margin:0 16px 20px;">${ta('honeymoonAttachmentsSaveFirstText')}</div>
+  `}
+
+  <button class="login-btn" id="save-hmoption-btn" style="width:calc(100% - 32px); max-width:none; margin:0 16px 12px;">${ICONS.check} ${ta('btnSave')}</button>
+  <button class="visit-action-btn danger" id="del-hmoption-btn" style="width:calc(100% - 32px); margin:0 16px 30px;">${ICONS.trash} ${ta('btnDeleteThisOption')}</button>
+  `;
+}
+
+function viewFornecedores(){
+  if(fornecedoresSubview === 'recomendados') return viewFornecedoresRecomendados();
+  if(fornecedoresSubview === 'detalhe') return viewFornecedorDetalhe();
+
+  const chips = [{id:'todos', label:ta('filterAllPlural')}].concat(state.categories.map(c=>({id:c.id, label:c.name})));
+  const chipsHTML = chips.map(c=>`
+    <button class="sup-chip ${supplierFilter===c.id?'active':''}" data-supfilter="${c.id}">${c.label}</button>`).join('');
+
+  return `
+  ${pageHeader('fornecedores-back', ta('homeQuickSuppliers'), ta('suppliersSubtitle'), `<button class="sup-add-btn" id="add-supplier-btn">${ICONS.plus}</button>`)}
+
+  <div class="search-bar" style="margin-bottom:12px; gap:8px;">
+    ${ICONS.search}<input type="text" id="sup-search" placeholder="${ta('placeholderSearchSuppliers')}" value="${supplierQuery}">
+    <button class="sup-filter-toggle" id="sup-filter-toggle" title="${ta('titleFilterByCategory')}">${ICONS.filter}</button>
+  </div>
+
+  <div class="sup-chip-row" id="sup-chip-row" style="${showFilterChips?'':'display:none;'}">${chipsHTML}</div>
+
+  <div class="sup-banner">
+    <div class="sup-banner-text">
+      <div class="sup-banner-eyebrow">${ta('recommendedEyebrow')}</div>
+      <div class="sup-banner-title">${ta('recommendedTitle')}</div>
+      <div class="sup-banner-sub">${ta('recommendedSub')}</div>
+      <button class="sup-banner-btn" id="toggle-recommended">${ta('btnViewAll')} ${ICONS.arrowright}</button>
+    </div>
+    <div class="sup-banner-art">${ICONS.flower}</div>
+  </div>
+
+  <div class="sup-section-head">
+    <span>${ta('yourSuppliersLabel')}</span>
+  </div>
+  ${state.suppliers.length ? supplierDetailNoticeHTML() : ''}
+  <div id="sup-results">${buildSupplierResults()}</div>
+  <div style="height:10px;"></div>
+  `;
+}
+function supplierDetailNoticeHTML(){
+  let dismissed = false;
+  try{ dismissed = localStorage.getItem('weddy-supplier-detail-notice-dismissed') === '1'; }catch(e){}
+  if(dismissed) return '';
+  return `
+  <div class="sup-notice" id="sup-detail-notice">
+    <div class="sup-notice-icon">${ICONS.docnote}</div>
+    <div class="sup-notice-text">${ta('supplierNoticeHtml')}</div>
+    <button class="remove-x" id="sup-detail-notice-close">✕</button>
+  </div>`;
+}
+function viewFornecedoresRecomendados(){
+  const groups = state.categories.map(cat=>{
+    const items = RECOMMENDED_SUPPLIERS_LIST().filter(r=>r.category===cat.id);
+    return { cat, items };
+  }).filter(g=>g.items.length);
+
+  const groupsHTML = groups.map(g=>`
+    <div class="sup-section-head"><span>${escapeHTML(g.cat.name)}</span></div>
+    <div class="sup-list">
+      ${g.items.map(r=>supplierCardHTML({
+        title: r.name,
+        catLabel: r.catLabel.toUpperCase(),
+        phone: r.phone,
+        local: r.local,
+        site: r.site,
+        email: r.email,
+        logo: r.logo,
+        clickable: false
+      })).join('')}
+    </div>`).join('');
+
+  return `
+  ${pageHeader('recomendados-back', ta('recommendedPageTitle'), ta('recommendedSub'))}
+  ${groupsHTML || `<div class="empty-note">${ta('emptyNoRecommendations')}</div>`}
+  <div style="height:10px;"></div>
+  `;
+}
+function buildSupplierResults(){
+  const q = supplierQuery.trim().toLowerCase();
+  const searching = q.length >= 2;
+  const mine = state.suppliers.filter(s=>{
+    if(supplierFilter!=='todos' && s.category!==supplierFilter) return false;
+    if(searching && !s.name.toLowerCase().includes(q)) return false;
+    return true;
+  });
+  const mineHTML = mine.map(s=>{
+    const cat = state.categories.find(c=>c.id===s.category);
+    return supplierCardHTML({
+      title: s.name,
+      catLabel: (cat? cat.name : '').toUpperCase(),
+      phone: s.contact,
+      local: '',
+      price: s.price,
+      site: s.website,
+      attrs: `data-opensupplier="${s.id}"`
+    });
+  }).join('');
+
+  return `
+  <div class="sup-list">
+    ${mineHTML}
+    ${searching && !mine.length ? `<div class="empty-note">${ta('emptyNoSupplierFound')}</div>` : ''}
+    ${supplierCardHTML({ title:ta('addSupplierLabel'), catLabel:ta('otherSupplierLabel'), isAdd:true, attrs:'id="add-supplier-card"' })}
+  </div>`;
+}
+function softUpdateFornecedores(){
+  const el = document.getElementById('sup-results');
+  if(!el) return;
+  el.innerHTML = buildSupplierResults();
+  bindSupplierResultHandlers();
+}
+function bindSupplierResultHandlers(){
+  const addSupplierCard = document.getElementById('add-supplier-card');
+  if(addSupplierCard) addSupplierCard.addEventListener('click', ()=>createSupplier());
+  document.querySelectorAll('[data-opensupplier]').forEach(row=>{
+    row.addEventListener('click', e=>{
+      if(e.target.closest('[data-delsupplier]')) return;
+      openSupplierDetail(e.currentTarget.dataset.opensupplier);
+    });
+  });
+  document.querySelectorAll('[data-delsupplier]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      e.stopPropagation();
+      if(confirm(ta('confirmDeleteSupplier'))){
+        state.suppliers = state.suppliers.filter(s=>s.id!==e.currentTarget.dataset.delsupplier);
+        render();
+      }
+    });
+  });
+}
+
+/* ============================================================
+   VIEW: Ficha completa do fornecedor
+   A foto e o contrato ficam só no telemóvel (localStorage), tal
+   como as fotos de inspiração — evita encher o documento
+   partilhado na Firestore com ficheiros grandes. Os restantes
+   dados (pagamentos, notas, etc.) fazem parte do state normal.
+============================================================ */
+const SUPPLIER_STATUS_BG = { considerar:'#F3E4DC', contactado:'#EAE6E0', contratado:'#E7EBE1' };
+// Fix 6 da auditoria pós-fixes (Set 2026): estas chaves eram globais ao
+// browser, não delimitadas por casamento. Num dispositivo partilhado
+// (ex.: computador de família, demo), trocar de conta podia mostrar a foto
+// do fornecedor de OUTRO casamento com o mesmo device. Agora incluímos o
+// currentWeddingId na própria chave.
+function supplierPhotoKey(id){ return 'weddy-sup-photo-'+(currentWeddingId||'none')+'-'+id; }
+function supplierContractKey(id){ return 'weddy-sup-contract-'+(currentWeddingId||'none')+'-'+id; }
+function getSupplierPhoto(id){ try{ return localStorage.getItem(supplierPhotoKey(id)); }catch(e){ return null; } }
+function setSupplierPhoto(id, dataUrl){ try{ localStorage.setItem(supplierPhotoKey(id), dataUrl); }catch(e){ showSaveToast(true); alert(ta('errStoragePhoto')); } }
+function removeSupplierPhoto(id){ try{ localStorage.removeItem(supplierPhotoKey(id)); }catch(e){} }
+function getSupplierContract(id){ try{ const raw = localStorage.getItem(supplierContractKey(id)); return raw ? JSON.parse(raw) : null; }catch(e){ return null; } }
+function setSupplierContract(id, obj){ try{ localStorage.setItem(supplierContractKey(id), JSON.stringify(obj)); }catch(e){ showSaveToast(true); alert(ta('errStorageContract')); } }
+function removeSupplierContract(id){ try{ localStorage.removeItem(supplierContractKey(id)); }catch(e){} }
+// Fase 6.1.1 — migração financeira idempotente dos pagamentos legados de
+// fornecedor. s.payments era um segundo livro de contas, independente do
+// Budget, o que permitia (e já aconteceu) o fornecedor mostrar um total
+// pago diferente do que o Budget contava para esse mesmo fornecedor. Esta
+// função corre uma vez por casamento (chamada a cada snapshot do
+// Firestore, tal como migrateCategoryDescriptions/migrateGuestCategories
+// já fazem): para cada pagamento antigo em s.payments sem despesa
+// correspondente já migrada, cria uma despesa em state.expenses ligada ao
+// fornecedor (supplierId), marcada com legacyPaymentId (o id do pagamento
+// de origem) e migratedFromSupplierPayment:true. Verificar se já existe
+// uma despesa com aquele legacyPaymentId é o que torna a migração segura
+// de correr repetidamente — nunca duplica. s.payments NUNCA é apagado nem
+// alterado por esta função: fica só como registo de
+// compatibilidade/auditoria do que já foi migrado. Devolve true se algo
+// foi migrado nesta chamada (para quem chamar saber se deve gravar).
+function migrateLegacySupplierPayments(){
+  if(!state || !Array.isArray(state.suppliers) || !Array.isArray(state.expenses)) return false;
+  let migrated = false;
+  state.suppliers.forEach(s=>{
+    (s.payments||[]).forEach(p=>{
+      const already = state.expenses.some(e=>e.legacyPaymentId===p.id);
+      if(already) return;
+      state.expenses.unshift({
+        id: 'exp'+Date.now()+Math.random().toString(36).slice(2,6),
+        date: p.date || '', desc: ta('autoPaymentDesc')(s.name),
+        value: Number(p.amount)||0, paid: Number(p.amount)||0,
+        category: s.category, dueDate:'', method:'',
+        supplierId: s.id, legacyPaymentId: p.id, migratedFromSupplierPayment: true
+      });
+      migrated = true;
+    });
+  });
+  // Verificação automática: depois da migração, o total pago de cada
+  // fornecedor (agora só a partir de state.expenses) tem de bater certo
+  // com a soma de todos os pagamentos que alguma vez existiram em
+  // s.payments — se não bater, fica um aviso na consola (nunca bloqueia
+  // a app nem impede o uso, é só uma rede de segurança para detetar).
+  if(migrated){
+    state.suppliers.forEach(s=>{
+      const legacyTotal = (s.payments||[]).reduce((sum,p)=>sum+(Number(p.amount)||0),0);
+      const migratedTotal = state.expenses.filter(e=>e.supplierId===s.id && e.migratedFromSupplierPayment).reduce((sum,e)=>sum+(Number(e.paid)||0),0);
+      if(Math.abs(legacyTotal - migratedTotal) > 0.001){
+        console.error('[Weddy] Migração 6.1.1: total pago do fornecedor', s.id, 'não bate certo depois de migrar.', { legacyTotal, migratedTotal });
+      }
+    });
+  }
+  return migrated;
+}
+// Fase 6.1.1 — depois da migração acima, state.expenses passa a ser
+// realmente a ÚNICA fonte de verdade para dinheiro: já não somamos
+// s.payments aqui (todos os pagamentos que lá existirem já têm, ou vão
+// ter no próximo load, uma despesa equivalente). s.payments deixa de ser
+// lido pela UI — fica só como histórico bruto de compatibilidade.
+function supplierPaidTotal(s){
+  return (state.expenses||[]).filter(e=>e.supplierId===s.id).reduce((sum,e)=>sum+(Number(e.paid)||0),0);
+}
+// Fase 9.2 (Google Calendar — prazos) — a sincronização de "prazos de
+// pagamento" precisa de um identificador ESTÁVEL por despesa, para poder
+// atualizar/apagar o evento certo no Google quando a despesa muda, sem
+// nunca duplicar. As despesas sempre foram identificadas só pela posição
+// no array (ver data-exp="dueDate|${i}" em toda a UI) — isso continua a
+// funcionar na perfeição para a UI, por isso não mexemos nisso; só
+// acrescentamos um "id" por baixo, tal como já existe em state.daySchedule
+// e state.dressVisits. Idempotente: só atribui id a quem ainda não tem
+// (despesas criadas antes desta versão), nunca muda os já existentes.
+function migrateExpenseIds(){
+  if(!state || !Array.isArray(state.expenses)) return false;
+  let migrated = false;
+  state.expenses.forEach(e=>{
+    if(!e.id){
+      e.id = 'exp'+Date.now()+Math.random().toString(36).slice(2,6);
+      migrated = true;
+    }
+  });
+  return migrated;
+}
+// Lista de pagamentos para o ecrã de detalhe do fornecedor — lida só de
+// state.expenses (fonte única). migrated:true assinala um pagamento que
+// veio da migração 6.1.1 (para a UI poder dar uma pista visual discreta).
+function supplierCombinedPayments(s){
+  return (state.expenses||[])
+    .map((e,idx)=>({e,idx}))
+    .filter(({e})=>e.supplierId===s.id)
+    .map(({e,idx})=>({ date:e.date, amount:Number(e.paid)||0, id:String(idx), desc:e.desc, migrated: !!e.migratedFromSupplierPayment }))
+    .sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+}
+// Fase 6.1 — contrato do fornecedor: passa a ser guardado no Firestore
+// (via state.weddingDocuments, reaproveitando exatamente a mesma
+// infraestrutura dos Documentos gerais: Storage + extractPdfText), em vez
+// de ficar só em localStorage. Isto resolve, ao mesmo tempo, a
+// sincronização entre dispositivos e a pesquisa pelo Assistente
+// (searchWeddingDocuments já procura em todos os state.weddingDocuments).
+// getSupplierContract/localStorage fica como fallback só-leitura para
+// contratos carregados antes desta alteração — nunca é apagado sozinho.
+function supplierContractDoc(id){
+  return (state.weddingDocuments||[]).find(d=>d.supplierId===id) || null;
+}
+async function uploadSupplierContract(supplierId, file){
+  if(!file) return null;
+  const isPdf = file.type === 'application/pdf';
+  const isImage = file.type && file.type.startsWith('image/');
+  if(!isPdf && !isImage) return null;
+  let text = '';
+  try{ if(isPdf) text = await extractPdfText(file); }catch(e){ text = ''; }
+  let storagePath = null;
+  if(storage && FIREBASE_READY && auth && auth.currentUser && currentWeddingId){
+    storagePath = `documents/${currentWeddingId}/${Date.now()}_${file.name}`;
+    try{ await storage.ref(storagePath).put(file); }catch(err){ storagePath = null; }
+  }
+  if(!state.weddingDocuments) state.weddingDocuments = [];
+  // Substitui um contrato Firestore anterior do mesmo fornecedor (mantém
+  // só um contrato "ativo" por fornecedor nesta lista; não mexe no
+  // fallback localStorage).
+  const prev = state.weddingDocuments.find(d=>d.supplierId===supplierId);
+  if(prev){
+    if(prev.storagePath && storage) storage.ref(prev.storagePath).delete().catch(()=>{});
+    state.weddingDocuments = state.weddingDocuments.filter(d=>d!==prev);
+  }
+  const doc = { name:file.name, text, storagePath, uploadedAt:new Date().toISOString(), supplierId };
+  state.weddingDocuments.push(doc);
+  return doc;
+}
+// Anexos na Lua de Mel (Set 2026, pedido direto da Rita): reservas de
+// hotéis, voos, vouchers, passaportes/documentos, PDFs, confirmações de
+// reserva — tudo ligado a uma hipótese de lua-de-mel específica. Reaproveita
+// por completo a mesma infraestrutura dos Documentos gerais/contrato de
+// fornecedor acima (state.weddingDocuments + Storage em
+// documents/{weddingId}/…), só com "honeymoonOptionId" em vez de
+// "supplierId" a marcar o dono. Ao contrário do contrato de fornecedor (só
+// um por fornecedor, substituído a cada novo upload), aqui podem existir
+// vários anexos por hipótese — nunca substitui os anteriores. E, por viverem
+// no mesmo array que todos os outros documentos, entram automaticamente na
+// pesquisa do Weddy Brain (searchWeddingDocuments) sem precisar de nenhuma
+// alteração lá.
+function honeymoonAttachmentDocs(optionId){
+  return (state.weddingDocuments||[]).map((d,i)=>({d,i})).filter(({d})=>d.honeymoonOptionId===optionId);
+}
+async function uploadHoneymoonAttachment(optionId, file){
+  if(!file) return null;
+  const isPdf = file.type === 'application/pdf';
+  const isImage = file.type && file.type.startsWith('image/');
+  if(!isPdf && !isImage) return null;
+  if(file.size > 15*1024*1024) return null;
+  let text = '';
+  try{ if(isPdf) text = await extractPdfText(file); }catch(e){ text = ''; }
+  let storagePath = null;
+  if(storage && FIREBASE_READY && auth && auth.currentUser && currentWeddingId){
+    storagePath = `documents/${currentWeddingId}/${Date.now()}_${file.name}`;
+    try{ await storage.ref(storagePath).put(file); }catch(err){ storagePath = null; }
+  }
+  if(!state.weddingDocuments) state.weddingDocuments = [];
+  const doc = { name:file.name, text, storagePath, uploadedAt:new Date().toISOString(), honeymoonOptionId:optionId };
+  state.weddingDocuments.push(doc);
+  return doc;
+}
+function hmAttachmentRowHTML(d, i){
+  // Só PDF ou imagem podem chegar aqui (ver uploadHoneymoonAttachment), por
+  // isso basta verificar a extensão ".pdf" para escolher o ícone certo.
+  const isImg = !/\.pdf$/i.test(d.name||'');
+  return `
+  <div class="list-row tappable" style="align-items:center; cursor:pointer;" data-openattach="${i}">
+    <div class="def-row-icon" style="${chipStyle(4)}">${isImg ? ICONS.camera : (ICONS.docnote||ICONS.checklist)}</div>
+    <div class="def-row-mid">
+      <div class="def-row-title">${escapeHTML(d.name)}</div>
+    </div>
+    <button class="child-remove" data-delhmattach="${i}">×</button>
+  </div>`;
+}
+function openSupplierDetail(id){
+  closeAllSheets();
+  openSupplierDetailId = id;
+  fornecedoresSubview = 'detalhe';
+  _origRender();
+}
+function viewFornecedorDetalhe(){
+  const s = state.suppliers.find(x=>x.id===openSupplierDetailId);
+  if(!s){ fornecedoresSubview = 'lista'; openSupplierDetailId = null; return viewFornecedores(); }
+  const statusInfo = SUPPLIER_STATUS[s.status] || SUPPLIER_STATUS.considerar;
+  const photo = getSupplierPhoto(s.id);
+  const syncedContract = supplierContractDoc(s.id);
+  const legacyContract = syncedContract ? null : getSupplierContract(s.id);
+  const contract = syncedContract || legacyContract;
+  const paid = supplierPaidTotal(s);
+  const total = Number(s.valorTotal)||0;
+  const rest = Math.max(0, total-paid);
+  const pct = total ? Math.min(100, Math.round(paid/total*100)) : 0;
+  const paymentsHTML = supplierCombinedPayments(s).map(p=>`
+    <div class="supd-pay-row">
+      <div class="title" style="flex:1; font-size:13.5px; color:var(--ink);">${p.date?formatDateShortPT(p.date):ta('noDateLabel')}${p.desc?` · ${escapeHTML(p.desc)}`:''}${p.migrated?` · ${ta('legacyPaymentTag')}`:''}</div>
+      <div class="amount">${fmtEUR(p.amount)}</div>
+      <button class="remove-x" data-delsuppay="${p.id}">✕</button>
+    </div>`).join('');
+
+  return `
+  ${pageHeader('fornecedor-detail-back', ta('supplierDetailTitle'))}
+
+  <div class="supd-card">
+    <div class="supd-photo-wrap" id="supd-photo-btn">
+      ${photo ? `<img src="${photo}" class="supd-photo" alt="">` : `<div class="supd-photo-fallback">${ICONS.briefcase}</div>`}
+      <div class="supd-photo-edit">${ICONS.camera}</div>
+    </div>
+    <input type="file" id="supd-photo-input" accept="image/*" style="display:none;">
+    <div class="supd-info">
+      <input type="text" id="supd-name-input" class="supd-name-input" value="${escapeHTML(s.name)}" placeholder="${ta('phSupplierName')}">
+      <select id="supd-cat-select" class="supd-cat-select">
+        ${state.categories.map(c=>`<option value="${c.id}" ${c.id===s.category?'selected':''}>${escapeHTML(c.name)}</option>`).join('')}
+      </select>
+    </div>
+    <select id="supd-status-select" class="supd-status-select" style="background:${SUPPLIER_STATUS_BG[s.status]||'#F3E4DC'}; color:${statusInfo.color};">
+      <option value="considerar" ${s.status==='considerar'?'selected':''}>${ta('statusConsider')}</option>
+      <option value="contactado" ${s.status==='contactado'?'selected':''}>${ta('statusContacted')}</option>
+      <option value="contratado" ${s.status==='contratado'?'selected':''}>${ta('statusHired')}</option>
+    </select>
+  </div>
+
+  <div class="supd-field-card">
+    <div class="supd-field-2col" style="margin-bottom:12px;">
+      <div><label>${ta('labelPhone')}</label><input type="text" id="supd-phone" value="${escapeHTML(s.contact||'')}" placeholder="+351 912 345 678"></div>
+      <div><label>${ta('labelPrice')}</label><input type="text" id="supd-price" value="${escapeHTML(s.price||'')}" placeholder="${ta('phPriceExample')}"></div>
+    </div>
+    <div class="supd-field-2col">
+      <div><label>${ta('labelEmail')}</label><input type="email" id="supd-email" value="${escapeHTML(s.email||'')}" placeholder="geral@fornecedor.pt"></div>
+      <div><label>${ta('labelWebsite')}</label><input type="text" id="supd-website" value="${escapeHTML(s.website||'')}" placeholder="www.fornecedor.pt"></div>
+    </div>
+  </div>
+
+  <div class="supd-contact-row">
+    <button class="supd-contact-btn ${s.contact?'':'disabled'}" ${s.contact?'data-supd-call':'disabled'}>${ICONS.phone}<span>${ta('labelPhone')}</span></button>
+    <button class="supd-contact-btn ${s.email?'':'disabled'}" ${s.email?'data-supd-email':'disabled'}>${ICONS.mail}<span>${ta('labelEmail')}</span></button>
+    <button class="supd-contact-btn ${s.website?'':'disabled'}" ${s.website?'data-supd-site':'disabled'}>${ICONS.globe}<span>${ta('labelWebsite')}</span></button>
+    <button class="supd-contact-btn" id="supd-contact-contract">${ICONS.docnote}<span>${ta('sectionContract')}</span></button>
+  </div>
+
+  <div class="section-label">${ta('sectionPayments')}</div>
+  <div class="supd-pay-card">
+    <div class="sheet-field" style="margin-bottom:12px;"><label>${ta('labelTotalContractedValue')}</label><input type="number" min="0" id="supd-valortotal" value="${s.valorTotal||''}" placeholder="Ex: 2500"></div>
+    <div class="supd-pay-top">
+      <div><div class="supd-pay-paid" id="supd-paid-val">${fmtEUR(paid)}</div><div class="supd-pay-pct">${ta('lblPaidLower')}</div></div>
+      <div class="supd-pay-rest"><span id="supd-rest-val">${fmtEUR(rest)}</span><br>${ta('lblToPay').toLowerCase()}</div>
+    </div>
+    <div class="supd-pay-bar-track"><div class="supd-pay-bar-fill" id="supd-pay-bar" style="width:${pct}%;"></div></div>
+    <div class="supd-pay-pct" id="supd-pay-pct-label">${ta('pctPaidSuffix')(pct)}</div>
+    <div class="supd-pay-list" id="supd-pay-list">${paymentsHTML || `<div class="empty-note" style="margin:10px 0 0;">${ta('emptyNoPayments')}</div>`}</div>
+    <div class="supd-pay-addrow">
+      <span class="supd-pay-date-label">${ta('labelDate')}</span>
+      <input type="date" id="supd-pay-date">
+      <input type="number" min="0" id="supd-pay-amount" placeholder="${ta('placeholderValueEuro')}">
+      <button class="add-circle" id="supd-pay-add">${ICONS.plus}</button>
+    </div>
+  </div>
+
+  <div class="supd-field-card">
+    <div class="supd-field-2col">
+      <div><label>${ta('labelNextPayment')}</label><input type="date" id="supd-nextpaydate" value="${s.nextPaymentDate||''}"></div>
+      <div><label>${ta('valueEurLabel')}</label><input type="number" min="0" id="supd-nextpayamount" value="${s.nextPaymentAmount||''}" placeholder="${ta('phValueExample600')}"></div>
+    </div>
+  </div>
+
+  <div class="section-label">${ta('sectionContract')}</div>
+  <div class="supd-contract-row" id="supd-contract-row">
+    <div class="supd-contract-icon">${ICONS.docnote}</div>
+    <div class="supd-contract-text">
+      <div class="supd-contract-name">${contract? escapeHTML(contract.name) : ta('addContractLabel')}</div>
+      <div class="supd-contract-sub">${contract? (syncedContract? `${ta('tapToView')} · ${ta('contractSyncedNote')}` : `${ta('tapToView')} · ${ta('contractLocalOnlyNote')}`) : ta('contractHint')}</div>
+    </div>
+    ${contract? `<button class="remove-x" id="supd-contract-remove">✕</button>` : ICONS.chev}
+  </div>
+  <div id="supd-contract-status" class="empty-note" style="margin:-6px 16px 12px;"></div>
+  <input type="file" id="supd-contract-input" accept="application/pdf,image/*" style="display:none;">
+
+  <div class="section-label">${ta('sectionNotes')}</div>
+  <div class="supd-field-card"><label>${ta('sectionNotes')}</label><textarea id="supd-notas" placeholder="${ta('phSupplierNotesExample')}">${escapeHTML(s.notas||'')}</textarea></div>
+
+  <div class="section-label">${ta('sectionNextStep')}</div>
+  <div class="supd-field-card"><label>${ta('labelWhatIsLeft')}</label><input type="text" id="supd-nextstep" value="${escapeHTML(s.nextStep||'')}" placeholder="${ta('phNextStepExample')}"></div>
+
+  <div class="section-label">${ta('sectionLastContact')}</div>
+  <div class="supd-field-card"><label>${ta('labelLastContactDate')}</label><input type="date" id="supd-lastcontact" value="${s.lastContact||''}"></div>
+
+  <div style="display:flex; gap:9px; margin:20px 16px 30px;">
+    <button class="visit-action-btn danger" id="supd-delete-btn" style="flex:none; width:100%;">${ICONS.trash} ${ta('btnDeleteSupplier')}</button>
+  </div>
+  `;
+}
+function softUpdateSupplierPayments(){
+  const s = state.suppliers.find(x=>x.id===openSupplierDetailId);
+  if(!s) return;
+  const paid = supplierPaidTotal(s);
+  const total = Number(s.valorTotal)||0;
+  const rest = Math.max(0, total-paid);
+  const pct = total ? Math.min(100, Math.round(paid/total*100)) : 0;
+  const paidEl = document.getElementById('supd-paid-val'); if(paidEl) paidEl.textContent = fmtEUR(paid);
+  const restEl = document.getElementById('supd-rest-val'); if(restEl) restEl.textContent = fmtEUR(rest);
+  const barEl = document.getElementById('supd-pay-bar'); if(barEl) barEl.style.width = pct+'%';
+  const pctEl = document.getElementById('supd-pay-pct-label'); if(pctEl) pctEl.textContent = ta('pctPaidSuffix')(pct);
+  pushRemote();
+}
+function bindFornecedorDetalheHandlers(){
+  const backBtn = document.getElementById('fornecedor-detail-back');
+  if(backBtn) backBtn.addEventListener('click', ()=>{ fornecedoresSubview = 'lista'; openSupplierDetailId = null; _origRender(); });
+
+  const s = state.suppliers.find(x=>x.id===openSupplierDetailId);
+  if(!s) return;
+
+  const photoBtn = document.getElementById('supd-photo-btn');
+  const photoInput = document.getElementById('supd-photo-input');
+  if(photoBtn && photoInput){
+    photoBtn.addEventListener('click', ()=>photoInput.click());
+    photoInput.addEventListener('change', async (e)=>{
+      const file = e.target.files && e.target.files[0];
+      if(!file) return;
+      try{
+        const dataUrl = await resizeImageFile(file, 500, 0.8);
+        setSupplierPhoto(s.id, dataUrl);
+        _origRender();
+      }catch(err){}
+    });
+  }
+
+  document.querySelectorAll('[data-supd-call]').forEach(b=>b.addEventListener('click', ()=>{ window.location.href = 'tel:'+s.contact.replace(/\s+/g,''); }));
+  document.querySelectorAll('[data-supd-email]').forEach(b=>b.addEventListener('click', ()=>{ window.location.href = 'mailto:'+s.email; }));
+  document.querySelectorAll('[data-supd-site]').forEach(b=>b.addEventListener('click', ()=>{
+    let url = s.website.trim();
+    if(!/^https?:\/\//i.test(url)) url = 'https://'+url;
+    window.open(url, '_blank');
+  }));
+
+  const nameInput = document.getElementById('supd-name-input');
+  if(nameInput) nameInput.addEventListener('change', e=>{
+    const val = e.target.value.trim();
+    s.name = val || ta('defaultNewSupplierName');
+    e.target.value = s.name;
+    pushRemote(true);
+  });
+  const catSelect = document.getElementById('supd-cat-select');
+  if(catSelect) catSelect.addEventListener('change', e=>{ s.category = e.target.value; pushRemote(true); });
+  const statusSelect = document.getElementById('supd-status-select');
+  if(statusSelect) statusSelect.addEventListener('change', e=>{
+    s.status = e.target.value;
+    const info = SUPPLIER_STATUS[s.status] || SUPPLIER_STATUS.considerar;
+    e.target.style.background = SUPPLIER_STATUS_BG[s.status] || '#F3E4DC';
+    e.target.style.color = info.color;
+    pushRemote(true);
+  });
+  const softUpdateSupplierContactButtons = ()=>{ render(); };
+  const phoneInput = document.getElementById('supd-phone');
+  if(phoneInput) phoneInput.addEventListener('change', e=>{ s.contact = e.target.value.trim(); softUpdateSupplierContactButtons(); });
+  const priceInput = document.getElementById('supd-price');
+  if(priceInput) priceInput.addEventListener('change', e=>{ s.price = e.target.value.trim(); pushRemote(true); });
+  const emailInput = document.getElementById('supd-email');
+  if(emailInput) emailInput.addEventListener('change', e=>{ s.email = e.target.value.trim(); softUpdateSupplierContactButtons(); });
+  const websiteInput = document.getElementById('supd-website');
+  if(websiteInput) websiteInput.addEventListener('change', e=>{ s.website = e.target.value.trim(); softUpdateSupplierContactButtons(); });
+
+  const contractRow = document.getElementById('supd-contract-row');
+  const contractInput = document.getElementById('supd-contract-input');
+  const contractQuickBtn = document.getElementById('supd-contact-contract');
+  const openOrPickContract = async ()=>{
+    const synced = supplierContractDoc(s.id);
+    if(synced && synced.storagePath && storage){
+      try{ const url = await storage.ref(synced.storagePath).getDownloadURL(); previewAttachment(url, synced.name); return; }catch(err){}
+    }
+    const legacy = synced ? null : getSupplierContract(s.id);
+    if(legacy && legacy.dataUrl){ previewAttachment(legacy.dataUrl, legacy.name); return; }
+    if(contractInput) contractInput.click();
+  };
+  if(contractRow) contractRow.addEventListener('click', (e)=>{ if(e.target.closest('#supd-contract-remove')) return; openOrPickContract(); });
+  if(contractQuickBtn) contractQuickBtn.addEventListener('click', openOrPickContract);
+  const contractRemove = document.getElementById('supd-contract-remove');
+  if(contractRemove) contractRemove.addEventListener('click', e=>{
+    e.stopPropagation();
+    if(confirm(ta('confirmRemoveContract'))){
+      const synced = supplierContractDoc(s.id);
+      if(synced){
+        if(synced.storagePath && storage) storage.ref(synced.storagePath).delete().catch(()=>{});
+        state.weddingDocuments = (state.weddingDocuments||[]).filter(d=>d!==synced);
+        pushRemote(true);
+      }else{
+        removeSupplierContract(s.id);
+      }
+      _origRender();
+    }
+  });
+  if(contractInput) contractInput.addEventListener('change', async (e)=>{
+    const file = e.target.files && e.target.files[0];
+    if(!file) return;
+    const contractStatusEl = document.getElementById('supd-contract-status');
+    // Pedido (Set 2026): esta zona não tinha NENHUMA indicação de que o
+    // contrato estava a subir — quem tocasse não sabia se tinha resultado,
+    // e podia tocar outra vez sem querer.
+    if(contractStatusEl) contractStatusEl.innerHTML = `<span class="upload-status-row"><span class="upload-spin"></span>${escapeHTML(ta('statusUploadingFile')(file.name))}</span>`;
+    if(contractRow) contractRow.style.cssText += 'pointer-events:none; opacity:.6;';
+    try{
+      const doc = await uploadSupplierContract(s.id, file);
+      if(!doc){
+        // Fix 6 da auditoria RGPD/Segurança (Set 2026): antes, aqui,
+        // guardava-se o contrato em localStorage — fora do Firestore/
+        // Storage, sem controlo de acesso nem cifra, ligado ao dispositivo
+        // (risco em computador partilhado). uploadSupplierContract só
+        // devolve null quando o tipo de ficheiro não é PDF nem imagem (o
+        // seletor de ficheiros já filtra para isso, por isso deve ser raro
+        // na prática) — nesse caso, avisa e não guarda nada em vez de usar
+        // o fallback inseguro.
+        alert(ta('errContractUnsupportedType') || 'Tipo de ficheiro não suportado. Usa um PDF ou uma imagem.');
+        if(contractStatusEl) contractStatusEl.textContent = '';
+        if(contractRow) contractRow.style.cssText = contractRow.style.cssText.replace('pointer-events:none; opacity:.6;','');
+        return;
+      }
+      pushRemote(true);
+      _origRender();
+    }catch(err){
+      if(contractStatusEl) contractStatusEl.textContent = ta('statusPdfReadError');
+      if(contractRow) contractRow.style.cssText = contractRow.style.cssText.replace('pointer-events:none; opacity:.6;','');
+    }
+    e.target.value = '';
+  });
+
+  const valorTotalInp = document.getElementById('supd-valortotal');
+  if(valorTotalInp) valorTotalInp.addEventListener('input', e=>{ s.valorTotal = Math.max(0, Number(e.target.value)||0); softUpdateSupplierPayments(); });
+
+  // Fase 6.1 / 6.1.1 — Budget é a fonte única de verdade para dinheiro: um
+  // novo pagamento a um fornecedor é criado diretamente como despesa do
+  // Budget, ligada por supplierId. s.payments deixou de ser lido pela UI
+  // (ver supplierPaidTotal/supplierCombinedPayments) — fica só como
+  // histórico bruto de compatibilidade, e os pagamentos que lá existirem
+  // são migrados automaticamente para cá por migrateLegacySupplierPayments.
+  const payAddBtn = document.getElementById('supd-pay-add');
+  if(payAddBtn) payAddBtn.addEventListener('click', ()=>{
+    const dateEl = document.getElementById('supd-pay-date');
+    const amountEl = document.getElementById('supd-pay-amount');
+    const amount = Number(amountEl.value);
+    if(!amount || amount<=0){ flagRequiredField(amountEl); return; }
+    const date = dateEl.value || new Date().toISOString().slice(0,10);
+    state.expenses.unshift({
+      id: 'exp'+Date.now()+Math.random().toString(36).slice(2,6),
+      date, desc: ta('autoPaymentDesc')(s.name), value: amount, paid: amount,
+      category: s.category, dueDate:'', method:'', supplierId: s.id
+    });
+    render();
+    pushRemote(true);
+  });
+  document.querySelectorAll('[data-delsuppay]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      const idx = Number(e.currentTarget.dataset.delsuppay);
+      const exp = state.expenses[idx];
+      // Se esta despesa veio da migração de um pagamento antigo, remove
+      // também esse pagamento de s.payments — senão a próxima migração
+      // (idempotente por natureza) recriava-a sozinha, "ressuscitando" um
+      // pagamento que a pessoa acabou de apagar de propósito.
+      if(exp && exp.legacyPaymentId){
+        s.payments = (s.payments||[]).filter(p=>p.id!==exp.legacyPaymentId);
+      }
+      state.expenses.splice(idx,1);
+      render();
+      pushRemote(true);
+    });
+  });
+
+  const nextPayDate = document.getElementById('supd-nextpaydate');
+  if(nextPayDate) nextPayDate.addEventListener('change', e=>{ s.nextPaymentDate = e.target.value; pushRemote(true); });
+  const nextPayAmount = document.getElementById('supd-nextpayamount');
+  if(nextPayAmount) nextPayAmount.addEventListener('change', e=>{ s.nextPaymentAmount = Math.max(0, Number(e.target.value)||0); pushRemote(true); });
+
+  const notasEl = document.getElementById('supd-notas');
+  if(notasEl) notasEl.addEventListener('change', e=>{ s.notas = e.target.value; pushRemote(true); });
+  const nextStepEl = document.getElementById('supd-nextstep');
+  if(nextStepEl) nextStepEl.addEventListener('change', e=>{ s.nextStep = e.target.value.trim(); pushRemote(true); });
+  const lastContactEl = document.getElementById('supd-lastcontact');
+  if(lastContactEl) lastContactEl.addEventListener('change', e=>{ s.lastContact = e.target.value; pushRemote(true); });
+
+  const deleteBtn = document.getElementById('supd-delete-btn');
+  if(deleteBtn) deleteBtn.addEventListener('click', ()=>{
+    if(confirm(ta('confirmDeleteSupplier'))){
+      state.suppliers = state.suppliers.filter(x=>x.id!==s.id);
+      removeSupplierPhoto(s.id);
+      removeSupplierContract(s.id);
+      // Também remove o contrato sincronizado no Firestore, se existir.
+      // As despesas já ligadas a este fornecedor (Budget) não são
+      // apagadas — continuam a fazer parte do histórico do orçamento.
+      const synced = supplierContractDoc(s.id);
+      if(synced){
+        if(synced.storagePath && storage) storage.ref(synced.storagePath).delete().catch(()=>{});
+        state.weddingDocuments = (state.weddingDocuments||[]).filter(d=>d!==synced);
+      }
+      fornecedoresSubview = 'lista';
+      openSupplierDetailId = null;
+      render();
+      pushRemote(true);
+    }
+  });
+}
+
+/* ============================================================
+   VIEW: Definições
+============================================================ */
+/* ============================================================
+   WEDDY PREMIUM — RSVP + Assistente
+   ⚠️ Aponta para o mesmo projeto de testes (weddy-premium-teste).
+   Muda esta URL quando publicares a página pública de RSVP
+   (app/rsvp.html) noutro sítio — é para aí que aponta cada link
+   individual de convidado, nunca para dentro desta app.
+============================================================ */
+const RSVP_BASE_URL = 'https://ritamatosdoliveira-creator.github.io/weddy-premium-app-teste/rsvp.html';
+let rsvpResponses = {};
+let rsvpResponsesLoaded = false;
+let rsvpLoadingResponses = false;
+// Pedido da Rita (Set 2026): antes, uma falha a atualizar as respostas
+// ficava só na consola (console.error) — a pessoa via o botão voltar ao
+// normal sem perceber que nada tinha mudado. Agora guardamos que houve
+// erro para mostrar um aviso pequeno com um atalho direto para "Reporta um
+// problema" (viewDefReportar), em vez de a app ficar simplesmente calada.
+let rsvpRefreshError = false;
+let weddingMemories = [];
+
+/* ============================================================
+   FASE 9.1 — GOOGLE CALENDAR
+   googleCalendarIntegration espelha o documento
+   weddings/{weddingId}/integrations/googleCalendar (nunca escrito
+   diretamente pelo cliente — só lido; ver firestore.rules). Nunca
+   contém o refresh token, esse fica em privateIntegrations, que o
+   cliente nem consegue ler.
+============================================================ */
+let googleCalendarIntegration = null; // null = ainda não carregado
+let googleCalendarLoading = false;
+let googleCalendarCalendars = null; // lista devolvida por googleCalendarListCalendars, quando a pedir para escolher calendário
+let googleCalendarCalendarsLoading = false;
+let googleCalendarBusy = false; // true durante connect/sync/disconnect — desativa os botões para não haver duplo-clique
+let googleCalendarActionMsg = null; // { type:'error'|'success', text } — mensagem da última ação, mostrada uma vez
+let memoriesLoaded = false;
+let memoriesLoading = false;
+// Carrega as fotos que os convidados partilharam (Weddy Memories). Só
+// funciona para o dono autenticado do casamento — as regras do Firestore
+// não deixam mais ninguém listar esta coleção, por isso nem vale a pena
+// tentar quando a app ainda não tem sessão.
+function loadMemories(){
+  if(!FIREBASE_READY || !auth || !auth.currentUser || !currentWeddingId) return Promise.resolve();
+  memoriesLoading = true;
+  return MEMORIES().where('weddingId','==',currentWeddingId).get().then(qs=>{
+    const list = [];
+    qs.forEach(doc=>list.push({ id: doc.id, ...doc.data() }));
+    list.sort((a,b)=>{
+      const ta = a.createdAt && a.createdAt.toMillis ? a.createdAt.toMillis() : 0;
+      const tb = b.createdAt && b.createdAt.toMillis ? b.createdAt.toMillis() : 0;
+      return tb - ta;
+    });
+    // Bug encontrado ao corrigir o envio no rsvp.html (Set 2026): o convidado
+    // que envia a foto NUNCA teve permissão para a "ler de volta" (Storage
+    // Rules — só o casal pode), por isso o campo "url" gravado nesse momento
+    // já não fazia sentido (e deixou de ser gravado). É aqui, do lado do
+    // casal (que tem mesmo permissão de leitura), que resolvemos cada
+    // "storagePath" num link de download — ao vivo, a cada carregamento desta
+    // página, tal como já estava documentado (mas não implementado) nas
+    // regras do Storage. Memórias antigas que ainda tenham um "url" gravado
+    // continuam a funcionar na mesma (fallback).
+    return Promise.all(list.map(m=>{
+      if(!storage || !m.storagePath) return m;
+      return storage.ref(m.storagePath).getDownloadURL().then(liveUrl=>{
+        m.url = liveUrl;
+        return m;
+      }).catch(()=>m);
+    }));
+  }).then(list=>{
+    weddingMemories = list;
+    memoriesLoaded = true;
+    memoriesLoading = false;
+    render();
+  }).catch(err=>{
+    console.error('Weddy memories load error:', err.code, err.message);
+    memoriesLoading = false;
+    render();
+  });
+}
+function deleteMemory(memoryId, storagePath){
+  if(!confirm(ta('confirmDeleteMemory'))) return;
+  MEMORIES().doc(memoryId).delete().then(()=>{
+    if(storage && storagePath){ storage.ref(storagePath).delete().catch(()=>{}); }
+    weddingMemories = weddingMemories.filter(m=>m.id!==memoryId);
+    render();
+  }).catch(err=>{
+    console.error('Weddy memory delete error:', err.code, err.message);
+    alert(ta('alertDeleteMemoryError'));
+  });
+}
+let lastRSVPSyncSummary = null;
+// "Novas respostas": guarda em localStorage (por casamento) quantas
+// respostas já foram vistas da última vez que a página RSVP foi aberta,
+// para mostrar um pequeno indicador no menu quando há novidades — nunca
+// depende de notificações push reais, só do que já está carregado.
+// Estado de uma resposta: 'yes'/'no' (final), 'maybe' ("ainda não sei" —
+// conta como resposta dada, mas não como confirmação nem recusa) ou
+// 'pending' (nunca respondeu). Centralizado aqui porque há vários sítios
+// na app a precisar exatamente desta distinção.
+function rsvpStatusOf(resp){
+  if(!resp) return 'pending';
+  if(resp.attending===true) return 'yes';
+  if(resp.attending===false) return 'no';
+  if(resp.rsvpStatus==='maybe') return 'maybe';
+  return 'pending';
+}
+function rsvpHasResponded(resp){
+  return rsvpStatusOf(resp) !== 'pending';
+}
+function countRSVPResponded(){
+  return Object.values(rsvpResponses).filter(rsvpHasResponded).length;
+}
+function getRSVPSeenCount(){
+  if(!currentWeddingId) return 0;
+  try{ return Number(localStorage.getItem('weddy_rsvp_seen_'+currentWeddingId))||0; }catch(e){ return 0; }
+}
+function setRSVPSeenCount(n){
+  if(!currentWeddingId) return;
+  try{ localStorage.setItem('weddy_rsvp_seen_'+currentWeddingId, String(n)); }catch(e){}
+}
+function getRSVPNewResponsesCount(){
+  return Math.max(0, countRSVPResponded() - getRSVPSeenCount());
+}
+let rsvpSearchQuery = '';
+let rsvpStatusFilter = 'all'; // all | yes | pending | no
+let rsvpFilterChipsOpen = false;
+let lastRSVPRefreshAt = null;
+// Separadores do hub do RSVP (Set 2026, pedido da Rita): "send" agrupa a
+// configuração de como convidar (prazo + info para os convidados), "list"
+// agrupa o acompanhamento de quem já respondeu — só organiza a navegação,
+// não é dado gravado, por isso não precisa de ir para o Firestore.
+let rsvpHomeTab = 'send';
+// Modo de agrupar convidados num único link de RSVP de família: enquanto
+// ativo, cada linha ganha uma checkbox; rsvpGroupSelection guarda as chaves
+// "side|catId|idx" dos convidados escolhidos até se criar o link.
+let rsvpGroupMode = false;
+let rsvpGroupSelection = [];
+// Reorganização (Set 2026): ecrã de gestão do RSVP passou a ser um pequeno
+// "hub" de navegação em vez de uma página única com tudo — rsvpSubScreen
+// guarda em que sub-ecrã estamos (null = ecrã principal do hub).
+let rsvpSubScreen = null; // null | 'deadline' | 'info' | 'faq' | 'respostas'
+// Edição de perguntas frequentes (Concierge): null = nenhuma a editar,
+// 'new' = a criar uma nova, ou o índice (número) da pergunta existente.
+let rsvpFaqEditingIndex = null;
+// Pedido (Set 2026): "Informações para os convidados"/"Weddy Concierge"
+// deixaram de mostrar sempre todos os campos vazios de uma vez — só os que
+// já têm conteúdo guardado, mais os que a pessoa foi decidindo adicionar
+// nesta sessão (guardado aqui, não no state — não é dado do casamento, é só
+// "que caixas estão abertas neste momento no ecrã").
+let rsvpInfoAddedFields = new Set();
+// Definição dos campos de cada uma das duas secções — usada tanto para
+// desenhar as caixas já adicionadas como as sugestões por adicionar.
+const GUEST_INFO_FIELDS = [
+  { key:'dresscode', settingsKey:'guestDressCode', type:'text', labelKey:'labelDressCode', phKey:'phDressCode', inputId:'rsvp-dresscode-input' },
+  { key:'guestnotes', settingsKey:'guestInfoNotes', type:'textarea', labelKey:'labelGuestNotes', phKey:'phGuestNotes', inputId:'rsvp-guestnotes-input' },
+];
+const CONCIERGE_INFO_FIELDS = [
+  { key:'parking', settingsKey:'guestParkingInfo', type:'text', labelKey:'labelParking', phKey:'phParking', inputId:'rsvp-parking-input' },
+  { key:'transport', settingsKey:'guestTransportInfo', type:'text', labelKey:'labelTransport', phKey:'phTransport', inputId:'rsvp-transport-input' },
+  { key:'accommodation', settingsKey:'guestAccommodationInfo', type:'text', labelKey:'labelAccommodation', phKey:'phAccommodation', inputId:'rsvp-accommodation-input' },
+  { key:'gifts', settingsKey:'guestGiftsInfo', type:'text', labelKey:'labelGifts', phKey:'phGifts', inputId:'rsvp-gifts-input' },
+  { key:'contact', settingsKey:'guestContactInfo', type:'text', labelKey:'labelContact', phKey:'phContact', inputId:'rsvp-contact-input' },
+];
+// Desenha uma secção de campos "expansível": só mostra caixa de texto para
+// os campos que já têm conteúdo OU que a pessoa acabou de adicionar; os
+// restantes ficam como botões de sugestão ("+ Estacionamento", etc.),
+// mantendo bem visível o exemplo de sempre (agora no próprio botão), sem
+// obrigar a olhar para várias caixas vazias de uma vez.
+function guestInfoSectionHTML(fields){
+  const visible = fields.filter(f => (weddingSettings[f.settingsKey]||'').trim() || rsvpInfoAddedFields.has(f.key));
+  const hidden = fields.filter(f => !visible.includes(f));
+  const rows = visible.map(f=>{
+    const val = escapeHTML(weddingSettings[f.settingsKey]||'');
+    const ph = escapeHTML(ta(f.phKey));
+    const inputHtml = f.type==='textarea'
+      ? `<textarea id="${f.inputId}" placeholder="${ph}" style="width:100%; min-height:70px; border:1.6px solid var(--line); border-radius:12px; padding:10px 12px; font-size:13.5px; font-family:inherit; color:var(--ink); resize:vertical; box-sizing:border-box;">${val}</textarea>`
+      : `<input class="field-input" id="${f.inputId}" type="text" placeholder="${ph}" value="${val}" style="text-align:left; border:1.6px solid var(--line); border-radius:12px; padding:10px 12px; font-size:13.5px; width:100%; box-sizing:border-box;">`;
+    return `<div class="guestinfo-field">
+      <div class="guestinfo-field-top">
+        <span>${ta(f.labelKey)}</span>
+        <button type="button" class="guestinfo-field-remove" data-guestinforemove="${f.key}">✕</button>
+      </div>
+      ${inputHtml}
+    </div>`;
+  }).join('');
+  const chips = hidden.map(f=>`<button type="button" class="guestinfo-addchip" data-guestinfoadd="${f.key}">${ICONS.plus||'+'} ${ta(f.labelKey)}</button>`).join('');
+  return `${rows}${chips ? `<div style="margin-top:2px;">${hidden.length && visible.length ? `<div style="font-size:11px; color:var(--ink-soft); margin-bottom:6px;">${ta('guestInfoAddSectionLabel')}</div>`:''}${chips}</div>` : ''}`;
+}
+// Fase Feedback (Set 2026): capturas de ecrã escolhidas no ecrã "Reporta um
+// problema", ainda não enviadas — array de { file, dataUrl, name, size }.
+// Vive só em memória (nunca é gravado no state/Firestore antes do envio) e
+// é limpo a seguir a um envio com sucesso ou ao sair do ecrã.
+let reportarScreenshots = [];
+// Fase Histórico (Set 2026): estado do ecrã "Histórico do casamento" — a
+// lista em si vive só em memória (carregada por loadHistoricoSnapshots ao
+// entrar no ecrã, nunca pelo listener em tempo real que trata do resto do
+// documento, para não pesar a sincronização normal com algo que a pessoa
+// só vê raramente).
+let historicoSnapshots = [];
+let historicoLoading = false;
+let historicoError = false;
+let historicoRestoringId = null; // id do snapshot a ser restaurado agora, ou null
+let historicoCreatingBackup = false;
+function fmtRelativeTime(date){
+  if(!date) return '';
+  const diffMin = Math.round((Date.now() - date.getTime())/60000);
+  if(diffMin < 1) return ta('relTimeNow');
+  if(diffMin < 5) return ta('relTimeFewMinutes');
+  if(diffMin < 60) return ta('relTimeMinutes')(diffMin);
+  const diffH = Math.round(diffMin/60);
+  if(diffH < 24) return diffH===1 ? ta('relTimeOneHour') : ta('relTimeHours')(diffH);
+  const diffD = Math.round(diffH/24);
+  return diffD===1 ? ta('relTimeOneDay') : ta('relTimeDays')(diffD);
+}
+function normName(s){ return (s||'').toString().trim().toLowerCase(); }
+// Duas idades "combinam" se forem iguais, ou se pelo menos uma delas ainda
+// não estiver preenchida (não obriga a idade a bater certo se uma das
+// partes ainda não a escreveu em lado nenhum).
+function agesCompatible(a,b){
+  const na = (a===undefined||a===null||a==='') ? null : Number(a);
+  const nb = (b===undefined||b===null||b==='') ? null : Number(b);
+  if(na===null || nb===null) return true;
+  return na===nb;
+}
+// Fix 5 da auditoria RGPD/Segurança (Set 2026): estes ids funcionam como a
+// única "password" de acesso ao RSVP de um convidado (a regra do Firestore
+// é "allow get: if true" — quem tem o token, entra). Antes eram gerados
+// com Date.now()+Math.random(), que não é um gerador criptográfico — usa-se
+// agora crypto.getRandomValues(), a API própria do browser para valores
+// imprevisíveis, com bastante mais entropia do que o necessário para
+// tornar impraticável adivinhar ou repetir um token por força bruta.
+function secureRandomHex(byteLength){
+  const bytes = new Uint8Array(byteLength);
+  (window.crypto || window.msCrypto).getRandomValues(bytes);
+  return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+}
+function generateRSVPToken(){
+  return 'r' + secureRandomHex(16); // 128 bits de entropia
+}
+function generateRSVPMemberId(){
+  return 'm' + secureRandomHex(10); // 80 bits — só precisa de ser único dentro do mesmo convite de família
+}
+// RSVP de família: várias pessoas adultas do mesmo agregado partilham o
+// MESMO link/token (guests/{token}), mas cada uma tem a sua própria
+// resposta. O documento guests/{token} ganha isFamily:true, members:[...]
+// e responses:{[memberId]:{...}} em vez dos campos "attending"/"meal"/...
+// diretamente no topo (isso continua a acontecer só nos convites individuais).
+// Este helper é o único sítio que sabe ler a resposta certa de cada
+// convidado, seja ele um convite individual ou um membro de uma família —
+// todos os outros sítios da app passam a usar isto em vez de ler
+// rsvpResponses[token] diretamente.
+function memberRSVPResponse(item){
+  const token = item.entry.rsvpToken;
+  if(!token) return null;
+  const doc = rsvpResponses[token];
+  if(!doc) return null;
+  if(doc.isFamily){
+    if(!item.entry.rsvpMemberId) return null;
+    return (doc.responses && doc.responses[item.entry.rsvpMemberId]) || null;
+  }
+  return doc;
+}
+// Junta os convidados dos dois lados, todas as categorias (fixas e
+// criadas pela pessoa), numa lista plana pronta para a lista de RSVP.
+// Cada entrada guarda a referência direta ao objeto do convidado (para
+// se poder escrever o rsvpToken nele) e a "morada" completa (side/cat/id)
+// para depois se conseguir marcar como confirmado na lista de Convidados.
+function flattenAllGuestsForRSVP(){
+  const out = [];
+  ['noiva','noivo'].forEach(side=>{
+    allGuestCategoriesOf(side).forEach(c=>{
+      const arr = getGuestNames(side, c.id);
+      if(!Array.isArray(arr)) return;
+      arr.forEach((entry, idx)=>{
+        if(!entry || typeof entry!=='object') return;
+        out.push({ side, catId:c.id, catLabel:c.label, idx, entry, name: entry.name||'', guestId: entry.guestId });
+      });
+    });
+  });
   return out;
 }
 
-// Deriva o weddingId de algo que quem chama não pode escolher — nunca de
-// um campo que o cliente enviou diretamente. Ver "DE ONDE VEM O
-// weddingId" no comentário grande acima. Devolve null quando não é
-// possível derivar (sessão inválida, casamento não encontrado, guestToken
-// em falta ou inválido) — nesse caso simplesmente não há limite aplicado.
-async function resolveWeddingId(request, isCouple) {
-  if (isCouple) {
-    const email = request.auth && request.auth.token && request.auth.token.email;
-    if (!email) return null;
-    try {
-      const snap = await db.collection('weddings')
-        .where('ownerEmails', 'array-contains', email.toLowerCase())
-        .limit(1)
-        .get();
-      return snap.empty ? null : snap.docs[0].id;
-    } catch (err) {
-      logger.error('resolveWeddingId (couple): erro a procurar o casamento.', err);
-      return null;
+// ============================================================
+// RSVP AUTOPILOT (Fase 5, v1 — modo assistido)
+// Nunca envia nada sozinho: só deteta convidados pendentes, classifica a
+// urgência (dentro do prazo / precisa de lembrete / atrasado) e prepara
+// um lembrete que o casal revê e confirma antes de copiar (ver
+// openRSVPAutopilotModal, mais abaixo). Não há aqui nenhuma Cloud
+// Function nova nem chamada de rede — usa só dados que a app já lê
+// (rsvpDeadline) e o mesmo contador de lembretes que a Cloud Function
+// sendRsvpReminders (quando o casal a configurar) também incrementa —
+// guests/{token}.remindersSent, ou .reminders.{memberId}.remindersSent
+// num convite de família — por isso os dois mecanismos (manual aqui,
+// automático por email lá) nunca se "esquecem" um do outro.
+// ============================================================
+const RSVP_AUTOPILOT_STALE_DAYS = 5; // só volta a pedir lembrete passado isto
+
+function reminderInfoOf(item, token){
+  const doc = token ? rsvpResponses[token] : null;
+  if(!doc) return { count:0, lastAt:null };
+  if(doc.isFamily){
+    const mid = item.entry.rsvpMemberId;
+    const rem = (mid && doc.reminders && doc.reminders[mid]) || null;
+    return { count: (rem && rem.remindersSent) || 0, lastAt: (rem && rem.lastReminderAt) || null };
+  }
+  return { count: doc.remindersSent || 0, lastAt: doc.lastReminderAt || null };
+}
+function daysSinceTimestamp(tsLike){
+  if(!tsLike) return null;
+  const d = (tsLike && typeof tsLike.toDate === 'function') ? tsLike.toDate() : new Date(tsLike);
+  if(isNaN(d.getTime())) return null;
+  return Math.floor((Date.now() - d.getTime())/86400000);
+}
+// Urgência de UM convidado pendente (já com link, ainda sem resposta
+// "sim"/"não"). null = não se aplica (já respondeu, ou ainda nem tem
+// link gerado — não há para onde mandar lembrete nenhum).
+//   'late' 🔴 — o prazo já passou.
+//   'due'  🟠 — sem prazo definido, ou a menos de 7 dias dele, e nunca
+//               foi lembrado (ou já lá vão RSVP_AUTOPILOT_STALE_DAYS
+//               dias desde o último lembrete).
+//   'ontime' 🟡 — todo o resto (ainda folgado, ou lembrado há pouco).
+function rsvpAutopilotBucket(item, token, status, deadline){
+  if(status!=='pending' && status!=='maybe') return null;
+  if(!token) return null;
+  let daysLeft = null;
+  if(deadline){
+    const today = new Date(); today.setHours(0,0,0,0);
+    daysLeft = Math.ceil((new Date(deadline+'T00:00:00') - today)/86400000);
+  }
+  if(daysLeft!==null && daysLeft<0) return 'late';
+  const { count, lastAt } = reminderInfoOf(item, token);
+  const sinceLast = daysSinceTimestamp(lastAt);
+  const closeToDeadline = daysLeft!==null && daysLeft<=7;
+  const neverOrStale = count===0 || (sinceLast!==null && sinceLast>=RSVP_AUTOPILOT_STALE_DAYS);
+  if(neverOrStale && (closeToDeadline || daysLeft===null)) return 'due';
+  return 'ontime';
+}
+// Todos os convidados pendentes já classificados — o único sítio que
+// calcula isto; usado pelo ecrã de RSVP e pelo Copilot dos noivos.
+function rsvpAutopilotList(){
+  const deadline = weddingSettings.rsvpDeadline || '';
+  return flattenAllGuestsForRSVP().map(item=>{
+    const token = item.entry.rsvpToken;
+    const resp = token ? memberRSVPResponse(item) : null;
+    const status = rsvpStatusOf(resp);
+    const bucket = rsvpAutopilotBucket(item, token, status, deadline);
+    return { item, token, status, bucket };
+  }).filter(x=>x.bucket);
+}
+// Regista, no Firestore, que se acabou de preparar um lembrete para estes
+// convidados — atualiza a cópia local (rsvpResponses) de imediato, para o
+// ecrã refletir sem esperar por um novo loadRSVPResponses().
+function markRemindersSent(entries){
+  const jobs = entries.map(({item, token})=>{
+    if(!token) return Promise.resolve();
+    const doc = rsvpResponses[token];
+    const isFam = doc && doc.isFamily;
+    const mid = item.entry.rsvpMemberId;
+    const payload = isFam ? {
+      [`reminders.${mid}.remindersSent`]: firebase.firestore.FieldValue.increment(1),
+      [`reminders.${mid}.lastReminderAt`]: firebase.firestore.FieldValue.serverTimestamp(),
+    } : {
+      remindersSent: firebase.firestore.FieldValue.increment(1),
+      lastReminderAt: firebase.firestore.FieldValue.serverTimestamp(),
+    };
+    if(doc){
+      if(isFam){
+        doc.reminders = doc.reminders || {};
+        doc.reminders[mid] = doc.reminders[mid] || { remindersSent:0 };
+        doc.reminders[mid].remindersSent = (doc.reminders[mid].remindersSent||0) + 1;
+        doc.reminders[mid].lastReminderAt = new Date().toISOString();
+      } else {
+        doc.remindersSent = (doc.remindersSent||0) + 1;
+        doc.lastReminderAt = new Date().toISOString();
+      }
     }
+    return GUESTS().doc(token).update(payload).catch(err=>{
+      console.error('Weddy Autopilot markRemindersSent error:', err.code, err.message);
+    });
+  });
+  return Promise.all(jobs);
+}
+// Garante que este convidado tem um link de RSVP: se já tiver token,
+// devolve-o; caso contrário gera um, grava-o no próprio convidado (dentro
+// do state, sincronizado como o resto da app) e cria o documento público
+// "guests/{token}" na coleção separada — com só o que o convidado precisa
+// de ver, nunca a lista toda nem o orçamento (ver firestore.rules).
+// Só os momentos da agenda do dia que os noivos marcaram explicitamente
+// como "Mostrar aos convidados" — nunca a lista toda, que pode ter coisas
+// privadas (ex: hora do cabeleireiro, chegada dos fornecedores).
+function buildGuestVisibleProgram(){
+  return (state.daySchedule||[])
+    .filter(ev=>ev.guestVisible)
+    .map(ev=>({ time: ev.time||'', label: ev.label||'', place: ev.place||'' }))
+    .sort((a,b)=>(a.time||'99:99').localeCompare(b.time||'99:99'));
+}
+// Converte a lista de perguntas/respostas do Concierge para o formato de
+// texto livre editável ("P: ...\nR: ...") e vice-versa. Guarda-se sempre a
+// lista já estruturada (guestFaqList) no Firestore — o texto é só a forma
+// como o casal a edita no ecrã de Definições.
+function faqListToRaw(list){
+  if(!Array.isArray(list) || !list.length) return '';
+  return list.map(f=>`P: ${f.q||''}\nR: ${f.a||''}`).join('\n\n');
+}
+function rawToFaqList(raw){
+  if(!raw || !raw.trim()) return [];
+  const blocks = raw.split(/\n\s*\n/);
+  const out = [];
+  blocks.forEach(block=>{
+    const lines = block.split('\n').map(l=>l.trim()).filter(Boolean);
+    let q = '', a = '';
+    lines.forEach(line=>{
+      const mQ = line.match(/^[PQ]\s*[:\-]\s*(.+)$/i);
+      const mA = line.match(/^[RA]\s*[:\-]\s*(.+)$/i);
+      if(mQ) q = mQ[1].trim();
+      else if(mA) a = a ? a + ' ' + mA[1].trim() : mA[1].trim();
+      else if(q && !a) q = q + ' ' + line;
+      else if(a) a = a + ' ' + line;
+    });
+    if(q && a) out.push({ q, a });
+  });
+  return out;
+}
+function ensureRSVPLink(item){
+  if(item.entry.rsvpToken){
+    return Promise.resolve(item.entry.rsvpToken);
   }
-  const guestToken = request.data && request.data.guestToken;
-  if (!guestToken || typeof guestToken !== 'string') return null;
-  try {
-    const snap = await db.collection('guests').doc(guestToken).get();
-    if (!snap.exists) return null;
-    const data = snap.data();
-    return (data && typeof data.weddingId === 'string') ? data.weddingId : null;
-  } catch (err) {
-    logger.error('resolveWeddingId (guest): erro a ler o documento do convidado.', err);
-    return null;
+  const token = generateRSVPToken();
+  const s = weddingSettings;
+  return GUESTS().doc(token).set({
+    weddingId: currentWeddingId,
+    guestId: item.entry.guestId || item.entry.id || null,
+    name: item.name,
+    coupleName1: s.coupleName1 || '',
+    coupleName2: s.coupleName2 || '',
+    weddingDate: s.weddingDate || '',
+    venue: s.venue || '',
+    rsvpDeadline: s.rsvpDeadline || '',
+    guestDressCode: s.guestDressCode || '',
+    guestInfoNotes: s.guestInfoNotes || '',
+    guestParkingInfo: s.guestParkingInfo || '',
+    guestTransportInfo: s.guestTransportInfo || '',
+    guestAccommodationInfo: s.guestAccommodationInfo || '',
+    guestGiftsInfo: s.guestGiftsInfo || '',
+    guestContactInfo: s.guestContactInfo || '',
+    guestFaqList: s.guestFaqList || [],
+    guestProgram: buildGuestVisibleProgram(),
+    attending: null,
+    meal: '',
+    dietary: '',
+    transporte: false,
+    alojamento: false,
+    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+  }).then(()=>{
+    item.entry.rsvpToken = token;
+    render();
+    return token;
+  });
+}
+// Agrupa vários convidados (2+ items de flattenAllGuestsForRSVP) num único
+// link de RSVP de família. Cada um mantém a sua própria entrada em
+// "members" e a sua resposta ficará em responses[memberId] — o resto da
+// informação do casamento (data, local, prazo, programa) é partilhada por
+// todos, tal como num convite individual. Se algum dos convidados já tiver
+// um link individual, esse link antigo é substituído por este (o convidado
+// passa a responder só através do novo link de família).
+function ensureFamilyRSVPLink(items){
+  if(!items || items.length<2) return Promise.resolve(null);
+  const token = generateRSVPToken();
+  const s = weddingSettings;
+  const members = items.map(it=>{
+    const memberId = generateRSVPMemberId();
+    return { memberId, item: it };
+  });
+  return GUESTS().doc(token).set({
+    weddingId: currentWeddingId,
+    isFamily: true,
+    // Fase 8.0 (Set 2026): antes, o campo abaixo chamava-se "guestId" e
+    // guardava, na verdade, o memberId gerado só para este link — colidia
+    // de nome com o guestId permanente e estável do convidado (o mesmo
+    // campo que agora existe em convites individuais). Passa a chamar-se
+    // rsvpMemberId (o que sempre foi, de facto) e "guestId" passa a
+    // guardar mesmo a identidade permanente do convidado.
+    members: members.map(m=>({ guestId: m.item.entry.guestId || null, rsvpMemberId: m.memberId, name: m.item.name })),
+    coupleName1: s.coupleName1 || '',
+    coupleName2: s.coupleName2 || '',
+    weddingDate: s.weddingDate || '',
+    venue: s.venue || '',
+    rsvpDeadline: s.rsvpDeadline || '',
+    guestDressCode: s.guestDressCode || '',
+    guestInfoNotes: s.guestInfoNotes || '',
+    guestParkingInfo: s.guestParkingInfo || '',
+    guestTransportInfo: s.guestTransportInfo || '',
+    guestAccommodationInfo: s.guestAccommodationInfo || '',
+    guestGiftsInfo: s.guestGiftsInfo || '',
+    guestContactInfo: s.guestContactInfo || '',
+    guestFaqList: s.guestFaqList || [],
+    guestProgram: buildGuestVisibleProgram(),
+    responses: {},
+    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+  }).then(()=>{
+    // Fix 3 da auditoria pós-fixes (Set 2026): antes, quando um convidado
+    // com link individual passava a fazer parte de um link de família, só
+    // a referência local (m.item.entry.rsvpToken) era substituída — o
+    // documento guests/{oldToken} antigo no Firestore nunca era apagado,
+    // pelo que o link individual antigo continuava ativo e editável,
+    // apesar do comentário desta função dizer o contrário. Guardamos os
+    // tokens antigos antes de os substituir e limpamos-lhes o Firestore
+    // com o mesmo helper usado nas outras remoções.
+    const oldEntries = members
+      .map(m=>({ ...m.item.entry }))
+      .filter(e=>e.rsvpToken && e.rsvpToken!==token);
+    members.forEach(m=>{
+      m.item.entry.rsvpToken = token;
+      m.item.entry.rsvpMemberId = m.memberId;
+    });
+    // Fase 8.0 (Set 2026): usa o helper em lote, não uma chamada por
+    // convidado — se 2+ dos convidados fundidos já partilhavam ENTRE SI
+    // um link de família antigo (ex: juntar uma pessoa nova a uma família
+    // já existente), várias chamadas concorrentes a deleteGuestRSVPDoc()
+    // para o mesmo oldToken caiam exatamente no mesmo bug de corrida
+    // corrigido no apagar-categoria (ver deleteGuestRSVPDocsBatch).
+    deleteGuestRSVPDocsBatch(oldEntries).catch(()=>{});
+    render();
+    return token;
+  });
+}
+// Cumpre o direito de apagamento do RGPD do lado dos noivos: apaga por
+// completo o documento guests/{token} (nome incluído) e desliga o link —
+// deixa de ser possível aceder ou responder através dele. Diferente do
+// "Apagar a minha resposta" no próprio link (que só limpa a resposta e
+// mantém o link ativo), isto remove o convite inteiro. Para um convite de
+// família, remove só este membro do grupo (o link continua ativo para os
+// restantes) — só apaga o documento inteiro se for o último membro.
+// Fix 3 da auditoria RGPD/Segurança (Set 2026): a lógica de apagar (ou, em
+// modo família, encolher) o documento guests/{token} no Firestore estava
+// só aqui dentro, só acessível a partir do botão explícito "revogar link".
+// Extraída para esta função para poder ser reaproveitada também quando um
+// convidado é simplesmente removido da lista (ver [data-remove] abaixo) —
+// caso contrário o documento guests/{token} ficava órfão no Firestore,
+// continuando acessível a quem tivesse o link antigo, mesmo depois do
+// casal "remover" esse convidado da app.
+function deleteGuestRSVPDoc(entry){
+  if(!entry || !entry.rsvpToken) return Promise.resolve();
+  const token = entry.rsvpToken;
+  // Fix (Set 2026): NUNCA decidir "apagar tudo" vs. "só encolher" a partir
+  // da cópia local rsvpResponses[token] — esse cache só é preenchido depois
+  // de se abrir o ecrã "Convites RSVP" (ver loadRSVPResponses/viewDefRSVP).
+  // Se a pessoa remover um convidado direto em Convidados sem alguma vez
+  // ter aberto esse ecrã nesta sessão, rsvpResponses[token] está vazio →
+  // a condição "doc.isFamily" falhava silenciosamente → caía sempre no
+  // ramo de baixo → apagava o documento INTEIRO, incluindo os restantes
+  // membros da família ainda por remover. Lê sempre o documento atual do
+  // Firestore antes de decidir.
+  return GUESTS().doc(token).get().then(snap=>{
+    const doc = snap.exists ? snap.data() : null;
+    if(doc && doc.isFamily && entry.rsvpMemberId){
+      // Fase 8.0: lê "rsvpMemberId" (formato novo) com fallback para
+      // "guestId" (formato antigo, ainda por migrar nesta conta —
+      // ver migrateFamilyGuestIds nas Cloud Functions) — funciona com
+      // documentos de familia criados antes OU depois desta migração.
+      const remainingMembers = (doc.members||[]).filter(m=>(m.rsvpMemberId||m.guestId)!==entry.rsvpMemberId);
+      if(remainingMembers.length>0){
+        const remainingResponses = { ...(doc.responses||{}) };
+        delete remainingResponses[entry.rsvpMemberId];
+        const updates = { members: remainingMembers, ['responses.'+entry.rsvpMemberId]: firebase.firestore.FieldValue.delete() };
+        // Fase 8.2 (correção pedida pela Rita): um membro removido tem de
+        // desaparecer também de memberTables (guestId PERMANENTE, não o
+        // rsvpMemberId — é a chave que syncSeatingToGuestDocs usa), na MESMA
+        // escrita que já remove members[]/responses — nunca numa operação à
+        // parte. Sem isto, memberTables ficava com entradas órfãs de gente
+        // que já nem está no convite, o que mais tarde (AI Seating,
+        // Concierge, exports) não dá para distinguir de um membro real ainda
+        // sem mesa atribuída (esse caso usa null, ver syncSeatingToGuestDocs
+        // — nunca apaga a propriedade, só um membro removido é que apaga).
+        const remainingMemberTables = { ...(doc.memberTables||{}) };
+        if(entry.guestId && (entry.guestId in remainingMemberTables)){
+          delete remainingMemberTables[entry.guestId];
+          updates['memberTables.'+entry.guestId] = firebase.firestore.FieldValue.delete();
+        }
+        return GUESTS().doc(token).update(updates).then(()=>{
+          if(rsvpResponses[token]){ rsvpResponses[token] = { ...doc, members: remainingMembers, responses: remainingResponses, memberTables: remainingMemberTables }; }
+        });
+      }
+    }
+    return GUESTS().doc(token).delete().then(()=>{
+      delete rsvpResponses[token];
+    });
+  });
+}
+// Fase 8.0 — versão "em lote" de deleteGuestRSVPDoc(), para quando várias
+// entries são removidas de uma vez (ex: apagar uma categoria inteira).
+// Agrupa as entries por rsvpToken e faz UMA só leitura/escrita por
+// documento — mesmo que 2+ dessas entries sejam membros do MESMO link de
+// família — em vez de uma chamada concorrente por convidado (que é
+// exatamente o que causava o bug: cada chamada calculava "quem sobra" a
+// partir da mesma cópia local desatualizada, e o documento nunca chegava
+// a ficar com zero membros). Usar sempre que se apaga mais do que um
+// convidado ao mesmo tempo; para um único convidado, deleteGuestRSVPDoc()
+// continua a ser suficiente.
+function deleteGuestRSVPDocsBatch(entries){
+  const withToken = (entries||[]).filter(e=>e && e.rsvpToken);
+  if(!withToken.length) return Promise.resolve();
+  const byToken = new Map();
+  withToken.forEach(e=>{
+    if(!byToken.has(e.rsvpToken)) byToken.set(e.rsvpToken, []);
+    byToken.get(e.rsvpToken).push(e);
+  });
+  const tokens = Array.from(byToken.keys());
+  // Fix (Set 2026): mesmo motivo do deleteGuestRSVPDoc() — nunca confiar em
+  // rsvpResponses[token] (cache local só preenchida depois de abrir
+  // "Convites RSVP") para decidir se um documento de família deve ser só
+  // encolhido ou apagado por inteiro. Lê sempre o estado atual de cada
+  // documento no Firestore antes de decidir.
+  return Promise.all(tokens.map(token=>GUESTS().doc(token).get().then(snap=>({token, doc: snap.exists ? snap.data() : null})))).then(results=>{
+    const ops = results.map(({token, doc})=>{
+      const groupEntries = byToken.get(token);
+      const anyMemberId = groupEntries.some(e=>e.rsvpMemberId);
+      if(doc && doc.isFamily && anyMemberId){
+        const removedIds = new Set(groupEntries.map(e=>e.rsvpMemberId).filter(Boolean));
+        const remainingMembers = (doc.members||[]).filter(m=>!removedIds.has(m.rsvpMemberId||m.guestId));
+        if(remainingMembers.length>0){
+          const remainingResponses = { ...(doc.responses||{}) };
+          const updates = { members: remainingMembers };
+          removedIds.forEach(mid=>{
+            delete remainingResponses[mid];
+            updates['responses.'+mid] = firebase.firestore.FieldValue.delete();
+          });
+          // Fase 8.2: mesma limpeza de memberTables que deleteGuestRSVPDoc(),
+          // aqui para o caso de vários membros removidos de uma vez — chave é
+          // sempre o guestId PERMANENTE de cada entry removida, nunca o
+          // rsvpMemberId. Um membro que fica sem mesa continua a valer null
+          // (ver syncSeatingToGuestDocs); só um membro REMOVIDO é que perde a
+          // propriedade inteira.
+          const remainingMemberTables = { ...(doc.memberTables||{}) };
+          groupEntries.forEach(e=>{
+            if(e.guestId && (e.guestId in remainingMemberTables)){
+              delete remainingMemberTables[e.guestId];
+              updates['memberTables.'+e.guestId] = firebase.firestore.FieldValue.delete();
+            }
+          });
+          return GUESTS().doc(token).update(updates).then(()=>{
+            if(rsvpResponses[token]){ rsvpResponses[token] = { ...doc, members: remainingMembers, responses: remainingResponses, memberTables: remainingMemberTables }; }
+          }).catch(()=>{});
+        }
+      }
+      return GUESTS().doc(token).delete().then(()=>{
+        delete rsvpResponses[token];
+      }).catch(()=>{});
+    });
+    return Promise.all(ops);
+  });
+}
+function revokeRSVPLink(side, catId, idx, name){
+  const arr = getGuestNames(side, catId);
+  const entry = arr && arr[idx];
+  if(!entry || !entry.rsvpToken){ return; }
+  if(!confirm(ta('confirmRemoveRSVPInvite')(name))){
+    return;
   }
+  deleteGuestRSVPDoc(entry).then(()=>{
+    entry.rsvpToken = null;
+    entry.rsvpMemberId = null;
+    render();
+  }).catch(err=>{
+    console.error('Weddy RSVP revoke error:', err.code, err.message);
+    alert(ta('alertRemoveInviteError'));
+  });
+}
+// Vai buscar todas as respostas já dadas para os convidados deste
+// casamento (a query só é permitida às regras do Firestore para o(s)
+// dono(s) autenticados do próprio casamento — nunca para um convidado).
+// Atualiza campos de weddingSettings que são copiados ("denormalizados")
+// para dentro de cada convite já gerado (prazo, dress code, notas) — sem
+// isto, um convidado que já tinha o link antes só veria a versão antiga
+// dessas informações, porque o rsvp.html nunca lê o documento do casamento.
+function saveAndSyncWeddingSettingsToGuests(btn, fields){
+  weddingSettings = { ...weddingSettings, ...fields };
+  const original = btn.textContent;
+  btn.textContent = ta('btnSavingEllipsis');
+  if(!FIREBASE_READY || !auth || !auth.currentUser || !currentWeddingId){
+    btn.textContent = original;
+    alert(ta('alertSaveNoConnection'));
+    return;
+  }
+  CURRENT_DOC().set({ settings: weddingSettings, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge:true }).then(()=>{
+    const tokens = flattenAllGuestsForRSVP().map(g=>g.entry.rsvpToken).filter(Boolean);
+    // Fase 4E (LOG-02): cada update() devolve o próprio token quando falha
+    // (em vez de engolir o erro em silêncio), para sabermos exatamente
+    // quantos/quais convidados NÃO ficaram com a informação atualizada.
+    Promise.all(tokens.map(t=>GUESTS().doc(t).update(fields).then(()=>null).catch(()=>t))).then(results=>{
+      const failedTokens = results.filter(Boolean);
+      logMassPropagationFailures('sync_wedding_settings_to_guests_failed', failedTokens);
+      if(failedTokens.length){
+        btn.textContent = original;
+        alert(ta('alertSettingsSyncPartialFailure')(failedTokens.length, tokens.length));
+      } else {
+        btn.textContent = ta('btnSavedCheck');
+      }
+      setTimeout(()=>{ _origRender(); }, 900);
+    });
+  }).catch(()=>{
+    btn.textContent = original;
+    alert(ta('alertSaveError'));
+  });
+}
+function loadRSVPResponses(){
+  if(!FIREBASE_READY || !currentWeddingId) return Promise.resolve();
+  rsvpLoadingResponses = true;
+  return GUESTS().where('weddingId','==',currentWeddingId).get().then(qs=>{
+    const next = {};
+    qs.forEach(doc=>{ next[doc.id] = doc.data(); });
+    rsvpResponses = next;
+    rsvpResponsesLoaded = true;
+    rsvpLoadingResponses = false;
+    rsvpRefreshError = false;
+    lastRSVPRefreshAt = new Date();
+    applyRSVPResponsesToState();
+    render();
+  }).catch(err=>{
+    console.error('Weddy RSVP load error:', err.code, err.message);
+    rsvpLoadingResponses = false;
+    rsvpRefreshError = true;
+    render();
+  });
+}
+// Fase 9.1 — carrega o estado da ligação Google Calendar. É uma leitura
+// direta ao Firestore (permitida pelas regras só ao dono, nunca uma
+// escrita) — não passa por Cloud Function porque não há nada sensível
+// neste documento (o refresh token está à parte, em privateIntegrations,
+// que nem o próprio dono consegue ler).
+function loadGoogleCalendarIntegration(){
+  if(!FIREBASE_READY || !currentWeddingId) return Promise.resolve();
+  googleCalendarLoading = true;
+  return CURRENT_DOC().collection('integrations').doc('googleCalendar').get().then(snap=>{
+    googleCalendarIntegration = snap.exists ? snap.data() : { connected:false };
+    googleCalendarLoading = false;
+    render();
+  }).catch(err=>{
+    console.error('Weddy GoogleCalendar load error:', err.code, err.message);
+    googleCalendarIntegration = { connected:false };
+    googleCalendarLoading = false;
+    render();
+  });
+}
+// Fase 8.0 (Set 2026): isto costumava ter de recalcular a posição atual
+// (idx) do convidado, porque a posição podia mudar a meio desta mesma
+// sincronização e nunca se guardava um índice — só se ia buscar a posição
+// na hora, pela referência do próprio objeto. Com o guestId estável, já
+// não há nada a recalcular: a identidade do convidado é sempre a mesma,
+// independentemente da posição. Mantido (em vez de removido) para não
+// obrigar a tocar em todos os call sites — devolve sempre entry.guestId.
+function liveGuestKeyFor(side, catId, entry){
+  return entry && entry.guestId ? entry.guestId : null;
+}
+// Aplica as respostas de RSVP já recebidas (rsvpResponses) ao estado local:
+// 1) Sim/Não do convidado principal atualiza a marca de "confirmado" que já
+//    existia na página de Convidados, e — se responder "Não" e já tivesse
+//    lugar atribuído numa mesa — liberta esse lugar.
+// 2) As crianças que a pessoa declarar no link (nome + idade + se vão) são
+//    refletidas na categoria "Crianças" do mesmo lado, para contarem nos
+//    números de convidados e poderem ser sentadas às mesas como qualquer
+//    outra pessoa; se deixarem de vir, são removidas dali (libertando
+//    também o lugar que tivessem, se já estivesse atribuído).
+function applyRSVPResponsesToState(){
+  const guests = flattenAllGuestsForRSVP();
+  let changed = false;
+  const summary = { confirmedChanged:0, seatsFreed:0, childrenAdded:0, childrenLinked:0, childrenUnlinked:0 };
+
+  guests.forEach(item=>{
+    const token = item.entry.rsvpToken;
+    if(!token) return;
+    const resp = memberRSVPResponse(item);
+    if(!resp) return;
+
+    if(resp.attending===true || resp.attending===false){
+      const gk = liveGuestKeyFor(item.side, item.catId, item.entry);
+      if(gk){
+        const wasConfirmed = !!state.confirmed[gk];
+        const nowConfirmed = resp.attending===true;
+        if(wasConfirmed !== nowConfirmed){
+          if(nowConfirmed) state.confirmed[gk] = true; else delete state.confirmed[gk];
+          changed = true;
+          summary.confirmedChanged++;
+        }
+        if(resp.attending===false){
+          const seatKey = findGuestSeatKey(gk, null);
+          if(seatKey){ delete state.seating.assignments[seatKey]; changed = true; summary.seatsFreed++; }
+        }
+      }
+    }
+
+    // Crianças declaradas neste convite específico (identificadas por
+    // "token#índice-na-resposta"). Isto é o ponto delicado: a criança já
+    // pode ter sido acrescentada à mão antes do convite ser enviado — por
+    // isso NUNCA se cria uma linha nova sem antes tentar "adotar" uma já
+    // existente (ainda sem RSVP ligado) cujo nome e idade façam match. Só
+    // quando não há nenhum match é que se cria mesmo uma linha nova.
+    const side = item.side;
+    if(!state.guests[side].custom) state.guests[side].custom = [];
+    let criancasCat = state.guests[side].custom.find(c=>c.id==='criancas');
+    if(!criancasCat){ criancasCat = { id:'criancas', label:'Crianças', names:[] }; state.guests[side].custom.push(criancasCat); }
+
+    // Prefixo da referência da criança: para um convite individual é só o
+    // token; para um membro de uma família inclui também o memberId, para
+    // as crianças de cada pessoa nunca se confundirem com as de outro
+    // membro do mesmo link partilhado.
+    const childRefPrefix = item.entry.rsvpMemberId ? (token+'#'+item.entry.rsvpMemberId+'#') : (token+'#');
+    const declared = Array.isArray(resp.children) ? resp.children : [];
+    const stillWanted = declared
+      .map((c,i)=>({ name:c.name, age:c.age, attending:c.attending, ref: childRefPrefix+i }))
+      .filter(c=>c.attending!==false);
+    const wantedRefs = new Set(stillWanted.map(c=>c.ref));
+
+    // 1) Uma criança já ligada a este convite que deixou de constar da
+    //    resposta atual: se a linha tiver sido criada por nós (rsvpCreated),
+    //    remove-se mesmo (e liberta o lugar, se tivesse). Se era uma criança
+    //    que já existia antes de qualquer RSVP (só foi "adotada"), NUNCA se
+    //    apaga — só se desliga do convite, voltando a ser uma entrada normal.
+    for(let idx=criancasCat.names.length-1; idx>=0; idx--){
+      const n = criancasCat.names[idx];
+      if(n && n.rsvpChildOf && n.rsvpChildOf.indexOf(childRefPrefix)===0 && !wantedRefs.has(n.rsvpChildOf)){
+        if(n.rsvpCreated){
+          if(n.guestId){
+            const seatKey2 = findGuestSeatKey(n.guestId, null);
+            if(seatKey2) delete state.seating.assignments[seatKey2];
+            delete state.confirmed[n.guestId];
+          }
+          criancasCat.names.splice(idx,1);
+        } else {
+          delete n.rsvpChildOf;
+          delete n.rsvpCreated;
+        }
+        changed = true;
+        summary.childrenUnlinked++;
+      }
+    }
+
+    // 2) Para cada criança ainda desejada nesta resposta.
+    stillWanted.forEach(c=>{
+      const existing = criancasCat.names.find(n=>n && n.rsvpChildOf===c.ref);
+      if(existing){
+        if(existing.name!==c.name || existing.age!==c.age){ existing.name=c.name; existing.age=c.age; changed=true; }
+        return;
+      }
+      // Tenta adotar uma criança já existente (sem ligação a nenhum RSVP)
+      // com o mesmo nome e idade compatível — evita duplicar quem o casal
+      // já tinha posto na lista antes de mandar o convite.
+      const candidate = criancasCat.names.find(n =>
+        n && !n.rsvpChildOf && normName(n.name)===normName(c.name) && agesCompatible(n.age, c.age)
+      );
+      if(candidate){
+        candidate.rsvpChildOf = c.ref;
+        if((candidate.age===undefined || candidate.age==='') && c.age!==undefined && c.age!==null && c.age!==''){
+          candidate.age = c.age;
+        }
+        changed = true;
+        summary.childrenLinked++;
+      } else {
+        {
+          const newChildId = generateGuestId();
+          criancasCat.names.push({ id:newChildId, guestId:newChildId, name:c.name||'Criança', age:(c.age===undefined||c.age===null)?'':c.age, payingPct:0, rsvpChildOf:c.ref, rsvpCreated:true });
+        }
+        changed = true;
+        summary.childrenAdded++;
+      }
+    });
+  });
+
+  lastRSVPSyncSummary = summary;
+  return changed;
 }
 
-// Verifica e incrementa, numa única transação, o contador diário de
-// chamadas de IA de um casamento. Sem weddingId (ver resolveWeddingId
-// acima) não há como aplicar o limite, por isso deixa passar — a
-// proteção de custo cai, mas o classificador continua a funcionar.
-async function checkAndIncrementAiUsage(weddingId) {
-  if (!weddingId || typeof weddingId !== 'string') return { allowed: true };
-  const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD (UTC)
-  const ref = db.collection('aiUsage').doc(weddingId);
-  return db.runTransaction(async (tx) => {
-    const snap = await tx.get(ref);
-    const data = snap.exists ? snap.data() : {};
-    const count = data.day === today ? (data.count || 0) : 0;
-    if (count >= AI_DAILY_LIMIT_PER_WEDDING) {
-      return { allowed: false };
+/* --- Assistente Weddy (simulado — sem chave de API configurada) --- */
+let assistChatHistory = [];
+// Guarda a conversa no documento do casamento (não numa coleção à parte —
+// é só conveniência entre sessões/dispositivos do próprio casal, ao
+// contrário dos convites RSVP, que têm de ficar isolados por convidado).
+// Mantém só as últimas mensagens, para o documento não crescer sem limite.
+const ASSIST_CHAT_HISTORY_LIMIT = 30;
+function saveAssistChatHistory(){
+  if(!FIREBASE_READY || !currentWeddingId) return;
+  if(assistChatHistory.length > ASSIST_CHAT_HISTORY_LIMIT){
+    assistChatHistory = assistChatHistory.slice(-ASSIST_CHAT_HISTORY_LIMIT);
+  }
+  CURRENT_DOC().set({ assistantChatHistory: assistChatHistory }, { merge:true }).catch(err=>{
+    console.error('Weddy assistant history save error:', err.code, err.message);
+  });
+}
+// Respostas simuladas: usam sempre os dados reais deste casamento
+// (guardados em `state`/`weddingSettings`), só o "cérebro" que escreve a
+// frase é que está fixo em vez de vir de um modelo de linguagem real.
+// Sugestões "proactivas" — não é IA nenhuma, são só regras simples sobre o
+// estado real do casamento (convidados por responder, prazo a chegar,
+// orçamento ultrapassado), mostradas como atalhos para uma pergunta já
+// pronta ao abrir o Assistente pela primeira vez numa conversa.
+function getProactiveSuggestions(){
+  const out = [];
+  const pendingCount = flattenAllGuestsForRSVP().filter(g=>{
+    if(!g.entry.rsvpToken) return false;
+    return !rsvpHasResponded(memberRSVPResponse(g));
+  }).length;
+  if(pendingCount>0){
+    out.push({ icon:ICONS.bell, text:ta('cpSuggestPendingRSVP')(fmtGuestCount(pendingCount)), ask:'quantos convidados já confirmaram presença' });
+  }
+  const deadline = weddingSettings.rsvpDeadline;
+  if(deadline && pendingCount>0){
+    const days = Math.ceil((new Date(deadline+'T00:00:00') - new Date())/86400000);
+    if(days>=0 && days<=7){
+      out.push({ icon:ICONS.calendar, text: days===0 ? ta('cpSuggestRSVPDeadlineToday') : ta('cpSuggestRSVPDeadlineDays')(days), ask:'como funciona o rsvp' });
     }
-    tx.set(ref, {
-      day: today,
-      count: count + 1,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    }, { merge: true });
-    return { allowed: true };
+  }
+  const gasto = totalExpenseValue();
+  const orcamento = state.budget && state.budget.total ? state.budget.total : 0;
+  if(orcamento>0 && gasto>orcamento && out.length<2){
+    out.push({ icon:ICONS.budget, text:ta('cpSuggestOverBudget')(fmtEUR(gasto-orcamento)), ask:'como está o orçamento' });
+  }
+  return out.slice(0,2);
+}
+// ============================================================
+// WEDDY COPILOT (lado dos noivos) — Fase 3A do roadmap: a mesma
+// arquitetura Intent → Permission check → Action → Resposta já usada no
+// Weddy Concierge (rsvp.html, Fase 2.5), agora aplicada ao Assistente dos
+// noivos. classifyCopilotIntent() continua a ser sempre a primeira
+// tentativa — é só regex/keywords, sem custo nem rede. Desde a Fase 3B.1,
+// quando isso não reconhece nada (UNKNOWN), respondeAssistente() (mais
+// abaixo) tenta uma segunda opinião do AIService antes de desistir — mas
+// só para escolher a intenção; quem lê o estado do casamento e escreve a
+// resposta final continua a ser sempre WeddyActions, nunca a IA.
+// ============================================================
+
+const WEDDY_COPILOT_INTENTS = {
+  CREATE_TASK:'CREATE_TASK', GET_UPCOMING_TASKS:'GET_UPCOMING_TASKS',
+  GET_PENDING_RSVPS:'GET_PENDING_RSVPS', GET_DIETARY_LIST:'GET_DIETARY_LIST', GET_RSVP_INFO:'GET_RSVP_INFO',
+  GET_REMAINING_PAYMENTS:'GET_REMAINING_PAYMENTS', GET_BUDGET:'GET_BUDGET',
+  GET_GUEST_COUNT:'GET_GUEST_COUNT', GET_COUNTDOWN:'GET_COUNTDOWN', GET_TABLE_COUNT:'GET_TABLE_COUNT',
+  SEARCH_DOCUMENTS:'SEARCH_DOCUMENTS',
+  // Fase 5 — RSVP Autopilot (v1, modo assistido): só leitura, tal como
+  // tudo o resto do Copilot hoje — "preparar lembrete" continua a ser
+  // sempre um clique do casal no ecrã de RSVP, nunca algo que o chat
+  // dispara sozinho (ver rsvpAutopilotList/openRSVPAutopilotModal).
+  GET_LATE_RSVPS:'GET_LATE_RSVPS', GET_RSVPS_NEEDING_REMINDER:'GET_RSVPS_NEEDING_REMINDER',
+  // Fase 7 — Wedding Brain: mesma arquitetura Intent → WeddyActions.read →
+  // resposta, mas cada uma destas junta dados de MAIS do que um domínio
+  // (Vendors+Budget+Documentos, ou Guests+Mesas), em vez de ler só um sítio
+  // como as intents acima. A IA continua a servir só para classificar —
+  // nunca para gerar a resposta (ver respondeAssistente).
+  GET_SUPPLIER_PAYMENT_INFO:'GET_SUPPLIER_PAYMENT_INFO',
+  GET_UNCONTRACTED_SUPPLIERS:'GET_UNCONTRACTED_SUPPLIERS',
+  GET_PAYMENTS_THIS_MONTH:'GET_PAYMENTS_THIS_MONTH',
+  SEARCH_SUPPLIER_CONTRACT:'SEARCH_SUPPLIER_CONTRACT',
+  GET_SUPPLIER_BUDGET_MISMATCHES:'GET_SUPPLIER_BUDGET_MISMATCHES',
+  GET_GUESTS_WITHOUT_TABLE:'GET_GUESTS_WITHOUT_TABLE',
+  UNKNOWN:'UNKNOWN'
+};
+// Palavras com menos de 3 letras ("e", "x", "a"...) ficam de fora — são
+// curtas demais para significarem alguma coisa numa comparação e, sem este
+// filtro, "trapezista" "batia" com "fotografia" só por ambas conterem "e".
+function wordsOfNormalized(normStr){ return (normStr||'').split(/[^a-z0-9]+/).filter(w=>w.length>=3); }
+// "fotógrafo" e "fotografia" (a categoria) são a mesma família de
+// palavras, mas só a profissão/ofício costuma aparecer na pergunta — uma
+// simples inclusão de substring não os liga. Sem inventar um stemmer real,
+// considera que duas palavras batem certo se partilharem os primeiros
+// carateres (radical), desde que ambas tenham pelo menos 5 — é uma
+// aproximação simples, não IA nenhuma, mas cobre casos comuns em
+// português (fotógrafo/fotografia, florista/flores, decorador/decoração).
+function wordsMatchLoosely(a, b){
+  if(!a || !b || a.length<3 || b.length<3) return false;
+  if(a.includes(b) || b.includes(a)) return true;
+  const minLen = Math.min(a.length, b.length);
+  if(minLen < 5) return false;
+  const prefixLen = Math.min(6, minLen);
+  return a.slice(0,prefixLen) === b.slice(0,prefixLen);
+}
+// Encontra o fornecedor a que a pergunta se refere, por nome ou por
+// categoria (ex: "o fotógrafo" encontra o fornecedor cuja categoria é
+// "Fotografia e Vídeo", mesmo que essa palavra não esteja no nome dele).
+// Mesma técnica de pontuação por tokens que searchWeddingDocuments usa —
+// nunca é a IA a decidir isto, é sempre comparação de texto direta.
+function findSupplierByText(text){
+  const tokens = normalizeSearchText(text).split(/[^a-z0-9]+/).filter(w=>w.length>=3 && !STOPWORDS_PT.has(w));
+  if(!tokens.length || !state.suppliers || !state.suppliers.length) return null;
+  let best = null, bestScore = 0;
+  state.suppliers.forEach(s=>{
+    const nameWords = wordsOfNormalized(normalizeSearchText(s.name));
+    const cat = catById(s.category);
+    const catWords = cat ? wordsOfNormalized(normalizeSearchText(cat.name)) : [];
+    let score = 0;
+    tokens.forEach(t=>{
+      if(nameWords.some(w=>wordsMatchLoosely(t,w))) score += 2;
+      if(catWords.some(w=>wordsMatchLoosely(t,w))) score += 1;
+    });
+    if(score>bestScore){ bestScore = score; best = s; }
+  });
+  return bestScore>0 ? best : null;
+}
+
+// 1) CLASSIFICAÇÃO — por keywords, nenhuma IA real. Devolve sempre
+// { intent, value? }; nunca decide sozinha se pode executar nem como
+// responder — isso é o trabalho dos passos seguintes.
+function classifyCopilotIntent(pergunta){
+  const p = pergunta.toLowerCase().trim();
+
+  // "cria uma tarefa para X" / "adiciona tarefa X" / "lembra-me de X"
+  const taskMatch = p.match(/^(?:cria(?:r)?|adiciona(?:r)?)\s+(?:uma\s+)?tarefa\s+(?:para|de)?\s*(.+)$/)
+                  || p.match(/^lembra-?me\s+de\s+(.+)$/);
+  if(taskMatch && taskMatch[1] && taskMatch[1].trim().length>1){
+    let texto = pergunta.trim()
+      .replace(/^(?:cria(?:r)?|adiciona(?:r)?)\s+(?:uma\s+)?tarefa\s+(?:para|de)?\s*/i,'')
+      .replace(/^lembra-?me\s+de\s+/i,'');
+    texto = texto.charAt(0).toUpperCase()+texto.slice(1);
+    return { intent: WEDDY_COPILOT_INTENTS.CREATE_TASK, value: texto };
+  }
+
+  // "o que tenho esta semana" / "tarefas desta semana" / "agenda da semana"
+  if(/esta semana|nesta semana|essa semana|this week|agenda da semana|tarefas (desta|da) semana|o que tenho (para )?(esta semana|hoje)/.test(p)){
+    return { intent: WEDDY_COPILOT_INTENTS.GET_UPCOMING_TASKS };
+  }
+
+  // "quem está atrasado" / "quem passou o prazo" — subconjunto mais
+  // específico dos pendentes (checar antes do "quem ainda não respondeu").
+  if(/atrasad|em atraso|passou o prazo|fora do prazo/.test(p) && /quem|convidad|rsvp/.test(p)){
+    return { intent: WEDDY_COPILOT_INTENTS.GET_LATE_RSVPS };
+  }
+
+  // "quem precisa de lembrete" / "quem ainda não recebeu lembrete"
+  if(/precisa(m)?\s+de\s+lembrete|lembrete[s]?\s+(em falta|pendentes)|ainda n[aã]o (recebeu|receberam) (o )?lembrete|n[aã]o foi(ram)? lembrad/.test(p)){
+    return { intent: WEDDY_COPILOT_INTENTS.GET_RSVPS_NEEDING_REMINDER };
+  }
+
+  // "quem ainda não respondeu" / "quem falta responder" / "quem não confirmou"
+  if(/quem.*(ainda n[aã]o respond|falta respond|n[aã]o confirmou|n[aã]o respondeu)/.test(p)){
+    return { intent: WEDDY_COPILOT_INTENTS.GET_PENDING_RSVPS };
+  }
+
+  // "quem é vegetariano" / "quem tem restrições alimentares" / "alergias"
+  if(/vegetarian|vegan|alergia/.test(p) || (/restri[cç]/.test(p) && /alimentar/.test(p))){
+    return { intent: WEDDY_COPILOT_INTENTS.GET_DIETARY_LIST };
+  }
+
+  // "quanto falta pagar" / "próximos pagamentos" / "pagamentos pendentes"
+  if(/falta pagar|pagamentos? (pendentes|por pagar|em falta)|quanto (falta|tenho) (ainda )?(a )?pagar|pr[oó]ximos pagamentos/.test(p)){
+    return { intent: WEDDY_COPILOT_INTENTS.GET_REMAINING_PAYMENTS };
+  }
+
+  // Fase 7 — Wedding Brain: perguntas que cruzam Vendors com Budget e
+  // Documentos. Vêm antes das genéricas (GET_BUDGET, GET_TABLE_COUNT) de
+  // propósito — são mais específicas, têm de ganhar quando se aplicam.
+
+  // "quanto pagámos ao fotógrafo" / "próximo pagamento do espaço" —
+  // identifica QUAL fornecedor pelo nome ou pela categoria (findSupplierByText)
+  // e só dispara se resolver a um fornecedor concreto.
+  if(/(quanto|j[aá]).*pag[aá]?mos?\s+(ao|à|a|para)\s+/.test(p) || /pr[oó]ximo pagamento\s+(do|da|de)\s+/.test(p) || /valor (do|da) (contrato|fornecedor)/.test(p)){
+    const supplierGuess = findSupplierByText(pergunta);
+    if(supplierGuess) return { intent: WEDDY_COPILOT_INTENTS.GET_SUPPLIER_PAYMENT_INFO };
+  }
+
+  // "que fornecedores ainda não estão contratados" / "fornecedores por contratar"
+  if(/fornecedor/.test(p) && /(n[aã]o est[aã]o contratad|por contratar|ainda n[aã]o contratei|falta contratar|sem contrat)/.test(p)){
+    return { intent: WEDDY_COPILOT_INTENTS.GET_UNCONTRACTED_SUPPLIERS };
+  }
+
+  // "que pagamentos tenho este mês" / "pagamentos do mês"
+  if(/pagamentos?/.test(p) && /(este m[eê]s|deste m[eê]s|do m[eê]s|neste m[eê]s)/.test(p)){
+    return { intent: WEDDY_COPILOT_INTENTS.GET_PAYMENTS_THIS_MONTH };
+  }
+
+  // "há algum fornecedor cujo valor não bate certo com o orçamento?"
+  if(/fornecedor/.test(p) && /(n[aã]o bate|discrep[aâ]nci|n[aã]o coincide|n[aã]o corresponde)/.test(p)){
+    return { intent: WEDDY_COPILOT_INTENTS.GET_SUPPLIER_BUDGET_MISMATCHES };
+  }
+
+  // "o contrato do fotógrafo diz alguma coisa sobre X" — só dispara se
+  // conseguir identificar a QUE fornecedor o contrato pertence; senão cai
+  // na verificação seguinte (pesquisa geral de documentos).
+  if(/contrato/.test(p)){
+    const supplierGuess = findSupplierByText(pergunta);
+    if(supplierGuess) return { intent: WEDDY_COPILOT_INTENTS.SEARCH_SUPPLIER_CONTRACT };
+  }
+
+  // Achado ao vivo da Fase 4 (Rita): "a IA não sabe responder a nada sobre
+  // os documentos do casamento". Causa raiz: SEARCH_DOCUMENTS só era
+  // tentada em ÚLTIMO recurso, depois de TODAS as intenções genéricas
+  // abaixo (convidad/orçamento/data/mesa) — e qualquer pergunta real sobre
+  // um documento quase sempre contém uma dessas palavras genéricas (ex.:
+  // "o que diz o documento sobre a DATA de entrega?", "o contrato tem
+  // alguma cláusula sobre o PAGAMENTO final?"), por isso essas intenções
+  // genéricas ganhavam sempre primeiro e a pesquisa de documentos, na
+  // prática, quase nunca chegava a disparar. Corrigido com o mesmo
+  // princípio já usado acima ("mais específica ganha quando se aplica"):
+  // se a pergunta menciona explicitamente um documento/contrato/PDF E há
+  // mesmo uma correspondência real num documento carregado, isso ganha às
+  // intenções genéricas abaixo. Exige uma palavra-gatilho explícita (não
+  // corre para toda e qualquer pergunta) para não sequestrar perguntas
+  // normais de orçamento/convidados/mesas que não tenham nada a ver com
+  // documentos.
+  if(/document|contrato|pdf|carreguei|anexei|ficheiro/.test(p)){
+    const found = searchWeddingDocuments(pergunta);
+    if(found) return { intent: WEDDY_COPILOT_INTENTS.SEARCH_DOCUMENTS };
+  }
+
+  // "que convidados confirmados ainda não têm mesa" — antes do /mesa/
+  // genérico (GET_TABLE_COUNT), que só conta quantas mesas existem.
+  if(/sem mesa|mesa por atribuir|ainda n[aã]o t[eê]m mesa|falta atribuir mesa/.test(p)){
+    return { intent: WEDDY_COPILOT_INTENTS.GET_GUESTS_WITHOUT_TABLE };
+  }
+
+  if(/rsvp/.test(p)){
+    return { intent: WEDDY_COPILOT_INTENTS.GET_RSVP_INFO };
+  }
+  if(/convidad/.test(p)){
+    return { intent: WEDDY_COPILOT_INTENTS.GET_GUEST_COUNT };
+  }
+  if(/orçamento|orcamento|gast|dinheiro|pago|paguei/.test(p)){
+    return { intent: WEDDY_COPILOT_INTENTS.GET_BUDGET };
+  }
+  if(/data|dias|falta/.test(p) && weddingSettings.weddingDate){
+    return { intent: WEDDY_COPILOT_INTENTS.GET_COUNTDOWN };
+  }
+  if(/mesa/.test(p)){
+    return { intent: WEDDY_COPILOT_INTENTS.GET_TABLE_COUNT };
+  }
+  if(state.weddingDocuments && state.weddingDocuments.length){
+    return { intent: WEDDY_COPILOT_INTENTS.SEARCH_DOCUMENTS };
+  }
+  return { intent: WEDDY_COPILOT_INTENTS.UNKNOWN };
+}
+
+// 2) PERMISSÕES — hoje o ecrã do Assistente já só é acessível com
+// subscrição ativa (viewDefAssistente/zona premium), por isso não há aqui
+// nenhuma distinção adicional a fazer; fica como ponto de extensão único
+// para o dia em que, por exemplo, uma ação de escrita precise de uma
+// verificação própria antes de correr.
+function checkCopilotIntentPermission(intent, context){
+  return { allowed:true };
+}
+
+// 3) REGISTO DE AÇÕES — o único sítio que lê o estado do casamento ou
+// escreve nele. Separado explicitamente em "read" (nunca muda nada, seguro
+// para chamar quantas vezes for preciso) e "write" (muda o estado — no dia
+// em que uma IA real passar a poder chamar isto, saber-se de antemão quais
+// são as ações que escrevem é o que permite decidir quais precisam de
+// confirmação antes de correr, como já acontece no Weddy Concierge).
+// "Primeiras ações" do roadmap para o lado dos noivos; updateTask,
+// getGuest/getGuests, moveGuestToTable, sendRSVPReminder, etc. ficam para
+// quando a Fase 3B (IA real) precisar delas.
+const WeddyActions = {
+  read: {
+    getUpcomingTasks(){
+      return getDuedTodoItems().filter(it => it.days>=0 && it.days<=7);
+    },
+    getPendingRSVPs(){
+      // Fase 4C (RSVP-COUNT-01): usa a mesma regra que o Wedding Health
+      // (isRsvpPending), em vez de uma versão própria que contava sempre
+      // como pendente quem não tinha rsvpToken, mesmo já confirmado à mão.
+      return flattenAllGuestsForRSVP().filter(isRsvpPending).map(g=>g.name).filter(Boolean);
+    },
+    getDietaryList(){
+      return flattenAllGuestsForRSVP().filter(g=>{
+        const resp = g.entry.rsvpToken ? memberRSVPResponse(g) : null;
+        return resp && resp.dietary && resp.dietary.trim();
+      }).map(g=>{
+        const resp = memberRSVPResponse(g);
+        return `${g.name} (${resp.dietary.trim()})`;
+      });
+    },
+    getRemainingPayments(){
+      const gasto = totalExpenseValue();
+      const pago = totalExpensePaid();
+      return { totalRemaining: Math.max(0, gasto-pago), upcoming: getUpcomingPayments() };
+    },
+    // Fase 5 — RSVP Autopilot: mesma classificação usada no ecrã de RSVP
+    // (rsvpAutopilotList), só filtrada por urgência.
+    getLateRSVPs(){
+      return rsvpAutopilotList().filter(x=>x.bucket==='late').map(x=>x.item.name).filter(Boolean);
+    },
+    getRSVPsNeedingReminder(){
+      return rsvpAutopilotList().filter(x=>x.bucket==='due' || x.bucket==='late').map(x=>x.item.name).filter(Boolean);
+    },
+    // Fase 7 — Wedding Brain: cada uma destas junta Vendors + Budget (+
+    // Documentos), usando o link supplierId que a Fase 6.1/6.1.1 criou.
+    // Continuam a ser só leitura — nunca escrevem nada.
+    getSupplierPaymentInfo(pergunta){
+      const s = findSupplierByText(pergunta);
+      if(!s) return null;
+      return {
+        name: s.name,
+        paid: supplierPaidTotal(s),
+        total: Number(s.valorTotal)||0,
+        nextAmount: Number(s.nextPaymentAmount)||0,
+        nextDate: s.nextPaymentDate || '',
+        hasContract: !!(supplierContractDoc(s.id) || getSupplierContract(s.id))
+      };
+    },
+    getUncontractedSuppliers(){
+      return (state.suppliers||[]).filter(s=>s.status!=='contratado').map(s=>s.name).filter(Boolean);
+    },
+    getPaymentsThisMonth(){
+      const now = new Date();
+      const y = now.getFullYear(), m = now.getMonth();
+      const list = [];
+      state.expenses.forEach(e=>{
+        const remaining = Math.max(0, Number(e.value)-Number(e.paid||0));
+        if(remaining>0 && e.dueDate){
+          const d = new Date(e.dueDate+'T00:00:00');
+          if(d.getFullYear()===y && d.getMonth()===m) list.push({ label:e.desc||ta('defaultExpenseLabel'), amount:remaining, dueDate:e.dueDate });
+        }
+      });
+      // Também os "próximos pagamentos" já combinados na ficha do
+      // fornecedor, que podem ainda não ter despesa/data-limite no Budget.
+      (state.suppliers||[]).forEach(s=>{
+        if(s.nextPaymentDate && Number(s.nextPaymentAmount)>0){
+          const d = new Date(s.nextPaymentDate+'T00:00:00');
+          if(d.getFullYear()===y && d.getMonth()===m) list.push({ label: ta('autoPaymentDesc')(s.name), amount:Number(s.nextPaymentAmount), dueDate:s.nextPaymentDate });
+        }
+      });
+      return list.sort((a,b)=>(a.dueDate||'').localeCompare(b.dueDate||''));
+    },
+    searchSupplierContract(pergunta){
+      const s = findSupplierByText(pergunta);
+      if(!s) return null;
+      const doc = supplierContractDoc(s.id);
+      if(!doc){
+        const legacy = getSupplierContract(s.id);
+        return { supplierName: s.name, found:false, legacyOnly: !!legacy };
+      }
+      const tokens = normalizeSearchText(pergunta).split(/[^a-z0-9]+/).filter(w=>w.length>=3 && !STOPWORDS_PT.has(w));
+      let best = null;
+      buildDocumentChunks(doc.text).forEach(chunk=>{
+        const norm = normalizeSearchText(chunk);
+        let score = 0;
+        tokens.forEach(t=>{ if(norm.includes(t)) score++; });
+        if(score>0 && (!best || score>best.score)) best = { score, snippet: chunk.length>420 ? chunk.slice(0,420)+'…' : chunk };
+      });
+      return { supplierName: s.name, found: !!best, snippet: best ? best.snippet : null };
+    },
+    getSupplierBudgetMismatches(){
+      return (state.suppliers||[]).map(s=>{
+        const contracted = Number(s.valorTotal)||0;
+        if(!contracted) return null;
+        const budgeted = state.expenses.filter(e=>e.supplierId===s.id).reduce((sum,e)=>sum+(Number(e.value)||0),0);
+        const diff = budgeted - contracted;
+        if(Math.abs(diff) < 0.01) return null;
+        return { name: s.name, contracted, budgeted, diff };
+      }).filter(Boolean);
+    },
+    getGuestsWithoutTable(){
+      const assignedKeys = assignedGuestKeysSet();
+      return flattenAllGuestsForRSVP().filter(g=>{
+        if(!isConfirmed(g.side, g.catId, g.idx)) return false;
+        return !assignedKeys.has(g.guestId);
+      }).map(g=>g.name).filter(Boolean);
+    }
+  },
+  write: {
+    // Fase 4A da auditoria (COPILOT-01, P1): antes, esta função chamava
+    // render() (que agenda uma gravação no Firestore só 500ms depois, em
+    // segundo plano) e devolvia logo o resultado — respondeAssistente()
+    // confirmava "sucesso" ao utilizador sem esperar a escrita terminar,
+    // nem verificar se ela tinha realmente sido bem sucedida. Agora
+    // devolve uma Promise que só resolve depois de pushRemoteImmediate()
+    // confirmar que a gravação chegou ao Firestore — se falhar, a Promise
+    // rejeita e quem chamou sabe que a tarefa NÃO foi persistida.
+    createTask(texto){
+      const cat = state.todoCategories.find(c=>c.id==='tc3') || state.todoCategories[0];
+      if(!cat) return Promise.resolve(null);
+      cat.items.push({ text: texto, done:false, due:'', time:'' });
+      _origRender(); // atualiza o ecrã já, mas sem agendar o autosave debounced (fazemos a gravação imediata a seguir)
+      return pushRemoteImmediate().then(()=> cat);
+    }
+  }
+};
+
+// 4) RESPOSTA — junta classificação + permissão + ação numa frase de texto
+// só (este chat, ao contrário do Concierge, não tem passo de confirmação —
+// as ações de hoje, como criar tarefa, são de baixo risco e reversíveis
+// diretamente no ecrã).
+// A partir da Fase 3B.1: se as regex não reconhecerem nada (UNKNOWN), tenta
+// -se uma segunda opinião do AIService antes de desistir — mas só para
+// escolher a intenção; a IA nunca fica a saber os dados do casamento nem
+// escreve a resposta final, isso continua a ser sempre feito abaixo, a
+// partir do WeddyActions. Sem chave de IA configurada (ou em caso de
+// erro), AIService.classify() devolve sempre UNKNOWN e o comportamento
+// fica idêntico ao de antes desta camada existir.
+async function respondeAssistente(pergunta){
+  const context = {};
+  let classified = classifyCopilotIntent(pergunta);
+  if(classified.intent === WEDDY_COPILOT_INTENTS.UNKNOWN){
+    const aiGuess = await AIService.classify(pergunta, 'couple');
+    if(aiGuess && aiGuess.intent && aiGuess.intent!==WEDDY_COPILOT_INTENTS.UNKNOWN && WEDDY_COPILOT_INTENTS[aiGuess.intent]){
+      classified = aiGuess;
+    }
+  }
+  const permission = checkCopilotIntentPermission(classified.intent, context);
+  const I = WEDDY_COPILOT_INTENTS;
+  if(!permission.allowed) return ta('cpPermDenied');
+
+  const totalConvidados = countGuests('noiva') + countGuests('noivo');
+  const totalConfirmados = countConfirmed('noiva') + countConfirmed('noivo');
+
+  switch(classified.intent){
+    case I.CREATE_TASK: {
+      // Fase 4A da auditoria (COPILOT-01, P1): só confirmamos sucesso ao
+      // utilizador depois de a escrita no Firestore terminar com sucesso
+      // (ver WeddyActions.write.createTask / pushRemoteImmediate). Se
+      // falhar, dizemos que falhou em vez de fingir que gravámos — regra
+      // explícita desta fase: "a IA nunca pode dizer que fez algo se não
+      // tiver confirmação real da persistência".
+      try{
+        const cat = await WeddyActions.write.createTask(classified.value);
+        if(!cat) return null;
+        showSaveToast(false);
+        return ta('cpTaskCreated')(classified.value, cat.label);
+      }catch(err){
+        showSaveToast(true);
+        return ta('cpTaskCreateFailed')(classified.value);
+      }
+    }
+    case I.GET_UPCOMING_TASKS: {
+      const items = WeddyActions.read.getUpcomingTasks();
+      if(!items.length) return ta('cpNoUpcomingTasks');
+      const lista = items.slice(0,10).map(it=>`${it.text} (${formatDatePT(it.due)}${it.time?` ${ta('dateAtTimeSeparator')} ${it.time}`:''})`).join('; ');
+      return ta('cpUpcomingTasksList')(lista, items.length>10 ? ta('cpAndMore')(items.length-10) : '');
+    }
+    case I.GET_PENDING_RSVPS: {
+      const pendentes = WeddyActions.read.getPendingRSVPs();
+      if(!pendentes.length) return ta('cpAllRSVPResponded');
+      const lista = pendentes.slice(0,15).join(', ');
+      return ta('cpPendingRSVPList')(lista, pendentes.length>15 ? ta('cpAndMore')(pendentes.length-15) : '');
+    }
+    case I.GET_LATE_RSVPS: {
+      const atrasados = WeddyActions.read.getLateRSVPs();
+      if(!atrasados.length) return ta('cpNoLateRSVP');
+      const lista = atrasados.slice(0,15).join(', ');
+      return ta('cpLateRSVPList')(lista, atrasados.length>15 ? ta('cpAndMore')(atrasados.length-15) : '');
+    }
+    case I.GET_RSVPS_NEEDING_REMINDER: {
+      const precisam = WeddyActions.read.getRSVPsNeedingReminder();
+      if(!precisam.length) return ta('cpNoReminderNeeded');
+      const lista = precisam.slice(0,15).join(', ');
+      return ta('cpReminderList')(lista, precisam.length>15 ? ta('cpAndMore')(precisam.length-15) : '');
+    }
+    case I.GET_DIETARY_LIST: {
+      const comRestricao = WeddyActions.read.getDietaryList();
+      if(!comRestricao.length) return ta('cpNoDietaryInfo');
+      return ta('cpDietaryList')(comRestricao.join(', '));
+    }
+    case I.GET_REMAINING_PAYMENTS: {
+      const { totalRemaining, upcoming } = WeddyActions.read.getRemainingPayments();
+      if(totalRemaining<=0) return ta('cpAllPaid');
+      const base = ta('cpRemainingTotal')(fmtEUR(totalRemaining));
+      if(!upcoming.length) return base;
+      const lista = upcoming.slice(0,8).map(u=>`${u.label} — ${fmtEUR(u.amount)} (${u.days===0?ta('cpToday'):ta('cpInDays')(u.days)})`).join('; ');
+      return ta('cpRemainingNext15')(base, lista);
+    }
+    case I.GET_RSVP_INFO: {
+      const pendentes = flattenAllGuestsForRSVP().filter(g=>{
+        if(!g.entry.rsvpToken) return true;
+        return !rsvpHasResponded(memberRSVPResponse(g));
+      }).length;
+      return ta('cpRSVPInfoExplain')(fmtGuestCount(pendentes));
+    }
+    case I.GET_GUEST_COUNT:
+      return ta('cpGuestCount')(fmtGuestCount(totalConvidados), fmtGuestCount(totalConfirmados));
+    case I.GET_BUDGET: {
+      const gasto = totalExpenseValue();
+      const pago = totalExpensePaid();
+      const orcamento = state.budget && state.budget.total ? state.budget.total : 0;
+      return ta('cpBudgetSummary')(fmtEUR(orcamento), fmtEUR(gasto), fmtEUR(pago));
+    }
+    case I.GET_COUNTDOWN: {
+      const dias = daysUntil(weddingSettings.weddingDate);
+      return dias>=0 ? ta('cpCountdownFuture')(dias, formatDatePT(weddingSettings.weddingDate)) : ta('cpCountdownPast')(formatDatePT(weddingSettings.weddingDate));
+    }
+    case I.GET_TABLE_COUNT: {
+      const nTables = (state.seating && state.seating.tables) ? state.seating.tables.length : 0;
+      return ta('cpTableCount')(nTables);
+    }
+    case I.SEARCH_DOCUMENTS: {
+      // "Wedding Brain" leve: pesquisa por palavras-chave nos documentos que o
+      // casal carregou, sem nenhuma IA real — devolve sempre o texto tal como
+      // está escrito no documento, nunca uma resposta "inventada".
+      const found = searchWeddingDocuments(pergunta);
+      if(found) return ta('cpDocFound')(found.doc, found.snippet);
+      return ta('cpDemoFallback');
+    }
+    // Fase 7 — Wedding Brain: estas respostas juntam mais do que um
+    // domínio (Vendors+Budget+Documentos, ou Guests+Mesas). Continua tudo a
+    // sair só de WeddyActions — nenhuma destas frases é escrita pela IA.
+    case I.GET_SUPPLIER_PAYMENT_INFO: {
+      const info = WeddyActions.read.getSupplierPaymentInfo(pergunta);
+      if(!info) return ta('cpSupplierPaymentNotFound');
+      let resposta = ta('cpPaidSoFar')(info.name, fmtEUR(info.paid));
+      if(info.total>0) resposta += ta('cpOfContracted')(fmtEUR(info.total));
+      resposta += '.';
+      if(info.nextAmount>0 && info.nextDate) resposta += ta('cpNextPayment')(fmtEUR(info.nextAmount), formatDatePT(info.nextDate));
+      else if(info.nextAmount>0) resposta += ta('cpNextPaymentNoDate')(fmtEUR(info.nextAmount));
+      resposta += info.hasContract ? ta('cpSourceContract') : ta('cpSourceBudgetOnly');
+      return resposta;
+    }
+    case I.GET_UNCONTRACTED_SUPPLIERS: {
+      const list = WeddyActions.read.getUncontractedSuppliers();
+      if(!list.length) return ta('cpAllContracted');
+      return ta('cpUncontractedList')(list.join(', '));
+    }
+    case I.GET_PAYMENTS_THIS_MONTH: {
+      const list = WeddyActions.read.getPaymentsThisMonth();
+      if(!list.length) return ta('cpNoPaymentsThisMonth');
+      const lista = list.slice(0,10).map(u=>`${u.label} — ${fmtEUR(u.amount)} (${formatDatePT(u.dueDate)})`).join('; ');
+      return ta('cpPaymentsThisMonthList')(lista, list.length>10 ? ta('cpAndMore')(list.length-10) : '');
+    }
+    case I.SEARCH_SUPPLIER_CONTRACT: {
+      const result = WeddyActions.read.searchSupplierContract(pergunta);
+      if(!result) return ta('cpContractSupplierNotFound');
+      if(result.legacyOnly) return ta('cpContractLegacyOnly')(result.supplierName);
+      if(!result.found) return ta('cpContractNotUploaded')(result.supplierName);
+      if(!result.snippet) return ta('cpContractNoMatch')(result.supplierName);
+      return ta('cpContractFound')(result.supplierName, result.snippet);
+    }
+    case I.GET_SUPPLIER_BUDGET_MISMATCHES: {
+      const list = WeddyActions.read.getSupplierBudgetMismatches();
+      if(!list.length) return ta('cpNoBudgetMismatch');
+      const lista = list.slice(0,8).map(m=>`${m.name} (${ta('cpContractedLabel')}: ${fmtEUR(m.contracted)}, ${ta('cpInBudgetLabel')}: ${fmtEUR(m.budgeted)}, ${m.diff>0?ta('cpMoreWord'):ta('cpLessWord')}: ${fmtEUR(Math.abs(m.diff))})`).join('; ');
+      return ta('cpBudgetMismatchList')(lista);
+    }
+    case I.GET_GUESTS_WITHOUT_TABLE: {
+      const list = WeddyActions.read.getGuestsWithoutTable();
+      if(!list.length) return ta('cpAllGuestsHaveTable');
+      const lista = list.slice(0,15).join(', ');
+      return ta('cpGuestsWithoutTableList')(lista, list.length>15 ? ta('cpAndMore')(list.length-15) : '');
+    }
+    default:
+      return ta('cpDemoFallback');
+  }
+}
+// "Wedding Brain" leve — pesquisa por palavras-chave nos documentos que o
+// casal carregou (ver viewDefDocumentos), sem nenhuma IA real: procura o
+// trecho (por agora, a página do PDF) que tenha mais palavras da pergunta
+// em comum e devolve-o tal como está escrito — nunca gera texto novo.
+const STOPWORDS_PT = new Set(['o','a','os','as','um','uma','de','da','do','das','dos','e','ou','que','com','para','por','em','no','na','nos','nas','se','é','ao','aos','à','às','como','qual','quais','quando','onde','sobre','diz','tem','há','isso','este','esta','isto','meu','minha','nosso','nossa']);
+function normalizeSearchText(s){
+  return (s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+}
+// Junta parágrafos curtos (títulos de cláusulas, por exemplo) ao parágrafo
+// seguinte, para a pesquisa nunca devolver só um título sem o conteúdo que
+// vem a seguir.
+function buildDocumentChunks(text){
+  const raw = (text||'').split(/\n{2,}/).map(c=>c.trim()).filter(Boolean);
+  const merged = [];
+  let buffer = '';
+  raw.forEach(c=>{
+    buffer = buffer ? buffer + '\n\n' + c : c;
+    if(buffer.length >= 60){
+      merged.push(buffer);
+      buffer = '';
+    }
+  });
+  if(buffer) merged.push(buffer);
+  return merged;
+}
+function searchWeddingDocuments(pergunta){
+  const docs = state.weddingDocuments || [];
+  if(!docs.length) return null;
+  const tokens = normalizeSearchText(pergunta).split(/[^a-z0-9]+/).filter(w=>w.length>=3 && !STOPWORDS_PT.has(w));
+  if(!tokens.length) return null;
+  let best = null;
+  docs.forEach(doc=>{
+    const chunks = buildDocumentChunks(doc.text);
+    chunks.forEach(chunk=>{
+      const norm = normalizeSearchText(chunk);
+      let score = 0;
+      tokens.forEach(t=>{ if(norm.includes(t)) score++; });
+      if(score>0 && (!best || score>best.score)){
+        best = { score, doc: doc.name, snippet: chunk.length>420 ? chunk.slice(0,420)+'…' : chunk };
+      }
+    });
+  });
+  return best;
+}
+// Extrai o texto de um PDF inteiramente no browser, com pdf.js — nada é
+// enviado para nenhum servidor de IA. Limitamos o total de caracteres para
+// não arriscar estourar o limite de tamanho de um documento no Firestore
+// (1MB), já que o texto fica guardado junto com o resto dos dados da app.
+const WEDDING_DOC_TEXT_LIMIT = 60000;
+async function extractPdfText(file){
+  const buffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+  let text = '';
+  for(let i=1; i<=pdf.numPages; i++){
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    text += content.items.map(it=>it.str).join(' ') + '\n\n';
+    if(text.length > WEDDING_DOC_TEXT_LIMIT) break;
+  }
+  return text.slice(0, WEDDING_DOC_TEXT_LIMIT).trim();
+}
+async function handleDocumentUpload(fileList){
+  const file = fileList && fileList[0];
+  const statusEl = document.getElementById('document-upload-status');
+  const input = document.getElementById('document-file-input');
+  if(!file) return;
+  if(file.type !== 'application/pdf'){
+    if(statusEl) statusEl.textContent = ta('statusPdfOnly');
+    return;
+  }
+  if(file.size > 15*1024*1024){
+    if(statusEl) statusEl.textContent = ta('statusFileTooLarge');
+    return;
+  }
+  const uploadLabel = document.querySelector('label[for="document-file-input"]');
+  if(statusEl) statusEl.innerHTML = `<span class="upload-status-row"><span class="upload-spin"></span>${escapeHTML(ta('statusReadingPdf'))}</span>`;
+  if(uploadLabel) uploadLabel.style.cssText += 'pointer-events:none; opacity:.5;';
+  try{
+    const text = await extractPdfText(file);
+    let storagePath = null;
+    if(storage && FIREBASE_READY && auth && auth.currentUser && currentWeddingId){
+      storagePath = `documents/${currentWeddingId}/${Date.now()}_${file.name}`;
+      try{ await storage.ref(storagePath).put(file); }catch(err){ storagePath = null; }
+    }
+    if(!state.weddingDocuments) state.weddingDocuments = [];
+    state.weddingDocuments.push({ name: file.name, text, storagePath, uploadedAt: new Date().toISOString() });
+    if(statusEl) statusEl.textContent = '';
+    render();
+    pushRemote(true);
+  }catch(err){
+    console.error('Weddy PDF extract error:', err);
+    if(statusEl) statusEl.textContent = ta('statusPdfReadError');
+    if(uploadLabel) uploadLabel.style.cssText = uploadLabel.style.cssText.replace('pointer-events:none; opacity:.5;','');
+  }
+  if(input) input.value = '';
+}
+
+function viewDefPremiumLocked(title){
+  // Pedido da Rita (Set 2026): esta lista só mostrava 2 funcionalidades
+  // (RSVP e Assistente) — passou a mostrar todas as que ficam desbloqueadas
+  // com a subscrição, tal como já estão descritas noutros sítios da app
+  // (premiumFeatureGrid da Home, subscriptionFeature* da página "Gerir
+  // subscrição"), sem inventar nada de novo.
+  const features = [
+    [ICONS.mail, ta('premiumFeatureRSVP')],
+    [ICONS.chat, ta('premiumFeatureAssistant')],
+    [ICONS.guests, ta('subscriptionFeatureGuests')],
+    [ICONS.sparkle, ta('premiumTileAISeatingDesc')],
+    [ICONS.warn||ICONS.checklist, ta('premiumTileHealthDesc')],
+    [ICONS.camera, ta('premiumTileMemoriesDesc')],
+    [ICONS.docnote||ICONS.checklist, ta('premiumTileDocumentosDesc')],
+    [ICONS.calendar, ta('premiumTileGoogleCalDesc')],
+  ];
+  const listHtml = features.map(([icon,label])=>`
+    <li>
+      <div style="width:34px; height:34px; border-radius:50%; background:rgba(193,88,62,0.12); display:flex; align-items:center; justify-content:center; flex-shrink:0;">${icon}</div>
+      <div style="flex:1;">${label}</div>
+    </li>`).join('');
+  return `
+  ${defSubHeader(title)}
+  <div class="premium-upsell">
+    <div class="premium-upsell-icon">${ICONS.sparkle}</div>
+    <div class="premium-upsell-title">Weddy Premium</div>
+    <div class="premium-upsell-text">${ta('premiumLockedText')(title)}</div>
+    <ul class="premium-upsell-list">${listHtml}</ul>
+    <button class="login-btn js-premium-subscribe" style="max-width:none;">${ta('btnSubscribePremium')}</button>
+    <div class="empty-note" style="margin:10px 0 0;">${ta('testAccountNote')}</div>
+  </div>
+  `;
+}
+
+// Fase 9.1 — Google Calendar. Weddy = fonte de verdade, Google Calendar =
+// projeção externa (nunca lemos o Google Calendar para dentro da Weddy
+// nesta fase — ver comentário no topo do bloco Fase 9.1 nas Cloud
+// Functions). Estados possíveis, do mais simples ao mais completo:
+//   1) ainda a carregar (googleCalendarLoading)
+//   2) desligado — botão "Ligar Google Calendar"
+//   3) ligado, mas sem calendário escolhido ainda — lista de calendários
+//   4) ligado com calendário escolhido — estado + Sincronizar/Alterar/Desligar
+function viewDefGoogleCalendar(){
+  if(!hasActiveSubscription()) return viewDefPremiumLocked(ta('googleCalendarTitle'));
+  if(!googleCalendarIntegration && !googleCalendarLoading) loadGoogleCalendarIntegration();
+
+  const msgHtml = googleCalendarActionMsg
+    ? `<div class="login-msg ${googleCalendarActionMsg.type==='error'?'error':'success'}" style="margin:0 16px 14px;">${escapeHTML(googleCalendarActionMsg.text)}</div>`
+    : '';
+
+  if(googleCalendarLoading && !googleCalendarIntegration){
+    return `${defSubHeader(ta('googleCalendarTitle'))}<div class="loading">${ta('loadingLabel')||'A carregar…'}</div>`;
+  }
+
+  const gc = googleCalendarIntegration || { connected:false };
+  const needsReauth = gc.status === 'REAUTH_REQUIRED';
+  const hasCalendar = gc.connected && gc.calendarId;
+
+  // Estado 4: ligado com calendário escolhido.
+  if(gc.connected && hasCalendar && !needsReauth){
+    const lastSyncDate = gc.lastSyncAt && typeof gc.lastSyncAt.toDate === 'function' ? gc.lastSyncAt.toDate() : null;
+    const lastSync = lastSyncDate ? formatDateTimePT(lastSyncDate) : ta('googleCalendarNeverSynced');
+    return `
+    ${defSubHeader(ta('googleCalendarTitle'))}
+    ${msgHtml}
+    <div class="premium-upsell" style="text-align:left;">
+      <div class="def-row-title" style="margin-bottom:6px;">${ICONS.checkCircle||'✓'} ${ta('googleCalendarConnectedTitle')}</div>
+      <div class="def-row-desc" style="margin-bottom:2px;"><strong>${ta('googleCalendarCalendarLabel')}:</strong> ${escapeHTML(gc.calendarName||'')}</div>
+      <div class="def-row-desc" style="margin-bottom:16px;"><strong>${ta('googleCalendarLastSyncLabel')}:</strong> ${escapeHTML(lastSync)}</div>
+      ${gc.lastSyncStatus==='error' ? `<div class="login-msg error" style="margin-bottom:12px;">${escapeHTML(gc.lastSyncError ? ta('googleCalendarSyncErrorPrefix')+': '+gc.lastSyncError : ta('googleCalendarGenericSyncError'))}</div>` : ''}
+      <button class="login-btn" id="gcal-sync-btn" style="margin-top:0;" ${googleCalendarBusy?'disabled':''}>${googleCalendarBusy? ta('googleCalendarSyncing') : ta('googleCalendarSyncNow')}</button>
+      <button class="login-btn" id="gcal-change-btn" style="margin-top:10px; background:transparent; color:var(--rust-dark,#9A4F3D); border:1.6px solid var(--line,#e5e1dc);" ${googleCalendarBusy?'disabled':''}>${ta('googleCalendarChangeCalendar')}</button>
+      <button class="delete-response-link" id="gcal-disconnect-btn" style="margin-top:16px;" ${googleCalendarBusy?'disabled':''}>${ta('googleCalendarDisconnect')}</button>
+    </div>`;
+  }
+
+  // Estado 3: ligado ao Google, mas ainda falta escolher/voltar a
+  // escolher o calendário — ou a ligação precisa de ser refeita
+  // (REAUTH_REQUIRED, ex.: o token foi revogado do lado do Google).
+  if(gc.connected && (!hasCalendar || needsReauth)){
+    if(needsReauth){
+      return `
+      ${defSubHeader(ta('googleCalendarTitle'))}
+      ${msgHtml}
+      <div class="premium-upsell">
+        <div class="premium-upsell-icon">${ICONS.calendar}</div>
+        <div class="premium-upsell-text">${ta('googleCalendarReauthText')}</div>
+        <button class="login-btn" id="gcal-connect-btn" style="max-width:none;" ${googleCalendarBusy?'disabled':''}>${googleCalendarBusy? ta('googleCalendarConnecting') : ta('googleCalendarReconnect')}</button>
+      </div>`;
+    }
+    if(!googleCalendarCalendars && !googleCalendarCalendarsLoading) loadGoogleCalendarCalendars();
+    if(googleCalendarCalendarsLoading){
+      return `${defSubHeader(ta('googleCalendarTitle'))}${msgHtml}<div class="loading">${ta('loadingLabel')||'A carregar…'}</div>`;
+    }
+    const cals = googleCalendarCalendars || [];
+    return `
+    ${defSubHeader(ta('googleCalendarTitle'))}
+    ${msgHtml}
+    <div class="def-row-desc" style="margin:0 16px 14px;">${ta('googleCalendarPickCalendarText')}</div>
+    <div class="list-group">
+      ${cals.length ? cals.map(c=>`
+        <div class="list-row tappable" data-gcalpick="${escapeHTML(c.id)}" style="cursor:pointer;">
+          <div class="def-row-mid">
+            <div class="def-row-title">${escapeHTML(c.summary)}</div>
+            <div class="def-row-desc">${escapeHTML(c.timeZone||'')}</div>
+          </div>
+          ${ICONS.chev}
+        </div>`).join('') : `<div class="empty-note" style="padding:16px;">${ta('googleCalendarNoCalendars')}</div>`}
+    </div>
+    ${cals.length ? '' : `<div style="padding:0 16px;"><button class="login-btn" id="gcal-connect-btn" style="max-width:none;" ${googleCalendarBusy?'disabled':''}>${googleCalendarBusy? ta('googleCalendarConnecting') : ta('googleCalendarReconnect')}</button></div>`}`;
+  }
+
+  // Estado 2: desligado.
+  return `
+  ${defSubHeader(ta('googleCalendarTitle'))}
+  ${msgHtml}
+  <div class="premium-upsell">
+    <div class="premium-upsell-icon">${ICONS.calendar}</div>
+    <div class="premium-upsell-text">${ta('googleCalendarIntroText')}</div>
+    <button class="login-btn" id="gcal-connect-btn" style="max-width:none;" ${googleCalendarBusy?'disabled':''}>${googleCalendarBusy? ta('googleCalendarConnecting') : ta('googleCalendarConnect')}</button>
+  </div>`;
+}
+function loadGoogleCalendarCalendars(){
+  googleCalendarCalendarsLoading = true;
+  CalendarService.listCalendars().then(res=>{
+    googleCalendarCalendarsLoading = false;
+    if(res.ok){
+      googleCalendarCalendars = res.calendars;
+    } else {
+      googleCalendarCalendars = [];
+      googleCalendarActionMsg = { type:'error', text: res.message };
+    }
+    render();
   });
 }
 
-exports.classifyWeddyIntent = onCall({ region: 'europe-west1' }, async (request) => {
-  const question = request.data && request.data.question;
-  const requestedRole = request.data && request.data.role;
-  if (!question || typeof question !== 'string' || !question.trim() || question.length > 500) {
-    throw new HttpsError('invalid-argument', 'Pergunta em falta, vazia ou demasiado longa.');
+// Resume, em português simples, o que a última sincronização de respostas
+// mudou — para não ser preciso confiar às cegas que os números e as mesas
+// ficaram mesmo atualizados.
+function rsvpSyncSummaryText(s){
+  const partes = [];
+  if(s.confirmedChanged) partes.push(ta('rsvpConfirmedChanged')(s.confirmedChanged));
+  if(s.seatsFreed) partes.push(ta('rsvpSeatsFreed')(s.seatsFreed));
+  if(s.childrenAdded) partes.push(ta('rsvpChildrenAdded')(s.childrenAdded));
+  if(s.childrenLinked) partes.push(ta('rsvpChildrenLinked')(s.childrenLinked));
+  if(s.childrenUnlinked) partes.push(ta('rsvpChildrenUnlinked')(s.childrenUnlinked));
+  return partes.length ? ta('rsvpSyncChanged')(partes.join(', ')) : ta('rsvpSyncNothing');
+}
+// Descarrega um CSV simples com o estado de RSVP de todos os convidados —
+// não precisa de nenhuma biblioteca nem ligação, corre inteiramente no
+// browser (útil para partilhar com o catering, por exemplo).
+function csvEscape(v){
+  const s = (v===undefined || v===null) ? '' : String(v);
+  return /[",;\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
+}
+function exportRSVPToCSV(){
+  const guests = flattenAllGuestsForRSVP();
+  const header = appLang==='en'
+    ? ['Name','Side','Category','Status','Meal','Dietary restrictions','Transport','Accommodation','Declared children']
+    : ['Nome','Lado','Categoria','Estado','Refeição','Restrições alimentares','Transporte','Alojamento','Crianças declaradas'];
+  const linhas = [header.map(csvEscape).join(';')];
+  const estadoLabel = { yes:ta('rsvpStatusGoing'), no:ta('rsvpStatusNotGoing'), maybe:ta('rsvpStatusMaybe'), pending:ta('rsvpStatusPending') };
+  const simTxt = appLang==='en' ? 'Yes' : 'Sim';
+  guests.forEach(item=>{
+    const resp = item.entry.rsvpToken ? memberRSVPResponse(item) : null;
+    const estado = estadoLabel[rsvpStatusOf(resp)];
+    const declaredChildren = (resp && Array.isArray(resp.children)) ? resp.children : [];
+    const criancasTxt = declaredChildren.map(c=>`${c.name||'?'}${c.age!==undefined&&c.age!==null&&c.age!==''?ta('yearsOldSuffix')(c.age):''}${c.attending===false?ta('notGoingSuffix'):''}`).join(', ');
+    linhas.push([
+      item.name, item.side==='noiva'?ta('sideBride'):ta('sideGroom'), item.catLabel, estado,
+      (resp&&resp.meal)||'', (resp&&resp.dietary)||'', (resp&&resp.transporte)?simTxt:'', (resp&&resp.alojamento)?simTxt:'', criancasTxt
+    ].map(csvEscape).join(';'));
+  });
+  const csv = '﻿' + linhas.join('\r\n'); // BOM para acentos abrirem bem no Excel
+  const blob = new Blob([csv], { type:'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const coupleSlug = `${weddingSettings.coupleName1||'casamento'}-${weddingSettings.coupleName2||''}`.trim().replace(/\s+/g,'-').toLowerCase();
+  a.href = url;
+  a.download = `rsvp-${coupleSlug || 'convidados'}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url), 2000);
+}
+function viewDefWeddingHealth(){
+  if(!hasActiveSubscription()) return viewDefPremiumLocked(ta('healthTitle'));
+  const checks = getWeddingHealthChecks();
+  const totalGuests = countGuests('noiva')+countGuests('noivo');
+  const totalConfirmed = countConfirmed('noiva')+countConfirmed('noivo');
+  const pct = totalGuests>0 ? Math.round((totalConfirmed/totalGuests)*100) : 0;
+  const nRed = checks.filter(c=>c.severity==='red').length;
+  const nYellow = checks.filter(c=>c.severity==='yellow').length;
+  const overall = nRed>0 ? 'red' : (nYellow>0 ? 'yellow' : 'green');
+  const overallDot = { red:'#C0523F', yellow:'#D8A657', green:'#7A9471' }[overall];
+  const overallText = overall==='red' ? ta('healthSummaryRed')(nRed+nYellow)
+    : overall==='yellow' ? ta('healthSummaryYellow')(nYellow)
+    : ta('healthAllGood');
+  const rows = checks.map(c=>{
+    const dot = c.severity==='red' ? '#C0523F' : '#D8A657';
+    const gotoAttr = c.goto ? `data-healthgoto="${c.goto.tab ? 'tab:'+c.goto.tab : 'def:'+c.goto.def}"` : '';
+    return `
+    <div class="list-row" style="align-items:flex-start; gap:10px;">
+      <span style="width:10px; height:10px; border-radius:50%; background:${dot}; flex-shrink:0; margin-top:6px;"></span>
+      <div class="def-row-mid" style="flex:1;">
+        <div class="def-row-title" style="font-weight:400; line-height:1.4;">${c.text}</div>
+      </div>
+      ${c.goto ? `<button class="rsvp-copy-btn" ${gotoAttr} style="flex-shrink:0;">${ta('btnResolve')}</button>` : ''}
+    </div>`;
+  }).join('');
+  return `
+  ${defSubHeader(ta('healthTitle'))}
+  <div class="stat-card" style="margin:0 16px 12px; display:flex; align-items:center; gap:12px;">
+    <span style="width:14px; height:14px; border-radius:50%; background:${overallDot}; flex-shrink:0;"></span>
+    <div>
+      <div class="l" style="margin:0 0 2px; font-size:16px; color:var(--ink);">${overallText}</div>
+      ${totalGuests>0 ? `<div class="l" style="margin:0;">${ta('healthConfirmedPct')(pct)}</div>` : ''}
+    </div>
+  </div>
+  ${checks.length ? `<div class="list-group" style="margin-bottom:24px;">${rows}</div>` : `<div class="empty-note" style="margin:0 16px 24px;">${ta('healthAllGoodDesc')}</div>`}
+  `;
+}
+function viewDefRSVP(){
+  if(!hasActiveSubscription()) return viewDefPremiumLocked(ta('rsvpTitle'));
+  if(!rsvpResponsesLoaded && !rsvpLoadingResponses) loadRSVPResponses();
+  if(rsvpSubScreen==='deadline') return viewRSVPDeadline();
+  if(rsvpSubScreen==='info') return viewRSVPInfo();
+  if(rsvpSubScreen==='faq') return viewRSVPFaq();
+  if(rsvpSubScreen==='respostas') return viewRSVPRespostas();
+  return viewRSVPHome();
+}
+// Reorganização (Set 2026): ecrã principal do RSVP passou a ser um "hub" de
+// navegação (3 cartões de estatística + 3 linhas de navegação), em vez de
+// uma única página com tudo em sequência — usa.data-rsvpgoto para navegar
+// para cada sub-ecrã (viewRSVPDeadline/viewRSVPInfo/viewRSVPRespostas),
+// tal como o data-defgoto do menu de Definições faz para as suas secções.
+function rsvpNavRow(key, icon, colorIdx, title, desc){
+  return `
+  <div class="rsvp-nav-row tappable" data-rsvpgoto="${key}">
+    <div class="rsvp-nav-row-icon" style="${chipStyle(colorIdx)}">${icon}</div>
+    <div class="rsvp-nav-row-mid">
+      <div class="rsvp-nav-row-title">${title}</div>
+      <div class="rsvp-nav-row-desc">${desc}</div>
+    </div>
+    <span class="rsvp-nav-row-chev">${ICONS.chev}</span>
+  </div>`;
+}
+function viewRSVPHome(){
+  const allGuests = flattenAllGuestsForRSVP();
+  const totalGuests = allGuests.length;
+  let responded = 0, confirmedYes = 0;
+  allGuests.forEach(item=>{
+    const token = item.entry.rsvpToken;
+    const resp = token ? memberRSVPResponse(item) : null;
+    const status = rsvpStatusOf(resp);
+    if(status!=='pending') responded++;
+    if(status==='yes') confirmedYes++;
+  });
+  const deadline = weddingSettings.rsvpDeadline || '';
+  const deadlineLabel = deadline ? formatDatePT(deadline) : ta('rsvpDeadlineUnset');
+  const rustChip = 'background:rgba(193,88,62,0.12); color:var(--rust-dark);';
+  const sendRowsHtml = `
+    <div class="list-row tappable" data-rsvpgoto="deadline" style="cursor:pointer; padding-left:0; padding-right:0;">
+      <div class="def-row-icon" style="${rustChip} width:38px; height:38px;">${ICONS.calendar}</div>
+      <div class="def-row-mid">
+        <div class="def-row-title">${ta('labelRSVPDeadline')}</div>
+        <div class="def-row-desc">${deadlineLabel}</div>
+      </div>
+      ${ICONS.chev}
+    </div>
+    <div class="list-row tappable" data-rsvpgoto="info" style="cursor:pointer; padding-left:0; padding-right:0;">
+      <div class="def-row-icon" style="${rustChip} width:38px; height:38px;">${ICONS.pencil}</div>
+      <div class="def-row-mid">
+        <div class="def-row-title">${ta('guestInfoLabel')}</div>
+        <div class="def-row-desc">${ta('guestInfoSubLabel')}</div>
+      </div>
+      ${ICONS.chev}
+    </div>`;
+  const listRowsHtml = `
+    <div class="list-row tappable" data-rsvpgoto="respostas" style="cursor:pointer; padding-left:0; padding-right:0;">
+      <div class="def-row-icon" style="${rustChip} width:38px; height:38px;">${ICONS.guests}</div>
+      <div class="def-row-mid">
+        <div class="def-row-title">${ta('rsvpRespostasNavTitle')}</div>
+        <div class="def-row-desc">${ta('rsvpRespostasNavDesc')}</div>
+      </div>
+      ${ICONS.chev}
+    </div>`;
+  return `
+  ${defSubHeader(ta('rsvpTitle'))}
+  <div class="segmented">
+    <button type="button" class="${rsvpHomeTab==='send'?'active':''}" data-rsvphometab="send">${ta('rsvpTabSendInvites')}</button>
+    <button type="button" class="${rsvpHomeTab==='list'?'active':''}" data-rsvphometab="list">${ta('rsvpTabGuestList')}</button>
+  </div>
+  <div class="stat-card" style="margin:10px 16px 12px; padding:16px 16px 2px;">
+    <div style="display:flex; align-items:flex-start; gap:12px; margin-bottom:6px;">
+      <div class="def-row-icon" style="${rustChip} width:40px; height:40px;">${ICONS.mail}</div>
+      <div style="flex:1; min-width:0;">
+        <div class="l" style="margin:0 0 3px; font-size:15px; color:var(--ink); font-weight:600; text-align:left;">${ta('rsvpTabSendInvites')}</div>
+        <div class="empty-note" style="margin:0; padding:0; text-align:left; font-style:normal;">${ta('rsvpHubSubtitle')}</div>
+      </div>
+    </div>
+    ${rsvpHomeTab==='list' ? listRowsHtml : sendRowsHtml}
+  </div>
+  ${rsvpHomeTab==='list' ? `
+  <div class="stats-row" style="margin:0 16px 14px;">
+    <div class="stat-card" style="text-align:center;"><div class="l" style="margin:0 0 4px;">${ta('tabGuests')}</div><div class="n">${fmtGuestCount(totalGuests)}</div></div>
+    <div class="stat-card" style="text-align:center;"><div class="l" style="margin:0 0 4px;">${ta('respondedLabel')}</div><div class="n">${fmtGuestCount(responded)}</div></div>
+    <div class="stat-card" style="text-align:center;"><div class="l" style="margin:0 0 4px;">${ta('lblConfirmed')}</div><div class="n">${fmtGuestCount(confirmedYes)}</div></div>
+  </div>` : ''}
+  <div style="margin:0 16px 28px; padding:16px; border-radius:16px; background:linear-gradient(135deg, rgba(193,88,62,0.1), rgba(216,166,87,0.12)); text-align:center;">
+    <div class="l" style="margin:0 0 4px; font-size:14.5px; color:var(--ink); font-weight:600;">${ta('rsvpNoteAutoFreeTitle')}</div>
+    <div style="font-size:12px; color:var(--ink-soft); line-height:1.5;">${ta('rsvpNoteAutoFree')}</div>
+  </div>
+  `;
+}
+function viewRSVPDeadline(){
+  const allGuests = flattenAllGuestsForRSVP();
+  const withStatus = allGuests.map(item=>{
+    const token = item.entry.rsvpToken;
+    const resp = token ? memberRSVPResponse(item) : null;
+    return { status: rsvpStatusOf(resp) };
+  });
+  const pending = withStatus.filter(w=>w.status==='pending');
+  const autopilot = rsvpAutopilotList();
+  const lateList = autopilot.filter(x=>x.bucket==='late');
+  const dueList = autopilot.filter(x=>x.bucket==='due');
+  const needsAttention = [...lateList, ...dueList];
+  const deadline = weddingSettings.rsvpDeadline || '';
+  const deadlinePassed = deadline && deadline < new Date().toISOString().slice(0,10);
+  const deadlineWarnHtml = (deadlinePassed && pending.length)
+    ? `<div class="rsvp-deadline-warn">${ICONS.warn}<div>${ta('deadlinePassedWarn')(formatDatePT(deadline), pending.length)}</div></div>`
+    : '';
+  return `
+  ${defSubHeader(ta('labelRSVPDeadline'))}
+  <div class="rsvp-deadline-card">
+    <div style="flex:1; min-width:0;">
+      <div class="l">${ta('labelRSVPDeadline')}</div>
+      <input type="date" id="rsvp-deadline-input" value="${escapeHTML(deadline)}">
+    </div>
+    <button class="rsvp-deadline-save" id="rsvp-deadline-save">${ta('btnSave')}</button>
+  </div>
+  ${deadlineWarnHtml}
+  ${autopilot.length ? `
+  <div class="stat-card" style="margin:0 16px 12px;">
+    <div class="l" style="margin:0 0 8px;">${ta('autopilotTitle')}</div>
+    <div class="empty-note" style="margin:0 0 10px; font-style:normal;">${[
+      lateList.length ? ta('autopilotLateCount')(lateList.length) : '',
+      dueList.length ? ta('autopilotDueCount')(dueList.length) : ''
+    ].filter(Boolean).join(' · ') || ta('autopilotAllOnTime')}</div>
+    <button class="rsvp-deadline-save" id="rsvp-autopilot-prepare" style="width:100%;" ${needsAttention.length? '':'disabled'}>${ICONS.bell} ${ta('autopilotPrepareBtn')(needsAttention.length)}</button>
+  </div>` : ''}
+  `;
+}
+function viewRSVPInfo(){
+  return `
+  ${defSubHeader(ta('guestInfoLabel'))}
+  <div class="stat-card" style="margin:0 16px 12px;">
+    <div class="l" style="margin:0 0 8px;">${ta('guestInfoLabel')} <span style="font-weight:400;">${ta('guestInfoSubLabel')}</span></div>
+    ${guestInfoSectionHTML(GUEST_INFO_FIELDS)}
+    <button class="rsvp-deadline-save" id="rsvp-guestinfo-save" style="margin-top:10px; width:100%;">${ta('btnSaveInfo')}</button>
+  </div>
+  <div class="stat-card" style="margin:0 16px 12px;">
+    <div class="l" style="margin:0 0 8px;">${ta('conciergeLabel')} <span style="font-weight:400;">${ta('conciergeSubLabel')}</span></div>
+    ${guestInfoSectionHTML(CONCIERGE_INFO_FIELDS)}
+    <button class="rsvp-deadline-save" id="rsvp-concierge-save" style="margin-top:10px; width:100%;">${ta('btnSaveInfo')}</button>
+  </div>
+  ${rsvpNavRow('faq', ICONS.question, 2, ta('rsvpFaqNavTitle'), ta('rsvpFaqNavDesc'))}
+  `;
+}
+function viewRSVPFaq(){
+  const list = Array.isArray(weddingSettings.guestFaqList) ? weddingSettings.guestFaqList : [];
+  const editing = rsvpFaqEditingIndex;
+  const cards = list.map((f,i)=>{
+    const active = f.active!==false;
+    if(editing===i){
+      return `
+      <div class="faq-card">
+        <textarea class="faq-edit-field" id="rsvp-faq-edit-q" rows="2" placeholder="${ta('faqQuestionPlaceholder')}">${escapeHTML(f.q||'')}</textarea>
+        <textarea class="faq-edit-field" id="rsvp-faq-edit-a" rows="3" placeholder="${ta('faqAnswerPlaceholder')}">${escapeHTML(f.a||'')}</textarea>
+        <div style="display:flex; gap:8px;">
+          <button class="rsvp-deadline-save" data-faqsave="${i}" style="flex:1;">${ta('btnSave')}</button>
+          <button class="rsvp-copy-btn" data-faqcancel style="flex:0 0 auto;">${ta('btnCancel')||'Cancelar'}</button>
+        </div>
+      </div>`;
+    }
+    return `
+    <div class="faq-card${active?'':' off'}">
+      <div class="faq-card-top">
+        <div>
+          <div class="faq-card-q">${escapeHTML(f.q||'')}</div>
+          <div class="faq-card-a">${escapeHTML(f.a||'')}</div>
+        </div>
+        <button class="faq-toggle${active?' on':''}" data-faqtoggle="${i}"><span class="faq-toggle-knob"></span></button>
+      </div>
+      <div class="faq-card-actions">
+        <button class="faq-card-action" data-faqedit="${i}">${ICONS.pencil} ${ta('btnEditFaq')}</button>
+        <button class="faq-card-action danger" data-faqdel="${i}">${ICONS.trash} ${ta('btnDeleteFaq')}</button>
+      </div>
+    </div>`;
+  }).join('');
+  const newCardHtml = editing==='new' ? `
+    <div class="faq-card">
+      <textarea class="faq-edit-field" id="rsvp-faq-edit-q" rows="2" placeholder="${ta('faqQuestionPlaceholder')}"></textarea>
+      <textarea class="faq-edit-field" id="rsvp-faq-edit-a" rows="3" placeholder="${ta('faqAnswerPlaceholder')}"></textarea>
+      <div style="display:flex; gap:8px;">
+        <button class="rsvp-deadline-save" data-faqsave="new" style="flex:1;">${ta('btnSave')}</button>
+        <button class="rsvp-copy-btn" data-faqcancel style="flex:0 0 auto;">${ta('btnCancel')||'Cancelar'}</button>
+      </div>
+    </div>` : '';
+  return `
+  ${defSubHeader(ta('rsvpFaqNavTitle'))}
+  <div class="empty-note" style="margin:0 16px 12px; font-style:normal;">${ta('faqToggleHint')}</div>
+  ${list.length ? cards : (editing==='new' ? '' : `<div class="empty-note" style="margin:0 16px 12px;">${ta('faqEmptyState')}</div>`)}
+  ${newCardHtml}
+  ${editing==='new' ? '' : `<button class="faq-add-btn" id="rsvp-faq-add">${ICONS.plus} ${ta('btnAddFaq')}</button>`}
+  <button id="rsvp-faq-silent-save" hidden></button>
+  `;
+}
+function viewRSVPRespostas(){
+  const allGuests = flattenAllGuestsForRSVP();
+  const totalGuests = allGuests.length;
+  let maybeCount = 0;
+  const withStatus = allGuests.map(item=>{
+    const token = item.entry.rsvpToken;
+    const resp = token ? memberRSVPResponse(item) : null;
+    const status = rsvpStatusOf(resp);
+    if(status==='maybe') maybeCount++;
+    return { item, token, resp, status };
+  });
+  const q = normName(rsvpSearchQuery);
+  const visible = withStatus.filter(({item, status})=>{
+    if(rsvpStatusFilter!=='all' && status!==rsvpStatusFilter) return false;
+    if(q && !normName(item.name).includes(q)) return false;
+    return true;
+  });
+  const deadlineForBuckets = weddingSettings.rsvpDeadline || '';
+  const rows = visible.map(({item, token, resp, status})=>{
+    const rowKey = `${item.side}|${item.catId}|${item.idx}`;
+    const rowBucket = rsvpAutopilotBucket(item, token, status, deadlineForBuckets);
+    const isFamilyDoc = token && rsvpResponses[token] && rsvpResponses[token].isFamily;
+    const statusHtml = status==='yes'
+      ? `<span class="rsvp-pill rsvp-pill-yes">${ta('rsvpStatusGoing')}${resp.meal? ' · '+escapeHTML(resp.meal):''}</span>`
+      : status==='no'
+        ? `<span class="rsvp-pill rsvp-pill-no">${ta('rsvpStatusNotGoing')}</span>`
+        : status==='maybe'
+          ? `<span class="rsvp-pill rsvp-pill-maybe">${ta('rsvpStatusMaybe')}</span>`
+          : (resp && resp.openedAt)
+            ? `<span class="rsvp-pill rsvp-pill-opened">${ta('rsvpStatusOpened')}</span>`
+            : `<span class="rsvp-pill rsvp-pill-pending">${ta('rsvpStatusPending')}</span>`;
+    let actionsHtml;
+    if(token){
+      const link = RSVP_BASE_URL + '?g=' + token;
+      actionsHtml = `<div class="rsvp-actions-inline">
+        <button class="rsvp-copy-btn" data-rsvpcopy="${escapeHTML(link)}">${ICONS.mail} ${ta('btnCopyLink')}</button>
+        <button class="rsvp-qr-btn" data-rsvpqr="${escapeHTML(link)}" data-rsvpqrname="${escapeHTML(item.name)}">${ICONS.qrcode||''} QR</button>
+        <button class="rsvp-qr-btn rsvp-revoke-btn" data-rsvprevoke="${item.side}|${item.catId}|${item.idx}" data-rsvprevokename="${escapeHTML(item.name)}" title="${ta('titleRemoveInvite')}">${ICONS.trash}</button>
+      </div>`;
+    } else {
+      actionsHtml = `<button class="rsvp-copy-btn" data-rsvpgerar="${item.side}|${item.catId}|${item.idx}">${ICONS.mail} ${ta('btnGenerateLink')}</button>`;
+    }
+    const declaredChildren = (resp && Array.isArray(resp.children)) ? resp.children : [];
+    const childrenHtml = declaredChildren.length
+      ? `<div class="visit-detail">${ta('labelChildrenColon')} ${declaredChildren.map(c=>`${escapeHTML(c.name||'?')}${c.age!==undefined&&c.age!==null&&c.age!==''?ta('yearsOldSuffix')(escapeHTML(String(c.age))):''}${c.attending===false?ta('notGoingSuffix'):''}`).join(', ')}</div>`
+      : '';
+    const extrasParts = [];
+    if(status==='yes' && resp){
+      if(resp.transporte) extrasParts.push(ta('needsTransport'));
+      if(resp.alojamento) extrasParts.push(ta('needsAccommodation'));
+    }
+    const extrasHtml = extrasParts.length ? `<div class="visit-detail">${extrasParts.map(t=>escapeHTML(t)).join(' · ')}</div>` : '';
+    // Fase 5 — RSVP Autopilot: só assinala quem precisa mesmo de atenção
+    // (atrasado ou a precisar de lembrete); quem ainda está bem dentro do
+    // prazo não ganha nenhum aviso extra, para não poluir a lista.
+    const autopilotHtml = rowBucket==='late'
+      ? `<div class="visit-detail" style="color:#C0523F;">🔴 ${ta('autopilotBadgeLate')}</div>`
+      : rowBucket==='due'
+        ? `<div class="visit-detail" style="color:#D8A657;">🟠 ${ta('autopilotBadgeDue')}</div>`
+        : '';
+    const familyBadgeHtml = isFamilyDoc ? `<span class="rsvp-pill" style="background:var(--cream); color:var(--rust-dark);">${ta('familyBadge')}</span>` : '';
+    // Email opcional por convidado — só serve para os lembretes automáticos
+    // (Cloud Function separada, ver functions/). Sem isto não há forma de a
+    // função saber para onde enviar; o link em si nunca depende disto.
+    const emailHtml = (token && !rsvpGroupMode && (status==='pending' || status==='maybe'))
+      ? `<input type="email" class="field-input" data-rsvpemail="${item.side}|${item.catId}|${item.idx}|${token}" placeholder="${ta('phGuestEmail')}" value="${escapeHTML(item.entry.rsvpEmail||'')}" style="font-size:12px; padding:7px 10px; margin-top:2px;">`
+      : '';
+    const checkboxHtml = rsvpGroupMode ? `<input type="checkbox" class="rsvp-group-checkbox" data-rsvpgroupcheck="${rowKey}" ${rsvpGroupSelection.includes(rowKey)?'checked':''} style="width:19px; height:19px; margin-right:2px; flex-shrink:0;">` : '';
+    return `
+    <div class="list-row" style="flex-direction:column; align-items:stretch; gap:7px;">
+      <div class="rsvp-row-top">
+        ${checkboxHtml}
+        <div class="rsvp-row-name">${escapeHTML(item.name)}</div>
+        ${familyBadgeHtml}
+        ${statusHtml}
+      </div>
+      <div class="rsvp-row-meta">${item.side==='noiva'?ta('sideBride'):ta('sideGroom')} · ${escapeHTML(item.catLabel)}</div>
+      ${childrenHtml}
+      ${extrasHtml}
+      ${autopilotHtml}
+      ${emailHtml}
+      ${rsvpGroupMode ? '' : `<div class="rsvp-row-actions">${actionsHtml}<span class="rsvp-row-chev">${ICONS.chev}</span></div>`}
+    </div>`;
+  }).join('');
+  const groupBarHtml = rsvpGroupMode ? `
+  <div class="stat-card" style="margin:0 16px 12px; background:var(--cream);">
+    <div class="l" style="margin:0 0 8px;">${ta('groupModeHint')}</div>
+    <div style="display:flex; gap:8px;">
+      <button class="rsvp-deadline-save" id="rsvp-create-family" style="flex:1;" ${rsvpGroupSelection.length>=2?'':'disabled'}>${ta('btnCreateFamilyLink')(rsvpGroupSelection.length)}</button>
+      <button class="rsvp-copy-btn" id="rsvp-cancel-group" style="flex:0 0 auto;">${ta('btnCancelGroup')}</button>
+    </div>
+  </div>` : '';
+  const filterChips = [
+    ['all',ta('filterAllPlural')], ['yes',ta('rsvpFilterConfirmed')], ['maybe',ta('rsvpFilterMaybe')], ['pending',ta('rsvpFilterPending')], ['no',ta('rsvpFilterNotGoing')]
+  ].map(([key,label])=>{
+    const active = rsvpStatusFilter===key;
+    const style = `padding:8px 13px; font-size:12px;${active? ' background:var(--rust); color:#fff; border-color:var(--rust);':''}`;
+    return `<button class="assist-chip" style="${style}" data-rsvpfilter="${key}">${escapeHTML(label)}</button>`;
+  }).join('');
+  const transporteCount = withStatus.filter(w=>w.status==='yes' && w.resp && w.resp.transporte).length;
+  const alojamentoCount = withStatus.filter(w=>w.status==='yes' && w.resp && w.resp.alojamento).length;
+  const summaryLine = [
+    lastRSVPRefreshAt? ta('lastUpdateLabel')(fmtRelativeTime(lastRSVPRefreshAt)) : ta('neverUpdatedLabel'),
+    lastRSVPSyncSummary ? rsvpSyncSummaryText(lastRSVPSyncSummary) : ''
+  ].filter(Boolean).join(' · ');
+  return `
+  ${defSubHeader(ta('rsvpRespostasNavTitle'))}
+  ${(maybeCount || transporteCount || alojamentoCount) ? `<div class="empty-note" style="margin:0 16px 12px; font-style:normal;">${[
+    maybeCount ? ta('maybeCountLabel')(maybeCount) : '',
+    transporteCount ? ta('transportCountLabel')(transporteCount) : '',
+    alojamentoCount ? ta('accommodationCountLabel')(alojamentoCount) : ''
+  ].filter(Boolean).join(' · ')}</div>` : ''}
+  <div class="stat-card" style="margin:0 16px 14px;">
+    <button class="rsvp-refresh-btn" id="rsvp-refresh-respostas" style="margin:0; width:100%;" ${rsvpLoadingResponses?'disabled':''}>${ICONS.refresh} ${rsvpLoadingResponses? ta('updatingLabel') : ta('btnUpdateResponses')}</button>
+    <div class="empty-note" style="margin:8px 0 0; font-style:normal; font-size:11.5px; text-align:center;">${summaryLine}</div>
+    ${rsvpRefreshError ? `
+    <div style="display:flex; align-items:center; justify-content:center; gap:6px; margin-top:8px; padding-top:8px; border-top:1px solid var(--line);">
+      <span style="font-size:11.5px; color:var(--rust-dark);">${ta('rsvpRefreshErrorNote')}</span>
+      <button type="button" class="tappable" data-defgoto="reportar" style="all:unset; cursor:pointer; font-size:11.5px; font-weight:600; color:var(--rust-dark); text-decoration:underline;">${ta('btnReportProblem')}</button>
+    </div>` : ''}
+  </div>
+  <div class="search-bar" style="display:flex; gap:8px;">
+    ${ICONS.search}<input type="text" id="rsvp-search" placeholder="${ta('phSearchGuestEllipsis')}" value="${escapeHTML(rsvpSearchQuery)}">
+    <button id="rsvp-filter-toggle" style="all:unset; box-sizing:border-box; width:26px; height:26px; display:flex; align-items:center; justify-content:center; color:${rsvpStatusFilter!=='all'?'var(--rust)':'var(--ink-soft)'}; cursor:pointer; flex-shrink:0;">${ICONS.filter}</button>
+  </div>
+  <div class="assist-chips" style="flex-direction:row; flex-wrap:wrap; margin:0 16px 12px;" id="rsvp-filter-chips" ${rsvpFilterChipsOpen? '':'hidden'}>${filterChips}</div>
+  <button class="rsvp-copy-btn" id="rsvp-toggle-group" style="margin:0 16px 12px; width:calc(100% - 32px);" ${totalGuests>=2? '':'disabled'}>${ICONS.mascot||''} ${rsvpGroupMode? ta('btnCancelGroup') : ta('btnGroupFamily')}</button>
+  ${groupBarHtml}
+  ${visible.length? `<div class="list-group" style="margin-bottom:16px;">${rows}</div>` : `<div class="empty-note" style="margin:0 16px 24px;">${totalGuests? ta('emptyNoMatchSearch') : ta('emptyNoGuestsSaved')}</div>`}
+  <div class="empty-note" style="margin:0 16px 14px; font-size:11px;">${ta('rsvpRespostasNotesShort')}</div>
+  <button class="rsvp-copy-btn" id="rsvp-export-csv" style="margin:0 16px 28px; width:calc(100% - 32px);" ${totalGuests? '':'disabled'}>${ICONS.download} ${ta('btnExportCSV')}</button>
+  `;
+}
+
+// Conteúdo do Assistente Weddy, usado dentro da janela flutuante (nunca
+// como página inteira). Mostra o convite para subscrever quando ainda não
+// há subscrição ativa, ou o chat quando já há.
+function buildChatPanelBody(){
+  if(!hasActiveSubscription()){
+    return `
+    <div class="premium-upsell" style="margin:2px 0 0;">
+      <div class="premium-upsell-icon" style="width:36px; height:36px;">${ICONS.sparkle}</div>
+      <div class="premium-upsell-title" style="font-size:19px;">Weddy Premium</div>
+      <div class="premium-upsell-text">${ta('assistLockedText')}</div>
+      <button class="login-btn" id="chat-premium-subscribe-btn" style="max-width:200px; font-size:12.5px; padding:8px 0;">${ta('btnSubscribePremium')}</button>
+      <div class="empty-note" style="margin:10px 0 0;">${ta('testAccountNote')}</div>
+    </div>`;
+  }
+  const nowHHMM = new Date().toTimeString().slice(0,5);
+  const greetingName = weddingSettings.coupleName1 ? `, ${escapeHTML(weddingSettings.coupleName1)}` : '';
+  const history = assistChatHistory.length ? assistChatHistory : [
+    { role:'bot', text:ta('assistGreeting1')(greetingName) },
+    { role:'bot', text:ta('assistGreeting2') }
+  ];
+  const bubbles = history.map((m,i)=>{
+    const isUser = m.role==='user';
+    const isLastBot = !isUser && i===history.length-1;
+    return `
+    <div class="assist-msg-row ${isUser?'assist-msg-row-user':''}">
+      ${isUser? '' : `<div class="assist-msg-avatar">${ICONS.mascot}</div>`}
+      <div>
+        <div class="assist-msg ${isUser ? 'assist-msg-user' : 'assist-msg-bot'}">${escapeHTML(m.text).replace(/\n/g,'<br>')}</div>
+        ${isLastBot? `<div class="assist-msg-time">${nowHHMM}</div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+  const chipsHtml = assistChatHistory.length ? '' : `
+  <div class="assist-chips">
+    <button class="assist-chip" data-assistchip="${ta('assistChipSuppliers')}">${ta('assistChipSuppliers')} ${ICONS.arrowright}</button>
+    <button class="assist-chip" data-assistchip="${ta('assistChipRSVP')}">${ta('assistChipRSVP')} ${ICONS.arrowright}</button>
+    <button class="assist-chip" data-assistchip="${ta('assistChipQuestion')}">${ta('assistChipQuestion')} ${ICONS.arrowright}</button>
+    <button class="assist-chip" data-assistchip="${ta('assistChipFeatures')}">${ta('assistChipFeatures')} ${ICONS.arrowright}</button>
+  </div>`;
+  const suggestions = assistChatHistory.length ? [] : getProactiveSuggestions();
+  const suggestionsHtml = suggestions.length ? `
+  <div class="assist-suggestions">
+    ${suggestions.map(s=>`<button class="assist-suggestion" data-assistchip="${escapeHTML(s.ask)}">${s.icon}<span>${escapeHTML(s.text)}</span>${ICONS.chev}</button>`).join('')}
+  </div>` : '';
+  return `
+  <div class="assist-hero">
+    <div class="assist-hero-icon">${ICONS.mascot}</div>
+    <div class="assist-hero-eyebrow">${ta('assistHeroEyebrow')}</div>
+    <div class="assist-hero-title">${ta('assistHeroTitle')}</div>
+    <div class="assist-hero-text">${ta('assistHeroText')}</div>
+  </div>
+  ${suggestionsHtml}
+  <div class="assist-chat-log" id="assist-chat-log">${bubbles}</div>
+  ${chipsHtml}
+  <div class="assist-input-row">
+    <input type="text" id="assist-chat-input" placeholder="${ta('assistInputPlaceholder')}" autocomplete="off">
+    <button id="assist-chat-send" aria-label="${ta('assistSendLabel')}">${ICONS.arrowright}</button>
+  </div>
+  `;
+}
+function renderChatPanelBody(){
+  const body = document.getElementById('chat-panel-body');
+  if(!body) return;
+  body.innerHTML = buildChatPanelBody();
+  bindChatPanelHandlers();
+  const log = document.getElementById('assist-chat-log');
+  if(log) log.scrollTop = log.scrollHeight;
+}
+function openChatPanel(){
+  const backdrop = document.getElementById('chat-panel-backdrop');
+  const panel = document.getElementById('chat-panel');
+  if(!backdrop || !panel) return;
+  backdrop.hidden = false;
+  panel.hidden = false;
+  renderChatPanelBody();
+}
+function closeChatPanel(){
+  const backdrop = document.getElementById('chat-panel-backdrop');
+  const panel = document.getElementById('chat-panel');
+  if(backdrop) backdrop.hidden = true;
+  if(panel) panel.hidden = true;
+}
+// O conteúdo da janela é substituído a cada mensagem/subscrição, por isso os
+// seus próprios botões são ligados aqui de cada vez — ao contrário do
+// botão e do fundo (esses vivem sempre no DOM, ligados uma única vez).
+function bindChatPanelHandlers(){
+  // Bug encontrado numa varredura por bugs "do mesmo género" (Set 2026): o
+  // botão de subscrever aqui dentro do balão do chat usava o MESMO id
+  // ("premium-subscribe-btn") que o botão equivalente nas páginas de
+  // upsell (AI Seating bloqueado, Wedding Health bloqueado, etc.). Como as
+  // duas coisas podem estar na página ao mesmo tempo (o balão do chat é uma
+  // janela flutuante por cima do ecrã atual, nunca o substitui),
+  // "document.getElementById" só devolvia UM dos dois botões — o outro
+  // ficava sem clique nenhum ligado, um botão que parece normal mas não faz
+  // nada ao tocar, exatamente como o bug das fotos do RSVP. Deu-se um id
+  // próprio a este botão (chat-premium-subscribe-btn) para nunca mais
+  // colidir com o das páginas.
+  const subscribeBtn = document.getElementById('chat-premium-subscribe-btn');
+  if(subscribeBtn) subscribeBtn.addEventListener('click', ()=>{
+    if(!FIREBASE_READY || !currentWeddingId){ alert(ta('alertNoConnectionRetry')); return; }
+    subscribeBtn.disabled = true;
+    subscribeBtn.textContent = ta('btnActivatingEllipsis');
+    const payload = buildSubscriptionActivatePayload();
+    CURRENT_DOC().update({
+      subscription: payload
+    }).then(()=>{
+      currentSubscription = payload;
+      renderChatPanelBody();
+      updateChatFab();
+    }).catch(err=>{
+      console.error('Weddy subscribe error:', err.code, err.message);
+      subscribeBtn.disabled = false;
+      subscribeBtn.textContent = ta('btnSubscribePremium');
+      alert(ta('alertSubscriptionActivateError'));
+    });
+  });
+  const assistInput = document.getElementById('assist-chat-input');
+  const assistSendBtn = document.getElementById('assist-chat-send');
+  const sendAssistMessage = (presetText)=>{
+    const texto = (presetText!==undefined ? presetText : (assistInput? assistInput.value : '')).trim();
+    if(!texto) return;
+    if(assistInput) assistInput.value = '';
+    assistChatHistory.push({ role:'user', text:texto });
+    // Só mostra o indicador "a pensar…" quando as regex não reconheceram
+    // nada localmente e vai mesmo haver uma chamada de rede ao AIService —
+    // uma resposta já reconhecida continua instantânea, como antes.
+    const needsAI = classifyCopilotIntent(texto).intent === WEDDY_COPILOT_INTENTS.UNKNOWN;
+    if(needsAI) assistChatHistory.push({ role:'bot', text: ta('assistThinking') });
+    renderChatPanelBody();
+    respondeAssistente(texto).then(resposta=>{
+      if(needsAI) assistChatHistory.pop();
+      assistChatHistory.push({ role:'bot', text: resposta });
+      renderChatPanelBody();
+      const freshInput = document.getElementById('assist-chat-input');
+      if(freshInput) freshInput.focus();
+      saveAssistChatHistory();
+    });
+  };
+  if(assistSendBtn) assistSendBtn.addEventListener('click', ()=>sendAssistMessage());
+  if(assistInput) assistInput.addEventListener('keydown', e=>{
+    if(e.key==='Enter'){ e.preventDefault(); sendAssistMessage(); }
+  });
+  document.querySelectorAll('[data-assistchip]').forEach(btn=>{
+    btn.addEventListener('click', ()=> sendAssistMessage(btn.getAttribute('data-assistchip')));
+  });
+}
+
+function viewDefinicoes(){
+  if(definicoesSection==='casamento') return viewDefCasamento();
+  if(definicoesSection==='design') return viewDefDesign();
+  if(definicoesSection==='categorias') return viewDefCategorias();
+  if(definicoesSection==='convidar') return viewDefConvidar();
+  if(definicoesSection==='seguranca') return viewDefSeguranca();
+  if(definicoesSection==='privacidade') return viewDefPrivacidade();
+  if(definicoesSection==='termos') return viewDefTermos();
+  if(definicoesSection==='sobre') return viewDefSobre();
+  if(definicoesSection==='exportar') return viewDefExportar();
+  if(definicoesSection==='historico') return viewDefHistorico();
+  if(definicoesSection==='reportar') return viewDefReportar();
+  if(definicoesSection==='rsvp') return viewDefRSVP();
+  if(definicoesSection==='health') return viewDefWeddingHealth();
+  if(definicoesSection==='memories') return viewDefMemories();
+  if(definicoesSection==='documentos') return viewDefDocumentos();
+  if(definicoesSection==='googlecalendar') return viewDefGoogleCalendar();
+  if(definicoesSection==='subscricao') return viewDefSubscricao();
+  return viewDefMenu();
+}
+// Reorganização (Set 2026): as áreas Premium (RSVP, Wedding Health,
+// Memórias, Documentos, Google Calendar) passaram a viver como cartões na
+// página principal (ver premiumFeatureGrid em viewInicio) em vez de linhas
+// aqui — Definições fica só com esta entrada para gerir a subscrição em si.
+function viewDefSubscricao(){
+  if(!hasActiveSubscription()) return viewDefPremiumLocked(ta('subscriptionTitle'));
+  const plan = (currentSubscription && currentSubscription.plan) || ta('subscriptionDefaultPlanName');
+  // Pedido direto da Rita (Fase 4, e reestruturação visual pedida em Set
+  // 2026 para ficar igual ao mock "Manage subscription"): mostrar a
+  // data-limite dos 24 meses (SUBSCRIPTION_MAX_MONTHS) como um selo "Renova
+  // a", e dar uma forma de cancelar a subscrição na própria área de gerir
+  // subscrição — o botão cancela mesmo o acesso Premium (que é o que a
+  // pessoa quer quando pede para cancelar); a nota "(Protótipo…)" mantém-se
+  // visível por baixo para não sugerir que existe faturação real por trás.
+  const startedAt = currentSubscription && currentSubscription.startedAt;
+  let expiryLabel = '';
+  if(startedAt){
+    const started = new Date(startedAt);
+    if(!isNaN(started.getTime())){
+      const expiry = new Date(started);
+      expiry.setMonth(expiry.getMonth() + SUBSCRIPTION_MAX_MONTHS);
+      expiryLabel = formatDatePT(expiry.toISOString().slice(0,10));
+    }
+  }
+  const features = ['subscriptionFeatureGuests','subscriptionFeatureAISeating','subscriptionFeatureWeddingHealth','subscriptionFeatureMemories','subscriptionFeatureRSVP','subscriptionFeatureMore'];
+  const featuresHtml = features.map(k=>`
+    <div style="display:flex; align-items:center; gap:10px; padding:6px 0;">
+      <div class="icon-circle-sm" style="background:rgba(193,88,62,0.12); color:var(--rust-dark);">${ICONS.check}</div>
+      <div style="font-size:13.5px; color:var(--ink);">${ta(k)}</div>
+    </div>`).join('');
+  return `
+  ${defSubHeader(ta('subscriptionTitle'))}
+  <div class="stat-card" style="margin:0 16px 12px;">
+    <div style="display:flex; align-items:center; gap:12px;">
+      <div class="premium-upsell-icon" style="width:40px; height:40px; margin:0; flex-shrink:0; padding:9px; box-sizing:border-box; border-radius:50%; background:rgba(193,88,62,0.12);">${ICONS.crown}</div>
+      <div style="flex:1; min-width:0;">
+        <div class="l" style="margin:0; font-size:16px; color:var(--ink); font-weight:600;">Weddy Premium</div>
+        <div class="empty-note" style="margin:2px 0 0; padding:0;">${ta('subscriptionSubtitleText')}</div>
+      </div>
+      <span class="rsvp-pill rsvp-pill-yes">${ta('subscriptionActiveBadge')}</span>
+    </div>
+    <div style="border-top:1px solid var(--line); margin-top:10px; padding-top:4px;">${featuresHtml}</div>
+  </div>
+  <div class="stat-card" style="margin:0 16px 12px;">
+    <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:8px; margin-bottom:6px;">
+      <div>
+        <div class="l" style="margin:0 0 2px; font-size:12.5px; color:var(--ink-soft);">${ta('subscriptionCurrentPlanLabel')}</div>
+        <div class="l" style="margin:0 0 2px; font-size:15px; color:var(--ink); font-weight:600;">${escapeHTML(plan)}</div>
+        <div class="empty-note" style="margin:0; padding:0;">${ta('subscriptionPriceText')}</div>
+      </div>
+      ${expiryLabel ? `<span class="rsvp-pill" style="background:var(--cream); color:var(--rust-dark); white-space:nowrap;">${ta('subscriptionRenewsOnLabel')(expiryLabel)}</span>` : ''}
+    </div>
+    <button class="login-btn" id="subscription-cancel-btn" style="margin-top:10px;">${ta('btnCancelSubscription')}</button>
+    <div class="empty-note" style="margin:10px 0 0; padding:0; text-align:center;">${ta('subscriptionManageNote')}</div>
+  </div>
+  <div class="list-group" style="margin-bottom:30px;">
+    <div class="list-row tappable" data-defgoto="reportar" style="cursor:pointer;">
+      <div class="def-row-icon" style="${chipStyle(2)}">${ICONS.mail}</div>
+      <div class="def-row-mid">
+        <div class="def-row-title">${ta('subscriptionNeedHelpTitle')}</div>
+        <div class="def-row-desc">${ta('subscriptionNeedHelpDesc')}</div>
+      </div>
+      ${ICONS.chev}
+    </div>
+  </div>
+  `;
+}
+
+function defMenuRow(key, icon, colorIdx, label, desc, badge){
+  return `
+  <div class="list-row tappable" data-defgoto="${key}" style="cursor:pointer;">
+    <div class="def-row-icon" style="${chipStyle(colorIdx)}">${icon}</div>
+    <div class="def-row-mid">
+      <div class="def-row-title">${label}</div>
+      ${desc? `<div class="def-row-desc">${desc}</div>` : ''}
+    </div>
+    ${badge? `<span class="def-row-badge">${badge}</span>` : ''}
+    ${ICONS.chev}
+  </div>`;
+}
+function viewDefMenu(){
+  const weddingInfo = [weddingSettings.coupleName1&&weddingSettings.coupleName2? `${weddingSettings.coupleName1} & ${weddingSettings.coupleName2}`:'', weddingSettings.weddingDate? formatDatePT(weddingSettings.weddingDate):'', weddingSettings.venue||''].filter(Boolean).join(' · ') || ta('weddingInfoUnset');
+  const subscribed = hasActiveSubscription();
+  return `
+  ${pageHeader('def-back', ta('defTitle'), ta('defSubtitle'), `<div class="def-header-botanical">${ICONS.botanical}</div>`)}
+
+  <div class="lang-switch-row">
+    <span class="lang-switch-label">${ta('languageLabel')}</span>
+    <div class="lang-switch-pills" id="app-lang-switch">
+      <button type="button" data-applang="pt" class="${appLang==='pt'?'active':''}">PT</button>
+      <button type="button" data-applang="en" class="${appLang==='en'?'active':''}">EN</button>
+    </div>
+  </div>
+
+  <div class="section-label-caps">${ta('sectionPremium')}</div>
+  <div class="list-group">
+    ${defMenuRow('subscricao', ICONS.sparkle||ICONS.lock, 6, ta('subscriptionTitle'), subscribed ? ta('subscriptionActiveStatus') : ta('subscriptionNeeded'))}
+  </div>
+
+  <div class="section-label-caps">${ta('sectionWedding')}</div>
+  <div class="list-group">
+    ${defMenuRow('casamento', ICONS.heart, 0, ta('weddingInfoTitle'), weddingInfo)}
+    ${defMenuRow('design', ICONS.camera, 3, ta('designTitle'), ta('designDesc'))}
+    ${defMenuRow('categorias', ICONS.budget, 4, ta('categoriesTitle'), ta('categoriesDesc'))}
+  </div>
+
+  <div class="section-label-caps">${ta('sectionData')}</div>
+  <div class="list-group">
+    ${defMenuRow('exportar', ICONS.docnote||ICONS.checklist, 3, ta('exportTitle'), ta('exportDesc'))}
+    ${defMenuRow('historico', ICONS.docnote||ICONS.checklist, 9, ta('historicoTitle'), ta('historicoDesc'))}
+  </div>
+
+  <div class="section-label-caps">${ta('sectionAccess')}</div>
+  <div class="list-group">
+    ${defMenuRow('convidar', ICONS.guests, 1, ta('inviteTitle'), ta('inviteDesc'))}
+    ${defMenuRow('seguranca', ICONS.lock, 5, ta('accessTitle'), ta('accessDesc'))}
+  </div>
+
+  <div class="section-label-caps">${ta('sectionInfo')}</div>
+  <div class="list-group">
+    ${defMenuRow('privacidade', ICONS.docnote||ICONS.checklist, 7, ta('privacyTitle'), ta('privacyDesc'))}
+    ${defMenuRow('termos', ICONS.docnote||ICONS.checklist, 8, ta('termsTitle'), ta('termsDesc'))}
+    ${defMenuRow('sobre', ICONS.heart, 6, ta('aboutTitle'), ta('aboutDesc'))}
+  </div>
+
+  <div class="section-label-caps">${ta('sectionHelp')}</div>
+  <div class="list-group">
+    ${defMenuRow('reportar', ICONS.warn, 2, ta('reportTitle'), ta('reportDesc'))}
+  </div>
+
+  <button class="def-signout-btn" id="def-signout">${ICONS.logout} ${ta('signOut')}</button>
+  `;
+}
+function pageHeader(backId, title, subtitle, extraRight){
+  return `
+  <div class="navbar">
+    <button class="nav-back" id="${backId}">${ICONS.chevleft}</button>
+    <div class="navbar-titlewrap">
+      <h1>${title}</h1>
+      ${subtitle ? `<div class="page-subtitle">${subtitle}</div>` : ''}
+    </div>
+    ${extraRight||''}
+  </div>`;
+}
+function defSubHeader(title, subtitle, botanical, backAttr){
+  // Set 2026 — Rita pediu para alinhar o header destes sub-ecrãs (com
+  // subtítulo + o ramo/flor decorativo) com o resto da app: os parâmetros
+  // extra são todos opcionais, por isso as chamadas antigas (só o título)
+  // continuam a renderizar exatamente como antes.
+  const showBotanical = botanical!==undefined ? botanical : !!subtitle;
+  const extra = showBotanical ? `<div class="navbar-botanical" style="opacity:.55;">${ICONS.botanical}</div>` : '';
+  return pageHeader('def-back-inner', title, subtitle, extra).replace('id="def-back-inner"', backAttr || 'data-defback');
+}
+function defSaveBtn(id, msgId){
+  return `
+  <div style="padding:4px 16px 30px;">
+    <button class="login-btn" id="${id}" style="margin-top:0;">${ta('btnSave')}</button>
+    <div class="login-msg" id="${msgId}"></div>
+  </div>`;
+}
+
+function viewDefCasamento(){
+  const s = weddingSettings;
+  return `
+  ${defSubHeader(ta('defCasamentoTitle'))}
+  <div class="stat-card" style="margin:0 16px 12px;">
+    <div class="l" style="margin:0 0 4px;">${ta('labelBrideName')}</div>
+    <input class="field-input big" id="def-name1" type="text" value="${s.coupleName1||''}" style="text-align:left;">
+  </div>
+  <div class="stat-card" style="margin:0 16px 12px;">
+    <div class="l" style="margin:0 0 4px;">${ta('labelGroomName')}</div>
+    <input class="field-input big" id="def-name2" type="text" value="${s.coupleName2||''}" style="text-align:left;">
+  </div>
+  <div class="stat-card" style="margin:0 16px 12px;">
+    <div class="l" style="margin:0 0 4px;">${ta('labelWeddingDate')}</div>
+    <input class="field-input big" id="def-date" type="date" value="${s.weddingDate||''}" style="text-align:left;">
+  </div>
+  <div class="stat-card" style="margin:0 16px 12px;">
+    <div class="l" style="margin:0 0 4px;">${ta('labelVenue')}</div>
+    <input class="field-input big" id="def-venue" type="text" value="${s.venue||''}" style="text-align:left;">
+  </div>
+  ${defSaveBtn('def-save-casamento','def-msg-casamento')}
+  `;
+}
+
+function viewDefDesign(){
+  const s = weddingSettings;
+  const hasPhoto = !!s.heroPhotoUrl;
+  return `
+  ${defSubHeader(ta('defDesignTitle'))}
+  <div class="section-label">${ta('weddingColorLabel')}</div>
+  <div class="theme-swatch-row">
+    ${Object.keys(THEMES).map(key=>`
+      <button class="theme-swatch ${(s.accentColor||'rust')===key?'active':''}" data-theme="${key}" style="background:${THEMES[key].rust};" title="${THEMES[key].label}"></button>
+    `).join('')}
+  </div>
+
+  <div class="section-label">${ta('coverPhotoLabel')}</div>
+  <div style="padding:0 16px 10px;">
+    ${hasPhoto ? `
+    <div class="crop-viewport" id="crop-viewport" style="background-image:url('${s.heroPhotoUrl}'); background-position:${s.heroPhotoPosX??50}% ${s.heroPhotoPosY??50}%; background-size:${s.heroPhotoZoom??100}%;">
+      <div class="crop-hint">${ta('dragToRecenterHint')}</div>
+    </div>
+    <div class="crop-zoom-row">
+      <span>${ICONS.camera}</span>
+      <input type="range" id="crop-zoom-slider" min="100" max="260" value="${s.heroPhotoZoom??100}">
+    </div>
+    ` : `<div class="empty-note" style="margin:0 0 12px;">${ta('noCoverPhotoNote')}</div>`}
+    <button class="login-btn" id="def-photo-btn" style="margin-top:0; background:rgba(193,88,62,0.09); color:var(--rust-dark); display:flex; align-items:center; justify-content:center; gap:8px; box-shadow:none;">${ICONS.camera} ${hasPhoto?ta('btnChangePhoto'):ta('btnAddPhoto')}</button>
+    ${hasPhoto ? `<button class="login-btn" id="def-photo-remove" style="margin-top:8px; background:rgba(193,88,62,0.09); color:var(--rust-dark); box-shadow:none;">${ta('btnRemovePhoto')}</button>` : ''}
+    <input type="file" id="def-photo-input" accept="image/*" style="display:none;">
+  </div>
+  ${defSaveBtn('def-save-design','def-msg-design')}
+  `;
+}
+
+function viewDefCategorias(){
+  const catRows = state.categories.map(c=>`
+    <div class="list-row">
+      <div class="title" style="flex:1;">${escapeHTML(c.name)}</div>
+      <button class="cat-edit-btn" data-renamecat="${c.id}" title="${ta('btnRename')}">${ICONS.pencil}</button>
+      <button class="remove-x" data-delcat="${c.id}" title="${ta('btnDelete')}">✕</button>
+    </div>`).join('');
+  return `
+  ${defSubHeader(ta('defCategoriasTitle'))}
+  <div class="section-label">${ta('categoriesTitle')}</div>
+  <div class="list-group">
+    ${catRows}
+    <div class="add-row">
+      <input type="text" placeholder="${ta('placeholderNewCategory')}" id="def-add-cat-name">
+      <button class="add-circle" id="def-addbtn-cat">${ICONS.plus}</button>
+    </div>
+  </div>
+  ${defSaveBtn('def-save-categorias','def-msg-categorias')}
+  `;
+}
+
+function viewDefConvidar(){
+  return `
+  ${defSubHeader(ta('defConvidarTitle'))}
+  <div class="section-label">${ta('inviteParticipantLabel')}</div>
+  <div class="stat-card" style="margin:0 16px 12px;">
+    <div class="l" style="margin:0 0 4px;">${ta('labelInviteEmail')}</div>
+    <input class="field-input" id="def-invite-email" type="email" placeholder="email@exemplo.com" style="text-align:left; font-size:14px;">
+    <div class="cat-row-perguest" style="margin-top:8px; text-align:left;">${ta('inviteNoEmailNote')}</div>
+  </div>
+  ${defSaveBtn('def-invite-btn','def-invite-msg').replace('>'+ta('btnSave')+'<','>'+ta('btnInvite')+'<')}
+  `;
+}
+
+function formatLastLogin(ts){
+  if(!ts) return ta('neverLoggedIn');
+  const d = ts.toDate ? ts.toDate() : new Date(ts);
+  const meses = ta('monthNamesShort');
+  const hh = String(d.getHours()).padStart(2,'0');
+  const mm = String(d.getMinutes()).padStart(2,'0');
+  return `${d.getDate()} ${meses[d.getMonth()]} ${ta('dateAtTimeSeparator')} ${hh}:${mm}`;
+}
+function viewDefSeguranca(){
+  const myEmail = (auth && auth.currentUser) ? auth.currentUser.email.toLowerCase() : '';
+  const owners = (currentWeddingOwners||[]).map(email => {
+    const isCreator = currentWeddingCreator && email === currentWeddingCreator;
+    const canRemove = currentWeddingOwners.length>1 && (!isCreator || email===myEmail);
+    return `
+    <div class="list-row" style="flex-direction:column; align-items:stretch; gap:8px;">
+      <div>
+        <div class="title" style="flex:1;">${escapeHTML(email)}${isCreator?' <span style="color:var(--ink-soft);font-weight:400;font-size:12px;">'+ta('createdWeddingTag')+'</span>':''}</div>
+        <div class="visit-detail">${ta('lastSessionLabel')(formatLastLogin(currentLastLogins[sanitizeEmailKey(email)]))}</div>
+      </div>
+      ${canRemove ? `<button class="visit-action-btn danger" style="width:100%;" data-removeowner="${escapeHTML(email)}">${ICONS.trash} ${ta('btnRemoveAccess')}</button>` : (currentWeddingOwners.length===1 ? `<div class="empty-note" style="margin:0;">${ta('onlyAccessNote')}</div>` : `<div class="empty-note" style="margin:0;">${ta('onlyCreatorCanRemoveNote')}</div>`)}
+    </div>`;
+  }).join('');
+  return `
+  ${defSubHeader(ta('defSegurancaTitle'))}
+  <div class="stat-card" style="margin:0 16px 16px; text-align:center;">
+    <div class="premium-upsell-icon" style="width:44px; height:44px;">${ICONS.lock}</div>
+    <div class="l" style="margin:0 0 4px; font-size:15px; color:var(--ink); font-weight:600;">${ta('securityHeroTitle')}</div>
+    <div class="empty-note" style="margin:0; padding:0;">${ta('privacySecurityText')}</div>
+  </div>
+  <div class="section-label">${ta('whoHasAccessLabel')}</div>
+  <div class="list-group" style="margin-bottom:6px;">${owners}</div>
+  ${defSaveBtn('def-save-seguranca','def-msg-seguranca')}
+
+  <div class="section-label">${ta('exportDataLabel')}</div>
+  <div class="list-group" style="margin-bottom:16px;">
+    <div class="list-row" style="flex-direction:column; align-items:stretch; gap:8px;">
+      <div>
+        <div class="title">${ta('exportDataTitle')}</div>
+        <div class="visit-detail">${ta('exportDataNote')}</div>
+      </div>
+      <button class="visit-action-btn" style="width:100%;" id="export-my-data-btn">${ICONS.download||''} ${ta('btnExportData')}</button>
+    </div>
+  </div>
+
+  <div class="section-label" style="color:var(--rust-dark);">${ta('dangerZoneLabel')}</div>
+  <div class="list-group" style="margin-bottom:16px;">
+    <div class="list-row" style="flex-direction:column; align-items:stretch; gap:8px;">
+      <div>
+        <div class="title">${ta('deleteMyAccountTitle')}</div>
+        <div class="visit-detail">${currentWeddingOwners.length>1
+          ? ta('deleteAccountNoteShared')
+          : ta('deleteAccountNoteSolo')}</div>
+      </div>
+      <button class="visit-action-btn danger" style="width:100%;" id="open-delete-account-btn">${ICONS.trash} ${ta('btnDeleteMyAccount')}</button>
+    </div>
+  </div>
+  `;
+}
+
+// Galeria das fotos partilhadas pelos convidados através do link de RSVP
+// (rsvp.html → "Weddy Memories"). Só o casal vê esta página — as regras do
+// Firestore impedem qualquer outra pessoa de listar esta coleção.
+function viewDefMemories(){
+  if(!hasActiveSubscription()) return viewDefPremiumLocked(ta('memoriesTitle'));
+  if(!memoriesLoaded && !memoriesLoading) loadMemories();
+  const gridHtml = weddingMemories.length ? `
+    <div class="memories-grid">
+      ${weddingMemories.map(m=>`
+        <div class="memory-tile">
+          <img src="${escapeHTML(m.url||'')}" loading="lazy">
+          <button class="memory-del" data-memorydel="${m.id}" data-memorypath="${escapeHTML(m.storagePath||'')}">${ICONS.trash}</button>
+          ${m.guestName ? `<div class="memory-caption">${escapeHTML(m.guestName)}</div>` : ''}
+        </div>
+      `).join('')}
+    </div>
+  ` : `
+    <div class="empty-note" style="margin:24px 16px;">${memoriesLoading ? ta('memoriesLoadingText') : ta('memoriesEmptyText')}</div>
+  `;
+  const emptyIllustration = `
+  <div style="position:relative; width:180px; height:150px; margin:10px auto 6px;">
+    <div style="position:absolute; left:20px; top:14px; width:140px; height:120px; border-radius:50%; background:#F1DFDB; opacity:.55;"></div>
+    <div style="position:absolute; left:18px; top:40px; width:86px; height:100px; background:#FBF7F2; border:1px solid #E7DCD4; border-radius:6px; box-shadow:0 6px 14px rgba(60,40,30,0.08); transform:rotate(-8deg);">
+      <div style="position:absolute; inset:7px 7px 20px; background:#EDE0D6; border-radius:2px;"></div>
+    </div>
+    <div style="position:absolute; left:52px; top:28px; width:94px; height:108px; background:#fff; border:1px solid #E7DCD4; border-radius:6px; box-shadow:0 8px 18px rgba(60,40,30,0.1); transform:rotate(6deg);">
+      <div style="position:absolute; inset:7px 7px 22px; background:#E9D9CE; border-radius:2px;"></div>
+    </div>
+    <div class="svg-fill" style="position:absolute; left:10px; top:14px; width:24px; height:24px; color:var(--rust-dark); opacity:.85;">${ICONS.heart}</div>
+    <div class="svg-fill" style="position:absolute; right:4px; top:0; width:48px; height:72px; color:#8AA07A; opacity:.7; transform:rotate(10deg);">${ICONS.botanical}</div>
+  </div>`;
+  return `
+  ${defSubHeader(ta('memoriesTitle'), ta('memoriesIntroText'))}
+  ${weddingMemories.length ? '' : emptyIllustration}
+  ${gridHtml}
+  <div style="margin:16px 16px 14px; padding:12px 14px; border-radius:14px; background:rgba(193,88,62,0.1); display:flex; align-items:center; gap:12px;">
+    <div class="svg-fill" style="width:18px; height:18px; color:var(--rust-dark); flex-shrink:0;">${ICONS.lock}</div>
+    <div>
+      <div class="l" style="margin:0 0 2px; font-size:13.5px; color:var(--ink); font-weight:600;">${ta('memoriesPrivateTitle')}</div>
+      <div class="empty-note" style="margin:0; padding:0;">${ta('memoriesPrivateDesc')}</div>
+    </div>
+  </div>
+  <div style="display:flex; justify-content:center; margin:0 16px 16px;"><button class="rsvp-copy-btn" id="memories-refresh" style="padding:10px 24px; flex:none;">${ICONS.refresh} ${ta('btnRefresh')}</button></div>
+  `;
+}
+
+// "Wedding Brain" leve: os documentos (contratos em PDF) que o casal
+// carrega ficam com o texto extraído no próprio browser (pdf.js, sem
+// nenhuma IA nem servidor externo) e guardado no documento do casamento.
+// O Assistente Weddy depois pesquisa por palavras-chave nesse texto — ver
+// searchWeddingDocuments() e a sua utilização em respondeAssistente().
+function viewDefDocumentos(){
+  if(!hasActiveSubscription()) return viewDefPremiumLocked(ta('documentsTitle'));
+  // Fase 6.1 — contratos ligados a um fornecedor (d.supplierId) já são
+  // mostrados na própria ficha do fornecedor, por isso ficam de fora desta
+  // lista geral para não duplicar. Fase Anexos Lua de Mel (Set 2026): o
+  // mesmo vale para anexos ligados a uma hipótese de lua-de-mel
+  // (d.honeymoonOptionId) — esses vivem na própria hipótese. O índice
+  // original de cada documento em state.weddingDocuments é preservado no
+  // filtro (não o índice da lista filtrada), para que data-docdel continue a
+  // apagar o documento certo.
+  const docs = (state.weddingDocuments || []).map((d,i)=>({d,i})).filter(({d})=>!d.supplierId && !d.honeymoonOptionId);
+  const listHtml = docs.length ? docs.map(({d,i})=>`
+    <div class="list-row tappable" style="align-items:center; cursor:pointer;" data-openattach="${i}">
+      <div class="def-row-icon" style="background:rgba(193,88,62,0.12); color:var(--rust-dark);">${ICONS.docnote||ICONS.checklist}</div>
+      <div class="def-row-mid">
+        <div class="def-row-title">${escapeHTML(d.name)}</div>
+        <div class="def-row-desc">${ta('charsExtractedLabel')((d.text||'').length.toLocaleString(appLang==='en'?'en-US':'pt-PT'))}</div>
+      </div>
+      <button class="child-remove" data-docdel="${i}">×</button>
+    </div>
+  `).join('') : `<div class="empty-note" style="margin:16px;">${ta('docsEmptyText')}</div>`;
+  return `
+  ${defSubHeader(ta('documentsTitle'), '', true)}
+  <div class="stat-card" style="margin:0 16px 16px;">
+    <div style="display:flex; align-items:flex-start; gap:12px; margin-bottom:10px;">
+      <div class="def-row-icon" style="background:rgba(193,88,62,0.12); color:var(--rust-dark); width:44px; height:44px; flex-shrink:0;">${ICONS.docnote||ICONS.checklist}</div>
+      <div class="l" style="margin:4px 0 0; font-size:19px; line-height:1.25; color:var(--heading); font-family:'Cormorant Garamond',serif; font-weight:600;">${ta('docsCardTitle')}</div>
+    </div>
+    <p style="font-size:13px; color:var(--ink-soft); margin:0 0 14px; line-height:1.6;">${ta('docsIntroText')}</p>
+    <label class="login-btn" for="document-file-input" style="margin-top:0; display:flex; align-items:center; justify-content:center; gap:8px;">${ICONS.download} ${ta('btnUploadPDF')}</label>
+    <input type="file" id="document-file-input" accept="application/pdf" style="display:none;">
+    <div id="document-upload-status" class="empty-note" style="margin:10px 0 0; padding:0;"></div>
+  </div>
+  <div class="section-label">${ta('uploadedDocumentsLabel')}</div>
+  <div class="list-group" style="margin:0 16px;">${listHtml}</div>
+  `;
+}
+
+// Fase Consentimento (Set 2026): o conteúdo em si (privacyBodyHtml) foi
+// separado do ecrã de Definições (viewDefPrivacidade) para poder ser
+// reaproveitado também no overlay de leitura rápida mostrado durante o
+// registo e no ecrã "Antes de continuares" (ver openLegalOverlay) — sem
+// isto, a pessoa só conseguiria ler a política depois de já ter conta.
+function privacyBodyHtml(){
+  return `
+    <p class="privacy-note" style="margin-bottom:16px;">${ta('privacyIntro')}</p>
+
+    <p><b>${ta('privacyWhoWeAreTitle')}</b><br>
+    ${ta('privacyWhoWeAreText').replace('geral@weddy.pt', '<span style="color:var(--rust);">geral@weddy.pt</span>')}</p>
+
+    <p><b>${ta('privacyControllerTitle')}</b><br>
+    ${ta('privacyControllerText')}</p>
+
+    <p><b>${ta('privacyCollectTitle')}</b><br>
+    ${ta('privacyCollectText')}</p>
+
+    <p><b>${ta('privacyPurposeTitle')}</b><br>
+    ${ta('privacyPurposeText')}</p>
+
+    <p><b>${ta('privacyWhatDataTitle')}</b><br>
+    ${ta('privacyWhatDataText')}</p>
+
+    <p><b>${ta('privacySecurityTitle')}</b><br>
+    ${ta('privacySecurityText')}</p>
+
+    <p><b>${ta('privacyRetentionTitle')}</b><br>
+    ${ta('privacyRetentionText')}</p>
+
+    <p><b>${ta('privacyRightsTitle')}</b><br>
+    ${ta('privacyRightsText').replace('geral@weddy.pt', '<span style="color:var(--rust);">geral@weddy.pt</span>')}</p>
+
+    <p><b>${ta('privacyPhotosTitle')}</b><br>
+    ${ta('privacyPhotosText')}</p>
+
+    <p><b>${ta('privacyWhoSeesTitle')}</b><br>
+    ${ta('privacyWhoSeesText')}</p>
+
+    <p><b>${ta('privacyGuestsTitle')}</b><br>
+    ${ta('privacyGuestsText')}</p>
+
+    <p><b>${ta('privacyConciergeTitle')}</b><br>
+    ${ta('privacyConciergeText')}</p>
+
+    <p><b>${ta('privacyAssistantTitle')}</b><br>
+    ${ta('privacyAssistantText')}</p>
+
+    <!-- Fase Consentimento — 2ª ronda (Set 2026): a Rita pediu para NÃO
+    mexer em nada do texto acima (já foi revisto por um advogado), só
+    acrescentar pontos em falta, depois de rever o documento de Privacidade
+    de uma app concorrente como referência. As 8 secções abaixo são
+    inteiramente novas e escritas de raiz com a arquitetura real da Weddy
+    (nunca copiadas) — nada do que já existia foi alterado. -->
+    <p><b>${ta('privacySubprocessorsTitle')}</b><br>
+    ${ta('privacySubprocessorsText')}</p>
+
+    <p><b>${ta('privacyGCalTitle')}</b><br>
+    ${ta('privacyGCalText')}</p>
+
+    <p><b>${ta('privacyIntlTransferTitle')}</b><br>
+    ${ta('privacyIntlTransferText')}</p>
+
+    <p><b>${ta('privacyComplaintTitle')}</b><br>
+    ${ta('privacyComplaintText').replace('www.cnpd.pt', '<span style="color:var(--rust);">www.cnpd.pt</span>')}</p>
+
+    <p><b>${ta('privacyCookiesTitle')}</b><br>
+    ${ta('privacyCookiesText')}</p>
+
+    <p><b>${ta('privacyMinorsTitle')}</b><br>
+    ${ta('privacyMinorsText')}</p>
+
+    <p><b>${ta('privacyConsentRecordTitle')}</b><br>
+    ${ta('privacyConsentRecordText')}</p>
+
+    <p><b>${ta('privacyChangesTitle')}</b><br>
+    ${ta('privacyChangesText')}</p>
+  `;
+}
+function viewDefPrivacidade(){
+  return `
+  ${defSubHeader(ta('privacyTitle'))}
+  <div class="legal-card"><div class="privacy-text">${privacyBodyHtml()}</div></div>
+  `;
+}
+// Fase Consentimento (Set 2026, pedido da Rita): Termos e Condições com o
+// mesmo tratamento da Política de Privacidade acima. IMPORTANTE — o texto
+// abaixo é um rascunho de trabalho (ver termsDraftNotice), escrito para dar
+// à funcionalidade de consentimento versionado algo real para mostrar e
+// gravar; não é aconselhamento jurídico nem foi revisto por um advogado.
+// Tem de ser revisto antes de a Weddy aceitar pagamentos reais de outras
+// pessoas além da Rita.
+// Fase Consentimento — 2ª ronda (Set 2026): estrutura ampliada, inspirada na
+// numeração/secções de um documento de Termos de uma app concorrente que a
+// Rita partilhou como referência ("há menus que nós não temos") — mas
+// TODO O TEXTO abaixo foi escrito de raiz para a Weddy, com os nossos
+// próprios dados, funcionalidades e modelo (projeto pessoal, sem
+// marketplace de fornecedores nem área de wedding planners, sem SMS/Twilio
+// ligado). Continua a ser um rascunho de trabalho (ver termsDraftNotice),
+// não texto copiado nem aconselhamento jurídico.
+function termsBodyHtml(){
+  return `
+    <p class="privacy-note" style="margin-bottom:4px; color:var(--rust-dark); font-weight:600;">${ta('termsDraftNotice')}</p>
+    <p class="privacy-note" style="margin-bottom:16px; font-size:12px;">${ta('termsUpdatedLabel')(formatDatePT(CURRENT_TERMS_VERSION), CURRENT_TERMS_VERSION)}</p>
+    <p class="privacy-note" style="margin-bottom:16px;">${ta('termsIntro')}</p>
+
+    <p><b>${ta('termsScopeTitle')}</b><br>
+    ${ta('termsScopeText')}</p>
+
+    <p><b>${ta('termsAcceptanceTitle')}</b><br>
+    ${ta('termsAcceptanceText')}</p>
+
+    <p><b>${ta('termsAccountTitle')}</b><br>
+    ${ta('termsAccountText')}</p>
+
+    <p><b>${ta('termsSubscriptionTitle')}</b><br>
+    ${ta('termsSubscriptionText')}</p>
+
+    <p><b>${ta('termsWithdrawalTitle')}</b><br>
+    ${ta('termsWithdrawalText')}</p>
+
+    <p><b>${ta('termsContentTitle')}</b><br>
+    ${ta('termsContentText')}</p>
+
+    <p><b>${ta('termsIPTitle')}</b><br>
+    ${ta('termsIPText')}</p>
+
+    <p><b>${ta('termsSuppliersTitle')}</b><br>
+    ${ta('termsSuppliersText')}</p>
+
+    <p><b>${ta('termsGuestsTitle')}</b><br>
+    ${ta('termsGuestsText')}</p>
+
+    <p><b>${ta('termsAcceptableUseTitle')}</b><br>
+    ${ta('termsAcceptableUseText')}</p>
+
+    <p><b>${ta('termsAvailabilityTitle')}</b><br>
+    ${ta('termsAvailabilityText')}</p>
+
+    <p><b>${ta('termsFutureFeaturesTitle')}</b><br>
+    ${ta('termsFutureFeaturesText')}</p>
+
+    <p><b>${ta('termsLiabilityTitle')}</b><br>
+    ${ta('termsLiabilityText')}</p>
+
+    <p><b>${ta('termsIndemnityTitle')}</b><br>
+    ${ta('termsIndemnityText')}</p>
+
+    <p><b>${ta('termsTerminationTitle')}</b><br>
+    ${ta('termsTerminationText')}</p>
+
+    <p><b>${ta('termsChangesTitle')}</b><br>
+    ${ta('termsChangesText')}</p>
+
+    <p><b>${ta('termsCommunicationsTitle')}</b><br>
+    ${ta('termsCommunicationsText')}</p>
+
+    <p><b>${ta('termsLawTitle')}</b><br>
+    ${ta('termsLawText')}</p>
+
+    <p><b>${ta('termsContactTitle')}</b><br>
+    ${ta('termsContactText').replace('geral@weddy.pt', '<span style="color:var(--rust);">geral@weddy.pt</span>')}</p>
+  `;
+}
+function viewDefTermos(){
+  return `
+  ${defSubHeader(ta('termsTitle'))}
+  <div class="legal-card"><div class="privacy-text">${termsBodyHtml()}</div></div>
+  `;
+}
+
+function viewDefExportar(){
+  return `
+  ${defSubHeader(ta('defExportTitle'))}
+  <div class="section-label">${ta('exportIncludesLabel')}</div>
+  <p style="font-size:13px; color:var(--ink-soft); margin:0 16px 18px; line-height:1.6;">
+    ${ta('exportIncludesText')}
+  </p>
+
+  <div class="about-card" style="background:#E7EBE1;">
+    <div class="about-card-icon" style="background:var(--sage-dark); color:#fff;">${ICONS.docnote||ICONS.checklist}</div>
+    <div class="about-card-title">${ta('excelFileTitle')}</div>
+    <div class="about-card-text">${ta('excelFileText')}</div>
+    <button class="login-btn" id="export-excel-btn" style="margin-top:12px;">${ta('btnDownloadExcel')}</button>
+    <div id="export-excel-msg" class="login-msg" style="margin-top:6px;"></div>
+  </div>
+
+  <div class="about-card" style="background:#F3E2D6;">
+    <div class="about-card-icon" style="background:var(--gold); color:#fff;">${ICONS.camera}</div>
+    <div class="about-card-title">${ta('pdfDocTitle')}</div>
+    <div class="about-card-text">${ta('pdfDocText')}</div>
+    <button class="login-btn" id="export-pdf-btn" style="margin-top:12px;">${ta('btnDownloadPDF')}</button>
+    <div id="export-pdf-msg" class="login-msg" style="margin-top:6px;"></div>
+  </div>
+  <div style="height:10px;"></div>
+  `;
+}
+
+// Histórico do casamento — cópias de segurança automáticas e manuais, com
+// restauro sempre protegido por um backup automático do estado atual (ver
+// restoreSnapshot em cima). Pedido direto da Rita, rejeitando o modelo mais
+// simples da app concorrente (carregar um ficheiro JSON e substituir tudo).
+function viewDefHistorico(){
+  if(historicoSnapshots.length===0 && !historicoLoading && !historicoError) loadHistoricoSnapshots();
+  const kindBadge = (kind)=> kind==='manual'
+    ? `<span class="def-row-badge" style="background:var(--sage-dark); color:#fff;">${ta('snapshotManualBadge')}</span>`
+    : `<span class="def-row-badge">${ta('snapshotAutoBadge')}</span>`;
+  let listHtml = '';
+  if(historicoLoading){
+    listHtml = `<div class="empty-note" style="margin:0 16px 12px;">${ta('loadingLabel')}</div>`;
+  }else if(historicoError){
+    listHtml = `<div class="empty-note" style="margin:0 16px 12px;">${ta('historicoLoadError')}</div>`;
+  }else if(historicoSnapshots.length===0){
+    listHtml = `<div class="empty-note" style="margin:0 16px 12px;">${ta('historicoEmptyText')}</div>`;
+  }else{
+    listHtml = `<div class="list-group">` + historicoSnapshots.map(s=>{
+      const busy = historicoRestoringId===s.id;
+      return `
+      <div class="list-row" style="align-items:flex-start; flex-direction:column; gap:8px; padding:12px 16px;">
+        <div style="display:flex; align-items:center; gap:8px; width:100%;">
+          <div class="def-row-mid" style="flex:1;">
+            <div class="def-row-title">${formatSnapshotDate(s.createdAt)}</div>
+            ${s.label? `<div class="def-row-desc">${escapeHTML(s.label)}</div>` : ''}
+          </div>
+          ${kindBadge(s.kind)}
+        </div>
+        <div style="display:flex; gap:8px; width:100%;">
+          <button type="button" class="login-btn" data-histverid="${s.id}" style="margin-top:0; flex:1; background:var(--card); color:var(--ink); border:1px solid var(--line); padding:10px;">${ta('btnViewSnapshot')}</button>
+          <button type="button" class="login-btn" data-histrestoreid="${s.id}" ${busy?'disabled':''} style="margin-top:0; flex:1; padding:10px;">${busy? ta('restoringLabel') : ta('btnRestoreSnapshot')}</button>
+        </div>
+      </div>`;
+    }).join('') + `</div>`;
+  }
+  return `
+  ${defSubHeader(ta('historicoTitle'))}
+  <div class="empty-note" style="margin:0 16px 14px;">${ta('historicoIntroText')}</div>
+
+  <div class="stat-card" style="margin:0 16px 16px;">
+    <div class="l" style="margin:0 0 4px;">${ta('snapshotLabelInputLabel')}</div>
+    <input type="text" id="hist-manual-label" placeholder="${ta('phSnapshotLabel')}" maxlength="80" style="all:unset; box-sizing:border-box; width:100%; background:var(--card); border:1px solid var(--line); border-radius:10px; padding:10px 12px; margin-top:6px; font-family:inherit; font-size:14px; color:var(--ink);">
+    <button class="login-btn" id="hist-manual-backup-btn" ${historicoCreatingBackup?'disabled':''} style="margin-top:12px;">${historicoCreatingBackup? ta('creatingBackupLabel') : ta('btnCreateManualSnapshot')}</button>
+  </div>
+
+  <div class="section-label">${ta('historicoListLabel')}</div>
+  ${listHtml}
+  <div style="height:10px;"></div>
+  `;
+}
+
+function viewDefSobre(){
+  return `
+  ${defSubHeader(ta('aboutTitle'))}
+  <div class="about-mono">${ICONS.heart}</div>
+
+  <div class="about-card" style="background:#F1DFDB;">
+    <div class="about-card-icon" style="background:var(--rust); color:#fff;">${ICONS.heart}</div>
+    <div class="about-card-title">${ta('aboutOneSpaceTitle')}</div>
+    <div class="about-card-text">${ta('aboutOneSpaceText')}</div>
+  </div>
+
+  <div class="about-card" style="background:#E7EBE1;">
+    <div class="about-card-icon" style="background:var(--sage-dark); color:#fff;">${ICONS.guests}</div>
+    <div class="about-card-title">${ta('aboutRealtimeTitle')}</div>
+    <div class="about-card-text">${ta('aboutRealtimeText')}</div>
+  </div>
+
+  <div class="about-card" style="background:#F0DFCE;">
+    <div class="about-card-icon" style="background:var(--gold); color:#fff;">${ICONS.lock}</div>
+    <div class="about-card-title">${ta('aboutMadeForCouplesTitle')}</div>
+    <div class="about-card-text">${ta('aboutMadeForCouplesText')}</div>
+  </div>
+
+  <div class="about-card" style="background:#EAE6E0;">
+    <div class="about-card-icon" style="background:var(--dusty-dark); color:#fff;">${ICONS.pencil}</div>
+    <div class="about-card-title">${ta('aboutFeedbackTitle')}</div>
+    <div class="about-card-text">${ta('aboutFeedbackText').replace('geral@weddy.pt', '<b style="color:var(--rust-dark);">geral@weddy.pt</b>')}</div>
+  </div>
+
+  <div class="about-version">${ta('aboutVersionLabel')}</div>
+  `;
+}
+
+function viewDefReportar(){
+  // Fase Feedback (Set 2026): o campo de email vem pré-preenchido com o da
+  // conta autenticada (quando existe), mas fica editável — quem reporta pode
+  // querer uma resposta noutro endereço. reportarScreenshots vive só em
+  // memória (ver declaração), por isso sobrevive a re-renders deste ecrã
+  // mas é limpo ao sair ou depois de um envio com sucesso.
+  const accountEmail = (typeof auth!=='undefined' && auth && auth.currentUser && auth.currentUser.email) ? auth.currentUser.email : '';
+  const totalBytes = reportarScreenshots.reduce((s,sc)=>s+(sc.size||0),0);
+  const thumbs = reportarScreenshots.map((sc,i)=>`
+    <div style="position:relative; width:64px; height:64px; border-radius:10px; overflow:hidden; border:1px solid var(--line); flex-shrink:0;">
+      <img src="${sc.dataUrl}" style="width:100%; height:100%; object-fit:cover; display:block;">
+      <button type="button" data-reportarrm="${i}" aria-label="${ta('reportRemoveImageAlt')}" style="position:absolute; top:2px; right:2px; width:20px; height:20px; border-radius:50%; border:none; background:rgba(30,26,23,0.72); color:#fff; display:flex; align-items:center; justify-content:center; cursor:pointer; padding:0;">${ICONS.x}</button>
+    </div>`).join('');
+  return `
+  ${defSubHeader(ta('reportTitle'))}
+  <div class="empty-note" style="margin:0 16px 14px;">${ta('reportIntroText')}</div>
+  <div class="stat-card" style="margin:0 16px 12px;">
+    <div class="l" style="margin:0 0 4px;">${ta('reportWhatHappenedLabel')}</div>
+    <textarea id="def-reportar-text" rows="8" placeholder="${ta('phReportDescribe')}" style="all:unset; box-sizing:border-box; width:100%; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px; margin-top:6px; font-family:inherit; font-size:14px; color:var(--ink); resize:vertical;"></textarea>
+  </div>
+  <div class="stat-card" style="margin:0 16px 12px;">
+    <div class="l" style="margin:0 0 4px;">${ta('reportEmailLabel')}</div>
+    <input type="email" id="def-reportar-email" value="${escapeHTML(accountEmail)}" placeholder="${ta('phReportEmail')}" style="all:unset; box-sizing:border-box; width:100%; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px; margin-top:6px; font-family:inherit; font-size:14px; color:var(--ink);">
+  </div>
+  <div class="stat-card" style="margin:0 16px 12px;">
+    <div class="l" style="margin:0 0 4px;">${ta('reportScreenshotsLabel')}</div>
+    <div class="empty-note" style="margin:0 0 10px; padding:0;">${ta('reportScreenshotsHint')}</div>
+    <div style="display:flex; flex-wrap:wrap; gap:8px;">
+      ${thumbs}
+      ${reportarScreenshots.length<5 ? `<button type="button" id="def-reportar-photo-btn" style="width:64px; height:64px; border-radius:10px; border:1.5px dashed var(--line); background:transparent; color:var(--ink-soft); display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0;">${ICONS.camera}</button>` : ''}
+    </div>
+    ${totalBytes>0 ? `<div class="empty-note" style="margin:10px 0 0; padding:0;">${fmtFileSize(totalBytes)} / 5 MB</div>` : ''}
+  </div>
+  <div style="padding:4px 16px 30px;">
+    <button class="login-btn" id="def-reportar-send" style="margin-top:0; display:flex; align-items:center; justify-content:center; gap:8px;">${ICONS.mail} ${ta('btnSend')}</button>
+    <div class="login-msg" id="def-msg-reportar"></div>
+  </div>
+  `;
+}
+
+/* ============================================================
+   EVENT BINDING
+============================================================ */
+// Scrolls only the nearest internal ".scroll" panel instead of using the
+// native Element.scrollIntoView(), which on iOS can try to scroll the
+// fixed-position document itself and leave the whole app stuck/shifted.
+function scrollIntoPanel(el){
+  if(!el) return;
+  const container = el.closest('.scroll');
+  if(!container){ return; }
+  const delta = el.getBoundingClientRect().top - container.getBoundingClientRect().top;
+  container.scrollBy({ top: delta, behavior: 'smooth' });
+}
+
+function bindHandlers(){
+  document.querySelectorAll('[data-goto]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const target = el.dataset.goto;
+      if(target !== activeTab) collapseAllSections();
+      closeAllSheets();
+      activeTab = target;
+      _origRender();
+    });
+  });
+  document.querySelectorAll('[data-catgoto]').forEach(el=>{
+    el.addEventListener('click', e=>{
+      const catId = e.currentTarget.dataset.catgoto;
+      collapseAllSections();
+      closeAllSheets();
+      todoOpenCategoryId = catId;
+      activeTab = 'todo';
+      _origRender();
+    });
+  });
+  document.querySelectorAll('[data-weekday]').forEach(el=>{
+    el.addEventListener('click', e=>{
+      weekAgendaSelectedDate = e.currentTarget.dataset.weekday;
+      _origRender();
+    });
+  });
+  document.querySelectorAll('[data-scrollto]').forEach(el=>{
+    el.addEventListener('click', e=>{
+      const target = document.getElementById(e.currentTarget.dataset.scrollto);
+      scrollIntoPanel(target);
+    });
+  });
+  const btnLogout = document.getElementById('btn-logout');
+  if(btnLogout) btnLogout.addEventListener('click', ()=>{ if(typeof auth!=='undefined' && auth) auth.signOut(); });
+  // Botão "Subscrever Weddy Premium" na página de upsell — como ainda não
+  // há pagamentos reais ligados, isto ativa já a subscrição de teste desta
+  // conta diretamente no Firestore, para poderes experimentar a funcionalidade
+  // completa sem teres de correr scripts à parte.
+  // Bug corrigido (Set 2026): este botão aparece em 3 sítios diferentes
+  // (Início, Definições → Subscrição, e o ecrã bloqueado do AI Seating) —
+  // como o render() mantém todos os separadores no DOM ao mesmo tempo (só
+  // escondidos por CSS, não removidos), quando a conta não tem subscrição
+  // TODOS coexistem ao mesmo tempo com o mesmo id. document.getElementById
+  // só liga o clique ao primeiro (o de Início), deixando os outros dois
+  // mortos — exatamente a mesma classe de bug já corrigida no botão do
+  // Assistente (premium-subscribe-btn vs chat-premium-subscribe-btn).
+  // Passa a usar querySelectorAll, que liga o clique a todos eles.
+  document.querySelectorAll('.js-premium-subscribe').forEach(subscribeBtn=>{
+    subscribeBtn.addEventListener('click', ()=>{
+      if(!FIREBASE_READY || !currentWeddingId){ alert(ta('alertNoConnectionRetry')); return; }
+      subscribeBtn.disabled = true;
+      subscribeBtn.textContent = ta('btnActivatingEllipsis');
+      const payload = buildSubscriptionActivatePayload();
+      CURRENT_DOC().update({
+        subscription: payload
+      }).then(()=>{
+        currentSubscription = payload;
+        _origRender();
+      }).catch(err=>{
+        console.error('Weddy subscribe error:', err.code, err.message);
+        subscribeBtn.disabled = false;
+        subscribeBtn.textContent = ta('btnSubscribePremium');
+        alert(ta('alertSubscriptionActivateError'));
+      });
+    });
+  });
+
+  // Inspiração
+  const inspAddBtn = document.getElementById('insp-add-btn');
+  if(inspAddBtn) inspAddBtn.addEventListener('click', ()=>{ document.getElementById('insp-file-input').click(); });
+  document.querySelectorAll('[data-insprm]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      inspirations = inspirations.filter(i=>i.id!==e.currentTarget.dataset.insprm);
+      saveInspirations();
+      render();
+    });
+  });
+  const inspBack = document.getElementById('insp-back');
+  if(inspBack) inspBack.addEventListener('click', ()=>{ closeAllSheets(); activeTab='inicio'; _origRender(); });
+  document.querySelectorAll('[data-insplightbox]').forEach(el=>{
+    el.addEventListener('click', e=>{
+      const item = inspirations.find(i=>i.id===e.currentTarget.dataset.insplightbox);
+      if(item) openImgLightbox(item.dataUrl);
+    });
+  });
+
+  // Checklist
+  const checklistBack = document.getElementById('checklist-back');
+  if(checklistBack) checklistBack.addEventListener('click', ()=>{ closeAllSheets(); activeTab='inicio'; _origRender(); });
+  document.querySelectorAll('[data-togglephase]').forEach(el=>{
+    el.addEventListener('click', e=>{
+      const key = e.currentTarget.dataset.togglephase;
+      openChecklistPhaseId = key;
+      _origRender();
+      requestAnimationFrame(()=>{
+        const container = document.querySelector('[data-panel="checklist"] .scroll');
+        if(container) container.scrollTo({ top: 0, behavior: 'auto' });
+      });
+    });
+  });
+  const toggleNoivaBtn = document.querySelector('[data-togglenoiva]');
+  if(toggleNoivaBtn) toggleNoivaBtn.addEventListener('click', ()=>{
+    openNoivaChecklist = !openNoivaChecklist;
+    _origRender();
+  });
+  const togglePhaseProgress = document.getElementById('toggle-phase-progress');
+  if(togglePhaseProgress) togglePhaseProgress.addEventListener('click', ()=>{
+    showAllPhaseProgress = !showAllPhaseProgress;
+    _origRender();
+  });
+  document.querySelectorAll('[data-checktask]').forEach(el=>{
+    el.addEventListener('click', e=>{
+      const key = e.currentTarget.dataset.checktask;
+      state.checklistDone[key] = !state.checklistDone[key];
+      render();
+    });
+  });
+  document.querySelectorAll('[data-checkdaytask]').forEach(el=>{
+    el.addEventListener('click', e=>{
+      const i = e.currentTarget.dataset.checkdaytask;
+      state.dressChecklistDone[i] = !state.dressChecklistDone[i];
+      render();
+    });
+  });
+  document.querySelectorAll('[data-personaltext]').forEach(inp=>{
+    inp.addEventListener('input', e=>{
+      const i = Number(e.currentTarget.dataset.personaltext);
+      state.checklistPersonal[i].text = e.target.value;
+      pushRemote();
+    });
+  });
+  document.querySelectorAll('[data-personalstatus]').forEach(sel=>{
+    sel.addEventListener('change', e=>{
+      const i = Number(e.currentTarget.dataset.personalstatus);
+      state.checklistPersonal[i].status = e.target.value;
+      delete state.checklistPersonal[i].done;
+      render();
+    });
+  });
+  document.querySelectorAll('[data-delpersonal]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      state.checklistPersonal.splice(Number(e.currentTarget.dataset.delpersonal),1);
+      render();
+    });
+  });
+  const addPersonalBtn = document.getElementById('addbtn-personal');
+  if(addPersonalBtn) addPersonalBtn.addEventListener('click', ()=>{
+    const input = document.getElementById('add-personal-item');
+    const text = input.value.trim();
+    if(!text) return;
+    const status = document.getElementById('add-personal-status').value;
+    state.checklistPersonal.push({ text, status });
+    render();
+  });
+
+  // Say Yes to the Dress
+  const vestidoBack = document.getElementById('vestido-back');
+  if(vestidoBack) vestidoBack.addEventListener('click', ()=>{ closeAllSheets(); activeTab='inicio'; _origRender(); });
+  const addVisitBtn = document.getElementById('add-visit-btn');
+  if(addVisitBtn) addVisitBtn.addEventListener('click', ()=>openVisitSheet());
+  document.querySelectorAll('[data-togglevisit]').forEach(el=>{
+    el.addEventListener('click', e=>{
+      const id = e.currentTarget.dataset.togglevisit;
+      openDressVisit[id] = !openDressVisit[id];
+      _origRender();
+    });
+  });
+  document.querySelectorAll('[data-favvisit]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      e.stopPropagation();
+      const id = e.currentTarget.dataset.favvisit;
+      state.favoriteVisitId = (state.favoriteVisitId===id) ? null : id;
+      render();
+    });
+  });
+  document.querySelectorAll('[data-editvisit]').forEach(btn=>{
+    btn.addEventListener('click', e=>{ e.stopPropagation(); openVisitSheet(e.currentTarget.dataset.editvisit); });
+  });
+  document.querySelectorAll('[data-delvisit]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      e.stopPropagation();
+      if(confirm(ta('confirmDeleteVisit'))){
+        state.dressVisits = state.dressVisits.filter(v=>v.id!==e.currentTarget.dataset.delvisit);
+        render();
+      }
+    });
+  });
+  const dressInspAddBtn = document.getElementById('dress-insp-add-btn');
+  if(dressInspAddBtn) dressInspAddBtn.addEventListener('click', ()=>{ document.getElementById('dress-insp-file-input').click(); });
+  document.querySelectorAll('[data-dressinsprm]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      dressInspirations = dressInspirations.filter(i=>i.id!==e.currentTarget.dataset.dressinsprm);
+      saveDressInspirations();
+      render();
+    });
+  });
+  document.querySelectorAll('[data-dresslightbox]').forEach(el=>{
+    el.addEventListener('click', e=>{
+      const item = dressInspirations.find(i=>i.id===e.currentTarget.dataset.dresslightbox);
+      if(item) openImgLightbox(item.dataUrl);
+    });
+  });
+
+  // To-do
+  const todoBack = document.getElementById('todo-back');
+  if(todoBack) todoBack.addEventListener('click', ()=>{ closeAllSheets(); activeTab='inicio'; _origRender(); });
+  const todocatBack = document.getElementById('todocat-back');
+  if(todocatBack) todocatBack.addEventListener('click', ()=>{ todoOpenCategoryId = null; _origRender(); });
+  document.querySelectorAll('[data-opencat]').forEach(card=>{
+    card.addEventListener('click', e=>{ todoOpenCategoryId = e.currentTarget.dataset.opencat; _origRender(); });
+  });
+  document.querySelectorAll('[data-todofilter]').forEach(btn=>{
+    btn.addEventListener('click', e=>{ todoFilter = e.currentTarget.dataset.todofilter; _origRender(); });
+  });
+  const todoSearch = document.getElementById('todo-search');
+  if(todoSearch) todoSearch.addEventListener('input', e=>{
+    todoQuery = e.target.value;
+    const selStart = e.target.selectionStart;
+    const selEnd = e.target.selectionEnd;
+    _origRender();
+    const newSearch = document.getElementById('todo-search');
+    if(newSearch){
+      newSearch.focus();
+      try{ newSearch.setSelectionRange(selStart, selEnd); }catch(_){}
+    }
+  });
+  document.querySelectorAll('[data-catitemcheck]').forEach(el=>{
+    el.addEventListener('click', e=>{
+      e.stopPropagation();
+      const [catId,i] = e.currentTarget.dataset.catitemcheck.split('|');
+      const cat = state.todoCategories.find(c=>c.id===catId);
+      cat.items[i].done = !cat.items[i].done;
+      render();
+    });
+  });
+  document.querySelectorAll('[data-catitemdel]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      const [catId,i] = e.currentTarget.dataset.catitemdel.split('|');
+      const cat = state.todoCategories.find(c=>c.id===catId);
+      cat.items.splice(Number(i),1);
+      render();
+    });
+  });
+  document.querySelectorAll('[data-catitemdue]').forEach(el=>{
+    el.addEventListener('change', e=>{
+      const [catId,i] = e.currentTarget.dataset.catitemdue.split('|');
+      const cat = state.todoCategories.find(c=>c.id===catId);
+      cat.items[i].due = e.currentTarget.value || '';
+      render();
+    });
+  });
+  document.querySelectorAll('[data-catitemtime]').forEach(el=>{
+    el.addEventListener('change', e=>{
+      const [catId,i] = e.currentTarget.dataset.catitemtime.split('|');
+      const cat = state.todoCategories.find(c=>c.id===catId);
+      cat.items[i].time = e.currentTarget.value || '';
+      render();
+    });
+  });
+  document.querySelectorAll('[data-catitemdueclear]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      const [catId,i] = e.currentTarget.dataset.catitemdueclear.split('|');
+      const cat = state.todoCategories.find(c=>c.id===catId);
+      cat.items[i].due = '';
+      cat.items[i].time = '';
+      render();
+    });
+  });
+  const addCatItemBtn = document.getElementById('addbtn-catitem');
+  if(addCatItemBtn) addCatItemBtn.addEventListener('click', e=>{
+    const catId = e.currentTarget.dataset.forcat;
+    const cat = state.todoCategories.find(c=>c.id===catId);
+    const input = document.getElementById('add-catitem-name');
+    const dueInput = document.getElementById('add-catitem-due');
+    const text = input.value.trim();
+    if(text){ cat.items.push({text, done:false, due: dueInput ? dueInput.value : '', time:''}); render(); }
+  });
+  const addCatItemInput = document.getElementById('add-catitem-name');
+  if(addCatItemInput) addCatItemInput.addEventListener('keydown', e=>{
+    if(e.key==='Enter'){
+      const catId = document.getElementById('addbtn-catitem').dataset.forcat;
+      const cat = state.todoCategories.find(c=>c.id===catId);
+      const dueInput = document.getElementById('add-catitem-due');
+      const text = e.currentTarget.value.trim();
+      if(text){ cat.items.push({text, done:false, due: dueInput ? dueInput.value : '', time:''}); render(); }
+    }
+  });
+  const openTodoNotes = document.getElementById('open-todo-notes');
+  if(openTodoNotes) openTodoNotes.addEventListener('click', ()=>{
+    closeAllSheets();
+    document.getElementById('todo-notes-text').value = state.todoNotes||'';
+    document.getElementById('todo-notes-sheet').classList.add('show');
+    document.getElementById('sheet-backdrop').classList.add('show');
+  });
+  const addTodoCatBtn = document.getElementById('add-todocat-btn');
+  if(addTodoCatBtn) addTodoCatBtn.addEventListener('click', ()=>{
+    closeAllSheets();
+    editingTodoCatId = null;
+    document.getElementById('tc-sheet-title').textContent = ta('tcSheetTitleNew');
+    document.getElementById('tc-label').value = '';
+    document.getElementById('tc-title').value = '';
+    document.getElementById('tc-desc').value = '';
+    document.getElementById('todo-cat-sheet').classList.add('show');
+    document.getElementById('sheet-backdrop').classList.add('show');
+  });
+  const editTodoCatBtn = document.getElementById('edit-todocat-btn');
+  if(editTodoCatBtn) editTodoCatBtn.addEventListener('click', e=>{
+    const cat = state.todoCategories.find(c=>c.id===e.currentTarget.dataset.forcat);
+    if(!cat) return;
+    closeAllSheets();
+    editingTodoCatId = cat.id;
+    document.getElementById('tc-sheet-title').textContent = ta('tcSheetTitleEdit');
+    document.getElementById('tc-label').value = cat.label;
+    document.getElementById('tc-title').value = cat.title;
+    document.getElementById('tc-desc').value = cat.desc;
+    document.getElementById('todo-cat-sheet').classList.add('show');
+    document.getElementById('sheet-backdrop').classList.add('show');
+  });
+  const delTodoCatBtn = document.getElementById('del-todocat-btn');
+  if(delTodoCatBtn) delTodoCatBtn.addEventListener('click', e=>{
+    const catId = e.currentTarget.dataset.forcat;
+    const cat = state.todoCategories.find(c=>c.id===catId);
+    if(!cat) return;
+    if(confirm(ta('confirmDeleteTodoCategory')(cat.title))){
+      state.todoCategories = state.todoCategories.filter(c=>c.id!==catId);
+      todoOpenCategoryId = null;
+      render();
+    }
+  });
+
+  // Lua-de-mel
+  const luademelBack = document.getElementById('luademel-back');
+  if(luademelBack) luademelBack.addEventListener('click', ()=>{ closeAllSheets(); activeTab='inicio'; _origRender(); });
+  const addOptionBtn = document.getElementById('add-idea-btn');
+  if(addOptionBtn) addOptionBtn.addEventListener('click', ()=>{
+    hmDraftOption = { id:null, name:'', favorite:false, budget:'', days:0, cities:[], type:'', notes:'' };
+    hmOpenOptionId = null;
+    _origRender();
+  });
+  document.querySelectorAll('[data-editidea]').forEach(card=>{
+    card.addEventListener('click', e=>{
+      if(e.target.closest('[data-favoption]')) return;
+      hmOpenOptionId = e.currentTarget.dataset.editidea;
+      hmDraftOption = null;
+      render();
+    });
+  });
+  document.querySelectorAll('[data-favoption]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      e.stopPropagation();
+      const id = e.currentTarget.dataset.favoption;
+      state.honeymoon.options.forEach(o=>{ o.favorite = (o.id===id) ? !o.favorite : false; });
+      render();
+    });
+  });
+
+  // Página de uma hipótese de lua-de-mel (a editar uma já existente, ou um rascunho novo)
+  function getCurrentHmOption(){
+    return hmDraftOption || state.honeymoon.options.find(x=>x.id===hmOpenOptionId);
+  }
+  const luademelOptionBack = document.getElementById('luademel-option-back');
+  if(luademelOptionBack) luademelOptionBack.addEventListener('click', ()=>{
+    hmOpenOptionId = null;
+    hmDraftOption = null; // se era uma hipótese nova por guardar, descarta-a — nunca chegou a existir
+    render();
+  });
+  const hmoNameInput = document.getElementById('hmo-name');
+  if(hmoNameInput) hmoNameInput.addEventListener('input', e=>{
+    const o = getCurrentHmOption();
+    if(o){ o.name = e.target.value; if(!hmDraftOption) pushRemote(); }
+  });
+  const hmoBudgetInput = document.getElementById('hmo-budget');
+  if(hmoBudgetInput) hmoBudgetInput.addEventListener('input', e=>{
+    const o = getCurrentHmOption();
+    if(o){ o.budget = Math.max(0, Number(e.target.value)||0); if(!hmDraftOption) pushRemote(); }
+  });
+  const hmoNotesInput = document.getElementById('hmo-notes');
+  if(hmoNotesInput) hmoNotesInput.addEventListener('input', e=>{
+    const o = getCurrentHmOption();
+    if(o){ o.notes = e.target.value; if(!hmDraftOption) pushRemote(); }
+  });
+  document.querySelectorAll('[data-hmotype]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      const o = getCurrentHmOption();
+      if(o){ o.type = e.currentTarget.dataset.hmotype; render(); }
+    });
+  });
+  document.querySelectorAll('[data-hmodays]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      const o = getCurrentHmOption();
+      if(!o) return;
+      o.days = Math.max(0, (o.days||0) + Number(e.currentTarget.dataset.hmodays));
+      const val = document.getElementById('hmo-days-val');
+      if(val) val.textContent = o.days;
+      if(!hmDraftOption) pushRemote();
+    });
+  });
+  const addHmoCityBtn = document.getElementById('addbtn-hmo-city');
+  if(addHmoCityBtn) addHmoCityBtn.addEventListener('click', ()=>{
+    const input = document.getElementById('add-hmo-city');
+    const city = input.value.trim();
+    if(!city) return;
+    const o = getCurrentHmOption();
+    if(o){ o.cities = o.cities||[]; o.cities.push(city); render(); }
+  });
+  const addHmoCityInput = document.getElementById('add-hmo-city');
+  if(addHmoCityInput) addHmoCityInput.addEventListener('keydown', e=>{
+    if(e.key==='Enter'){
+      const city = e.currentTarget.value.trim();
+      if(!city) return;
+      const o = getCurrentHmOption();
+      if(o){ o.cities = o.cities||[]; o.cities.push(city); render(); }
+    }
+  });
+  document.querySelectorAll('[data-delcity]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      const o = getCurrentHmOption();
+      if(o){ o.cities.splice(Number(e.currentTarget.dataset.delcity),1); render(); }
+    });
+  });
+  const saveHmOptionBtn = document.getElementById('save-hmoption-btn');
+  if(saveHmOptionBtn) saveHmOptionBtn.addEventListener('click', ()=>{
+    if(hmDraftOption){
+      const name = (hmDraftOption.name||'').trim();
+      if(!name){
+        const nameInput = document.getElementById('hmo-name');
+        if(nameInput){ nameInput.focus(); nameInput.style.borderColor = 'var(--rust)'; }
+        return; // sem nome, não guarda nada — o rascunho fica por guardar
+      }
+      hmDraftOption.id = 'hm'+Date.now()+Math.random().toString(36).slice(2,6);
+      hmDraftOption.name = name;
+      state.honeymoon.options.push(hmDraftOption);
+      hmDraftOption = null;
+      hmOpenOptionId = null;
+      render();
+    } else {
+      hmOpenOptionId = null;
+      render();
+      pushRemote(true);
+    }
+  });
+  const delHmOptionBtn = document.getElementById('del-hmoption-btn');
+  if(delHmOptionBtn) delHmOptionBtn.addEventListener('click', ()=>{
+    if(hmDraftOption){
+      // hipótese ainda nem guardada — só descarta, sem pedir confirmação
+      hmDraftOption = null;
+      render();
+      return;
+    }
+    if(confirm(ta('confirmDeleteHoneymoonOption'))){
+      state.honeymoon.options = state.honeymoon.options.filter(x=>x.id!==hmOpenOptionId);
+      hmOpenOptionId = null;
+      render();
+    }
+  });
+
+  // Anexos na Lua de Mel — só existem quando a hipótese já está guardada
+  // (tem id); um rascunho por guardar (hmDraftOption.id===null) nunca mostra
+  // esta secção (ver o "o.id ?" em viewLuademelOption), por isso este bloco
+  // só tem efeito nesse caso.
+  {
+    const hmOptForAttach = getCurrentHmOption();
+    if(hmOptForAttach && hmOptForAttach.id){
+      const hmoAttachInput = document.getElementById('hmo-attach-input');
+      const hmoAttachLabel = document.querySelector('label[for="hmo-attach-input"]');
+      if(hmoAttachInput) hmoAttachInput.addEventListener('change', async (e)=>{
+        const file = e.target.files && e.target.files[0];
+        const statusEl = document.getElementById('hmo-attach-status');
+        if(!file) return;
+        // Pedido (Set 2026): antes, a única pista de que algo estava a
+        // acontecer era este texto pequeno e cinzento — fácil de não
+        // reparar. Agora tem um spinner, e a própria zona de "adicionar" é
+        // desativada enquanto sobe, para não dar para carregar duas vezes
+        // sem querer no mesmo ficheiro.
+        if(statusEl) statusEl.innerHTML = `<span class="upload-status-row"><span class="upload-spin"></span>${escapeHTML(ta('statusUploadingFile')(file.name))}</span>`;
+        if(hmoAttachLabel) hmoAttachLabel.style.cssText += 'pointer-events:none; opacity:.5;';
+        try{
+          const doc = await uploadHoneymoonAttachment(hmOptForAttach.id, file);
+          if(!doc){
+            if(statusEl) statusEl.textContent = ta('errAttachmentUnsupportedType');
+            if(hmoAttachLabel) hmoAttachLabel.style.cssText = hmoAttachLabel.style.cssText.replace('pointer-events:none; opacity:.5;','');
+          } else {
+            pushRemote(true);
+            render();
+          }
+        }catch(err){
+          if(statusEl) statusEl.textContent = ta('statusPdfReadError');
+          if(hmoAttachLabel) hmoAttachLabel.style.cssText = hmoAttachLabel.style.cssText.replace('pointer-events:none; opacity:.5;','');
+        }
+        e.target.value = '';
+      });
+    }
+  }
+  document.querySelectorAll('[data-openattach]').forEach(row=>{
+    row.addEventListener('click', async e=>{
+      const i = Number(e.currentTarget.dataset.openattach);
+      const d = state.weddingDocuments && state.weddingDocuments[i];
+      if(!d) return;
+      if(d.storagePath && storage){
+        try{ const url = await storage.ref(d.storagePath).getDownloadURL(); previewAttachment(url, d.name); }
+        catch(err){ alert(ta('errOpenAttachmentFailed')); }
+      }
+    });
+  });
+  document.querySelectorAll('[data-delhmattach]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      e.stopPropagation();
+      const i = Number(e.currentTarget.dataset.delhmattach);
+      const d = state.weddingDocuments && state.weddingDocuments[i];
+      if(!d) return;
+      if(confirm(ta('confirmDeleteHoneymoonAttachment'))){
+        if(d.storagePath && storage) storage.ref(d.storagePath).delete().catch(()=>{});
+        state.weddingDocuments.splice(i,1);
+        pushRemote(true);
+        render();
+      }
+    });
+  });
+
+  // Fornecedores
+  const fornecedoresBack = document.getElementById('fornecedores-back');
+  if(fornecedoresBack) fornecedoresBack.addEventListener('click', ()=>{ closeAllSheets(); activeTab='inicio'; fornecedoresSubview='lista'; _origRender(); });
+  const addSupplierBtn = document.getElementById('add-supplier-btn');
+  if(addSupplierBtn) addSupplierBtn.addEventListener('click', ()=>createSupplier());
+  document.querySelectorAll('[data-supfilter]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      supplierFilter = e.currentTarget.dataset.supfilter;
+      document.querySelectorAll('[data-supfilter]').forEach(b=>b.classList.toggle('active', b.dataset.supfilter===supplierFilter));
+      softUpdateFornecedores();
+    });
+  });
+  const supFilterToggle = document.getElementById('sup-filter-toggle');
+  if(supFilterToggle) supFilterToggle.addEventListener('click', ()=>{ showFilterChips = !showFilterChips; render(); });
+  const toggleRec = document.getElementById('toggle-recommended');
+  if(toggleRec) toggleRec.addEventListener('click', ()=>{ fornecedoresSubview = 'recomendados'; render(); });
+  const recomendadosBack = document.getElementById('recomendados-back');
+  if(recomendadosBack) recomendadosBack.addEventListener('click', ()=>{ fornecedoresSubview = 'lista'; render(); });
+  const supSearch = document.getElementById('sup-search');
+  if(supSearch) supSearch.addEventListener('input', e=>{ supplierQuery = e.target.value; softUpdateFornecedores(); });
+  const supNoticeClose = document.getElementById('sup-detail-notice-close');
+  if(supNoticeClose) supNoticeClose.addEventListener('click', ()=>{
+    try{ localStorage.setItem('weddy-supplier-detail-notice-dismissed', '1'); }catch(e){}
+    const el = document.getElementById('sup-detail-notice');
+    if(el) el.remove();
+  });
+  bindSupplierResultHandlers();
+  if(fornecedoresSubview === 'detalhe') bindFornecedorDetalheHandlers();
+
+  // Definições — menu
+  document.querySelectorAll('[data-defgoto]').forEach(el=>{
+    el.addEventListener('click', e=>{
+      const key = e.currentTarget.dataset.defgoto;
+      definicoesSection = key;
+      rsvpSubScreen = null;
+      // Fase Feedback (Set 2026): começar sempre com o ecrã "Reporta um
+      // problema" limpo — evita mostrar (e reenviar sem querer) capturas de
+      // ecrã de uma visita anterior a este ecrã que nunca chegaram a ser
+      // enviadas.
+      if(key==='reportar') reportarScreenshots = [];
+      // Recarregar sempre do zero ao entrar no Histórico — evita mostrar uma
+      // lista desatualizada (ex.: depois de um restauro, que cria logo um
+      // novo snapshot automático) e força loadHistoricoSnapshots() a correr
+      // de novo (ver o guard "length===0 && !loading && !error" no topo de
+      // viewDefHistorico).
+      if(key==='historico'){ historicoSnapshots = []; historicoError = false; }
+      if(key==='rsvp') setRSVPSeenCount(countRSVPResponded());
+      _origRender();
+    });
+  });
+  // Reorganização (Set 2026): navegação dentro do "hub" do RSVP (Prazo,
+  // Informações, Respostas) — mesmo padrão do data-defgoto, mas para os
+  // sub-ecrãs dentro da secção "rsvp".
+  document.querySelectorAll('[data-rsvphometab]').forEach(btn=>{
+    btn.addEventListener('click', e=>{ rsvpHomeTab = e.currentTarget.dataset.rsvphometab; _origRender(); });
+  });
+  document.querySelectorAll('[data-rsvpgoto]').forEach(el=>{
+    el.addEventListener('click', e=>{
+      rsvpSubScreen = e.currentTarget.dataset.rsvpgoto;
+      rsvpFaqEditingIndex = null;
+      _origRender();
+    });
+  });
+  // Reorganização (Set 2026): cartões Premium na página principal (Início)
+  // — mesmo padrão do data-healthgoto "def:x" já usado pelo Wedding Health,
+  // salta direto para a secção certa dentro de Definições (que continua a
+  // decidir se mostra o ecrã normal ou o upsell, consoante a subscrição).
+  document.querySelectorAll('[data-premiumgoto]').forEach(el=>{
+    el.addEventListener('click', e=>{
+      const key = e.currentTarget.dataset.premiumgoto;
+      // O Chatbot não é uma secção de Definições — vive na janela flutuante
+      // do Assistente (o mesmo botão redondo que já existe sempre visível),
+      // por isso este azulejo só abre essa janela em vez de navegar.
+      if(key==='chatbot'){ openChatPanel(); return; }
+      closeAllSheets();
+      activeTab = 'definicoes';
+      definicoesSection = key;
+      rsvpSubScreen = null;
+      if(key==='rsvp') setRSVPSeenCount(countRSVPResponded());
+      _origRender();
+    });
+  });
+  document.querySelectorAll('[data-defback]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      // Se estivermos num sub-ecrã do hub de RSVP, o botão "voltar" primeiro
+      // regressa ao hub (não sai logo de "Convites RSVP" para o menu geral
+      // de Definições).
+      if(definicoesSection==='rsvp' && rsvpSubScreen){
+        if(rsvpSubScreen==='faq'){ rsvpSubScreen = 'info'; }
+        else { rsvpSubScreen = null; }
+        rsvpFaqEditingIndex = null;
+        _origRender();
+        return;
+      }
+      // Achado ao vivo da Fase 4 (Rita): "quando fazes back numa
+      // funcionalidade premium, retoma para a página das definições e não
+      // deveria, porque os menus estão na página inicial". Causa raiz: desde
+      // a reorganização de Set 2026 (ver comentário em viewDefinicoes), RSVP/
+      // Wedding Health/Memórias/Documentos/Google Calendar deixaram de ter
+      // linha própria no menu de Definições (viewDefMenu) — só são
+      // alcançáveis pelos azulejos da página Início (premiumFeatureGrid). O
+      // botão "voltar" genérico, feito para as secções que SÃO menu de
+      // Definições, continuava a mandar sempre de volta para esse menu —
+      // errado para estas 5, porque a pessoa nunca veio de lá. "subscricao"
+      // fica de fora desta lista de propósito: essa continua a ter linha
+      // própria em viewDefMenu (é a única secção Premium que a reorganização
+      // manteve lá), por isso voltar para o menu de Definições continua
+      // correto para ela.
+      const PREMIUM_SECTIONS_ONLY_FROM_HOME = ['rsvp', 'health', 'memories', 'documentos', 'googlecalendar'];
+      if(PREMIUM_SECTIONS_ONLY_FROM_HOME.includes(definicoesSection)){
+        definicoesSection = null;
+        activeTab = 'inicio';
+        _origRender();
+        return;
+      }
+      definicoesSection = null;
+      _origRender();
+    });
+  });
+  // Pedido direto da Rita (Fase 4): botão para cancelar a subscrição na
+  // própria área de gerir subscrição, voltando tudo o que é Premium a ficar
+  // bloqueado de imediato. Como ainda não há pagamentos reais ligados (ver
+  // subscriptionManageNote), isto é simétrico à ativação de teste que já
+  // existia: escreve subscription.active=false no Firestore. Mantém
+  // "startedAt" (não o apaga) — é exatamente esse campo que impede alguém
+  // de reiniciar o relógio dos 24 meses ao cancelar e reativar.
+  const cancelSubBtn = document.getElementById('subscription-cancel-btn');
+  if(cancelSubBtn) cancelSubBtn.addEventListener('click', ()=>{
+    if(!FIREBASE_READY || !currentWeddingId){ alert(ta('alertNoConnectionRetry')); return; }
+    if(!confirm(ta('confirmCancelSubscriptionText'))) return;
+    cancelSubBtn.disabled = true;
+    cancelSubBtn.textContent = ta('btnCancelingEllipsis');
+    const startedAt = (currentSubscription && currentSubscription.startedAt) || null;
+    CURRENT_DOC().update({
+      subscription: { active:false, plan:null, startedAt, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }
+    }).then(()=>{
+      currentSubscription = { active:false, plan:null, startedAt };
+      _origRender();
+    }).catch(err=>{
+      console.error('Weddy cancel subscription error:', err.code, err.message);
+      cancelSubBtn.disabled = false;
+      cancelSubBtn.textContent = ta('btnCancelSubscription');
+      alert(ta('alertSubscriptionCancelError'));
+    });
+  });
+  // Botões "Resolver" do Wedding Health — saltam para o separador principal
+  // (tab:x) ou para uma secção de Definições (def:x), fechando a própria
+  // página de Definições para a pessoa já cair no sítio certo.
+  document.querySelectorAll('[data-healthgoto]').forEach(el=>{
+    el.addEventListener('click', e=>{
+      const [kind, value] = e.currentTarget.dataset.healthgoto.split(':');
+      closeAllSheets();
+      if(kind==='tab'){
+        definicoesSection = null;
+        activeTab = value;
+      } else if(kind==='def'){
+        activeTab = 'definicoes';
+        definicoesSection = value;
+        if(value==='rsvp') setRSVPSeenCount(countRSVPResponded());
+      }
+      _origRender();
+    });
+  });
+  const defBack = document.getElementById('def-back');
+  if(defBack) defBack.addEventListener('click', ()=>{ closeAllSheets(); activeTab='inicio'; _origRender(); });
+  const defSignout = document.getElementById('def-signout');
+  if(defSignout) defSignout.addEventListener('click', ()=>{
+    if(confirm(ta('confirmSignOut'))){
+      if(typeof auth!=='undefined' && auth) auth.signOut();
+    }
+  });
+  document.querySelectorAll('[data-applang]').forEach(el=>{
+    el.addEventListener('click', ()=>{ setAppLang(el.getAttribute('data-applang')); });
+  });
+  // Histórico do casamento — religado a cada render() porque o ecrã inteiro
+  // é dinâmico (mesmo padrão dos botões do "Reporta um problema" acima).
+  const histManualBackupBtn = document.getElementById('hist-manual-backup-btn');
+  if(histManualBackupBtn) histManualBackupBtn.addEventListener('click', ()=>{
+    const labelInput = document.getElementById('hist-manual-label');
+    const label = (labelInput && labelInput.value.trim()) || '';
+    createManualSnapshot(label);
+  });
+  document.querySelectorAll('[data-histverid]').forEach(btn=>{
+    btn.addEventListener('click', e=> showSnapshotPreview(e.currentTarget.dataset.histverid));
+  });
+  document.querySelectorAll('[data-histrestoreid]').forEach(btn=>{
+    btn.addEventListener('click', e=> restoreSnapshot(e.currentTarget.dataset.histrestoreid));
+  });
+  // Fase Feedback (Set 2026): botão "+" que abre o seletor de imagens, e o
+  // "x" em cada miniatura já escolhida — ambos vivem dentro do ecrã
+  // dinâmico "Reporta um problema", por isso têm de ser religados a cada
+  // render() (ao contrário do <input type="file"> em si, que é estático).
+  const defReportarPhotoBtn = document.getElementById('def-reportar-photo-btn');
+  if(defReportarPhotoBtn) defReportarPhotoBtn.addEventListener('click', ()=>{
+    document.getElementById('def-reportar-photo-input').click();
+  });
+  document.querySelectorAll('[data-reportarrm]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      const i = Number(e.currentTarget.dataset.reportarrm);
+      reportarScreenshots.splice(i, 1);
+      render();
+    });
+  });
+  const defReportarSend = document.getElementById('def-reportar-send');
+  if(defReportarSend) defReportarSend.addEventListener('click', async ()=>{
+    const msg = document.getElementById('def-msg-reportar');
+    const txt = (document.getElementById('def-reportar-text').value || '').trim();
+    if(!txt){
+      if(msg){ msg.style.color = 'var(--rust-dark)'; msg.textContent = ta('msgWriteDescriptionFirst'); }
+      return;
+    }
+    // Fase Feedback (Set 2026): o relatório estruturado (mensagem + contexto
+    // + capturas de ecrã) passa a viver no Firestore/Storage, não só num
+    // email — por isso precisa mesmo de sessão e ligação, ao contrário do
+    // fluxo antigo que só dependia do EmailJS.
+    if(!FIREBASE_READY || !auth || !auth.currentUser || !currentWeddingId){
+      if(msg){ msg.style.color = 'var(--rust-dark)'; msg.textContent = ta('alertNoConnectionRetry'); }
+      return;
+    }
+    const emailInput = document.getElementById('def-reportar-email');
+    const emailVal = (emailInput && emailInput.value.trim()) || auth.currentUser.email || ta('notIdentifiedLabel');
+    defReportarSend.disabled = true;
+    if(msg){ msg.style.color = 'var(--ink-soft)'; msg.textContent = ta('msgSendingEllipsis'); }
+    const screenshotsToUpload = reportarScreenshots.slice();
+    try{
+      const feedbackRef = FEEDBACK().doc();
+      const uploaded = [];
+      for(let i=0; i<screenshotsToUpload.length; i++){
+        const sc = screenshotsToUpload[i];
+        try{
+          const blob = await (await fetch(sc.dataUrl)).blob();
+          const storagePath = `feedback/${currentWeddingId}/${feedbackRef.id}/${i}_${sc.name||'screenshot.jpg'}`;
+          await storage.ref(storagePath).put(blob);
+          uploaded.push({ storagePath, name: sc.name||'', size: sc.size||0 });
+        }catch(err){
+          // Uma imagem a falhar o upload não deve travar o resto do
+          // relatório — a mensagem e o contexto continuam a ser o essencial.
+          console.error('Weddy feedback screenshot upload error:', err && err.code, err && err.message);
+        }
+      }
+      const page = activeTab + (definicoesSection ? (':'+definicoesSection) : '');
+      await feedbackRef.set({
+        userId: auth.currentUser.uid,
+        weddingId: currentWeddingId,
+        message: txt,
+        email: emailVal,
+        screenshots: uploaded,
+        page,
+        userAgent: (typeof navigator!=='undefined' && navigator.userAgent) || '',
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        status: 'new'
+      });
+      // Continua a mandar também o aviso imediato por email que já existia,
+      // para a Rita continuar a ser notificada na hora — mas agora é só
+      // "best-effort": uma falha aqui já não invalida o envio, porque o
+      // relatório estruturado (com as imagens) já ficou gravado no
+      // Firestore/Storage de qualquer forma.
+      if(typeof emailjs !== 'undefined'){
+        emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
+          message: txt + (uploaded.length ? `\n\n(${uploaded.length} captura(s) de ecrã em anexo — ver no Firestore/Storage, coleção "feedback")` : ''),
+          from_email: emailVal,
+          to_email: 'geral@weddy.pt'
+        }).catch(()=>{});
+      }
+      reportarScreenshots = [];
+      render();
+      const newMsg = document.getElementById('def-msg-reportar');
+      if(newMsg){ newMsg.style.color = 'var(--sage-dark)'; newMsg.textContent = ta('msgReportThanks'); }
+    }catch(err){
+      console.error('Weddy feedback error:', err && err.code, err && err.message);
+      if(msg){ msg.style.color = 'var(--rust-dark)'; msg.textContent = ta('msgSendError'); }
+      defReportarSend.disabled = false;
+    }
+  });
+
+  // Casamento
+  const defSaveCasamento = document.getElementById('def-save-casamento');
+  if(defSaveCasamento) defSaveCasamento.addEventListener('click', ()=>{
+    weddingSettings = {
+      ...weddingSettings,
+      coupleName1: document.getElementById('def-name1').value.trim() || ta('genericName1'),
+      coupleName2: document.getElementById('def-name2').value.trim() || ta('genericName2'),
+      weddingDate: document.getElementById('def-date').value,
+      venue: document.getElementById('def-venue').value.trim()
+    };
+    saveSettingsNow('def-msg-casamento');
+  });
+
+  // Design
+  document.querySelectorAll('[data-theme]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      weddingSettings.accentColor = e.currentTarget.dataset.theme;
+      applyTheme(weddingSettings.accentColor);
+      document.querySelectorAll('[data-theme]').forEach(b=>b.classList.toggle('active', b===e.currentTarget));
+      pushRemote();
+    });
+  });
+  const defPhotoBtn = document.getElementById('def-photo-btn');
+  if(defPhotoBtn) defPhotoBtn.addEventListener('click', ()=>{ document.getElementById('def-photo-input').click(); });
+  const defPhotoRemove = document.getElementById('def-photo-remove');
+  if(defPhotoRemove) defPhotoRemove.addEventListener('click', ()=>{
+    weddingSettings.heroPhotoUrl = null;
+    weddingSettings.heroPhotoPosX = 50; weddingSettings.heroPhotoPosY = 50; weddingSettings.heroPhotoZoom = 100;
+    render();
+  });
+  const defPhotoInput = document.getElementById('def-photo-input');
+  if(defPhotoInput) defPhotoInput.addEventListener('change', async (e)=>{
+    const file = e.target.files && e.target.files[0];
+    if(!file) return;
+    try{
+      weddingSettings.heroPhotoUrl = await resizeImageFile(file, 1000, 0.75);
+      weddingSettings.heroPhotoPosX = 50; weddingSettings.heroPhotoPosY = 50; weddingSettings.heroPhotoZoom = 100;
+      render();
+    }catch(err){}
+  });
+  const cropViewport = document.getElementById('crop-viewport');
+  if(cropViewport) bindCropDrag(cropViewport);
+  const cropZoomSlider = document.getElementById('crop-zoom-slider');
+  if(cropZoomSlider) cropZoomSlider.addEventListener('input', e=>{
+    weddingSettings.heroPhotoZoom = Number(e.target.value);
+    const vp = document.getElementById('crop-viewport');
+    if(vp) vp.style.backgroundSize = weddingSettings.heroPhotoZoom+'%';
+  });
+  const defSaveDesign = document.getElementById('def-save-design');
+  if(defSaveDesign) defSaveDesign.addEventListener('click', ()=>saveSettingsNow('def-msg-design'));
+
+  // Categorias
+  const defAddCatBtn = document.getElementById('def-addbtn-cat');
+  if(defAddCatBtn) defAddCatBtn.addEventListener('click', ()=>{
+    const input = document.getElementById('def-add-cat-name');
+    const name = input.value.trim();
+    if(!name) return;
+    const id = 'cat'+Date.now()+Math.random().toString(36).slice(2,6);
+    state.categories.push({ id, name, value:0, desc:[] });
+    render();
+  });
+  const defSaveCategorias = document.getElementById('def-save-categorias');
+  if(defSaveCategorias) defSaveCategorias.addEventListener('click', ()=>saveSettingsNow('def-msg-categorias'));
+
+  // Convidar
+  const defInviteBtn = document.getElementById('def-invite-btn');
+  if(defInviteBtn) defInviteBtn.addEventListener('click', ()=>{
+    const email = document.getElementById('def-invite-email').value.trim().toLowerCase();
+    const msgEl = document.getElementById('def-invite-msg');
+    if(!email){ msgEl.textContent = ta('msgInvalidEmail'); msgEl.className='login-msg error'; return; }
+    msgEl.textContent = ta('msgInvitingEllipsis'); msgEl.className = 'login-msg';
+    CURRENT_DOC().update({ ownerEmails: firebase.firestore.FieldValue.arrayUnion(email) }).then(()=>{
+      msgEl.textContent = ta('msgInviteSuccess')(email);
+      msgEl.className = 'login-msg success';
+      document.getElementById('def-invite-email').value = '';
+    }).catch(err=>{
+      console.error('Weddy invite error:', err.code, err.message);
+      msgEl.textContent = ta('msgInviteError')(err.code||ta('unknownErrorLabel'));
+      msgEl.className='login-msg error';
+    });
+  });
+
+  // Segurança
+  document.querySelectorAll('[data-removeowner]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      const email = e.currentTarget.dataset.removeowner;
+      const myEmail = (auth && auth.currentUser) ? auth.currentUser.email.toLowerCase() : '';
+      if(currentWeddingCreator && email===currentWeddingCreator && email!==myEmail){
+        alert(ta('alertOnlyCreatorCanRemoveAccess'));
+        return;
+      }
+      if(!confirm(ta('confirmRemoveAccess')(email))) return;
+      const uidToRemove = currentUidByEmail[sanitizeEmailKey(email)];
+      const updates = { ownerEmails: firebase.firestore.FieldValue.arrayRemove(email) };
+      if(uidToRemove) updates.ownerUids = firebase.firestore.FieldValue.arrayRemove(uidToRemove);
+      CURRENT_DOC().update(updates).then(()=>{
+        currentWeddingOwners = currentWeddingOwners.filter(e2=>e2!==email);
+        render();
+      }).catch(()=>{ alert(ta('alertRemoveAccessError')); });
+    });
+  });
+  const defSaveSeguranca = document.getElementById('def-save-seguranca');
+  if(defSaveSeguranca) defSaveSeguranca.addEventListener('click', ()=>saveSettingsNow('def-msg-seguranca'));
+  const openDeleteAccountBtn = document.getElementById('open-delete-account-btn');
+  if(openDeleteAccountBtn) openDeleteAccountBtn.addEventListener('click', openDeleteAccountSheet);
+  const exportMyDataBtn = document.getElementById('export-my-data-btn');
+  if(exportMyDataBtn) exportMyDataBtn.addEventListener('click', ()=>exportMyDataAsJson(exportMyDataBtn));
+  const exportExcelBtn = document.getElementById('export-excel-btn');
+  if(exportExcelBtn) exportExcelBtn.addEventListener('click', exportToExcel);
+  const exportPdfBtn = document.getElementById('export-pdf-btn');
+  if(exportPdfBtn) exportPdfBtn.addEventListener('click', exportToPDF);
+
+  // Weddy Premium — Convites RSVP
+  document.querySelectorAll('[data-rsvpgerar]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      const [side, catId, idxStr] = e.currentTarget.dataset.rsvpgerar.split('|');
+      const idx = Number(idxStr);
+      const arr = getGuestNames(side, catId);
+      const entry = arr && arr[idx];
+      if(!entry){ alert(ta('alertGuestNotFound')); return; }
+      btn.disabled = true;
+      btn.textContent = ta('btnGeneratingEllipsis');
+      ensureRSVPLink({ side, catId, idx, entry, name: entry.name||'' }).catch(err=>{
+        console.error('Weddy RSVP gerar link error:', err.code, err.message);
+        alert(ta('alertGenerateLinkError'));
+        render();
+      });
+    });
+  });
+  document.querySelectorAll('[data-rsvpcopy]').forEach(btn=>{
+    btn.addEventListener('click', async e=>{
+      const link = e.currentTarget.dataset.rsvpcopy;
+      try{
+        await navigator.clipboard.writeText(link);
+        const original = btn.innerHTML;
+        btn.innerHTML = `${ICONS.check} ${ta('copiedCheck')}`;
+        setTimeout(()=>{ btn.innerHTML = original; }, 1600);
+      }catch(err){
+        prompt(ta('promptCopyLinkManually'), link);
+      }
+    });
+  });
+  document.querySelectorAll('[data-rsvpqr]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      openRSVPQRModal(e.currentTarget.dataset.rsvpqr, e.currentTarget.dataset.rsvpqrname);
+    });
+  });
+  document.querySelectorAll('[data-rsvprevoke]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      const [side,catId,idx] = e.currentTarget.dataset.rsvprevoke.split('|');
+      const name = e.currentTarget.dataset.rsvprevokename;
+      revokeRSVPLink(side, catId, Number(idx), name);
+    });
+  });
+  const rsvpRefreshBtn = document.getElementById('rsvp-refresh-respostas');
+  if(rsvpRefreshBtn) rsvpRefreshBtn.addEventListener('click', ()=>{ loadRSVPResponses(); });
+  const memoriesRefreshBtn = document.getElementById('memories-refresh');
+  if(memoriesRefreshBtn) memoriesRefreshBtn.addEventListener('click', ()=>{ loadMemories(); });
+  document.querySelectorAll('[data-memorydel]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      deleteMemory(e.currentTarget.dataset.memorydel, e.currentTarget.dataset.memorypath);
+    });
+  });
+  const documentFileInput = document.getElementById('document-file-input');
+  if(documentFileInput) documentFileInput.addEventListener('change', e=>{ handleDocumentUpload(e.target.files); });
+  document.querySelectorAll('[data-docdel]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      // A linha inteira passou a abrir a pré-visualização ao tocar (ver
+      // data-openattach) — sem isto, tocar no "×" também dispararia esse
+      // clique por propagação, tentando abrir o documento a seguir a
+      // apagá-lo (ou antes, consoante a ordem dos listeners).
+      e.stopPropagation();
+      const i = Number(e.currentTarget.dataset.docdel);
+      if(!confirm(ta('confirmDeleteDocument'))) return;
+      const doc = state.weddingDocuments[i];
+      state.weddingDocuments.splice(i,1);
+      if(doc && doc.storagePath && storage){ storage.ref(doc.storagePath).delete().catch(()=>{}); }
+      render();
+      pushRemote(true);
+    });
+  });
+  const rsvpSearchInput = document.getElementById('rsvp-search');
+  if(rsvpSearchInput) rsvpSearchInput.addEventListener('input', e=>{
+    rsvpSearchQuery = e.target.value;
+    _origRender();
+    const freshInput = document.getElementById('rsvp-search');
+    if(freshInput){ freshInput.focus(); freshInput.selectionStart = freshInput.selectionEnd = freshInput.value.length; }
+  });
+  const rsvpFilterToggle = document.getElementById('rsvp-filter-toggle');
+  if(rsvpFilterToggle) rsvpFilterToggle.addEventListener('click', ()=>{ rsvpFilterChipsOpen = !rsvpFilterChipsOpen; _origRender(); });
+  document.querySelectorAll('[data-rsvpfilter]').forEach(btn=>{
+    btn.addEventListener('click', e=>{ rsvpStatusFilter = e.currentTarget.dataset.rsvpfilter; _origRender(); });
+  });
+  const rsvpDeadlineSave = document.getElementById('rsvp-deadline-save');
+  if(rsvpDeadlineSave) rsvpDeadlineSave.addEventListener('click', ()=>{
+    const input = document.getElementById('rsvp-deadline-input');
+    saveAndSyncWeddingSettingsToGuests(rsvpDeadlineSave, { rsvpDeadline: input? input.value : '' });
+  });
+  const rsvpGuestInfoSave = document.getElementById('rsvp-guestinfo-save');
+  if(rsvpGuestInfoSave) rsvpGuestInfoSave.addEventListener('click', ()=>{
+    const dressInput = document.getElementById('rsvp-dresscode-input');
+    const notesInput = document.getElementById('rsvp-guestnotes-input');
+    saveAndSyncWeddingSettingsToGuests(rsvpGuestInfoSave, {
+      guestDressCode: dressInput? dressInput.value.trim() : '',
+      guestInfoNotes: notesInput? notesInput.value.trim() : ''
+    });
+  });
+  const rsvpConciergeSave = document.getElementById('rsvp-concierge-save');
+  if(rsvpConciergeSave) rsvpConciergeSave.addEventListener('click', ()=>{
+    const parkingInput = document.getElementById('rsvp-parking-input');
+    const transportInput = document.getElementById('rsvp-transport-input');
+    const accommodationInput = document.getElementById('rsvp-accommodation-input');
+    const giftsInput = document.getElementById('rsvp-gifts-input');
+    const contactInput = document.getElementById('rsvp-contact-input');
+    // Nota (Set 2026): as perguntas frequentes (guestFaqList) já não têm
+    // textarea própria aqui — têm o seu próprio ecrã/editor ("Perguntas
+    // personalizadas") com guardado independente (ver handlers data-faq*
+    // abaixo), por isso este botão já não lhes mexe.
+    saveAndSyncWeddingSettingsToGuests(rsvpConciergeSave, {
+      guestParkingInfo: parkingInput? parkingInput.value.trim() : '',
+      guestTransportInfo: transportInput? transportInput.value.trim() : '',
+      guestAccommodationInfo: accommodationInput? accommodationInput.value.trim() : '',
+      guestGiftsInfo: giftsInput? giftsInput.value.trim() : '',
+      guestContactInfo: contactInput? contactInput.value.trim() : ''
+    });
+  });
+  // Adicionar/remover campos das duas secções acima (ver guestInfoSectionHTML).
+  // Adicionar só marca o campo como "aberto" nesta sessão e volta a
+  // desenhar — não escreve nada ainda, só passa a mostrar a caixa (o
+  // "Guardar informações" de cada secção continua a ser o único momento em
+  // que algo é mesmo gravado). Remover, esse sim, já apaga o valor guardado
+  // (e não só esconde a caixa), para não ficar um valor escondido e
+  // esquecido sem se perceber porquê — é sempre pedida confirmação se já
+  // havia texto escrito.
+  document.querySelectorAll('[data-guestinfoadd]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      rsvpInfoAddedFields.add(e.currentTarget.dataset.guestinfoadd);
+      _origRender();
+      const allFields = GUEST_INFO_FIELDS.concat(CONCIERGE_INFO_FIELDS);
+      const added = allFields.find(f=>f.key===e.currentTarget.dataset.guestinfoadd);
+      if(added){ const el = document.getElementById(added.inputId); if(el) el.focus(); }
+    });
+  });
+  document.querySelectorAll('[data-guestinforemove]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      const key = e.currentTarget.dataset.guestinforemove;
+      const allFields = GUEST_INFO_FIELDS.concat(CONCIERGE_INFO_FIELDS);
+      const f = allFields.find(x=>x.key===key);
+      if(!f) return;
+      const hasValue = (weddingSettings[f.settingsKey]||'').trim();
+      if(hasValue && !confirm(ta('confirmRemoveGuestInfoField'))) return;
+      rsvpInfoAddedFields.delete(key);
+      if(hasValue){
+        weddingSettings[f.settingsKey] = '';
+        pushRemote(true);
+      }
+      _origRender();
+    });
+  });
+  // Editor de "Perguntas personalizadas" (Concierge FAQ) — cada pergunta
+  // guarda-se de imediato (toggle/editar/eliminar/adicionar), sem depender
+  // do botão "Guardar" de nenhum outro cartão.
+  // Nota: saveAndSyncWeddingSettingsToGuests precisa de um botão real (usa
+  // btn.textContent para mostrar "A guardar…"/"Guardado ✓"); os botões dos
+  // cartões de FAQ (toggle/eliminar) não têm esse texto, por isso guardamos
+  // via um botão dedicado invisível de "Guardar" sempre presente no ecrã
+  // (ver #rsvp-faq-silent-save no viewRSVPFaq) para não rebentar nem mudar
+  // o texto de um botão que a pessoa não está a ver como "guardar".
+  function rsvpSaveFaqList(list){
+    weddingSettings.guestFaqList = list;
+    const silentBtn = document.getElementById('rsvp-faq-silent-save');
+    if(silentBtn) saveAndSyncWeddingSettingsToGuests(silentBtn, { guestFaqList: list });
+  }
+  document.querySelectorAll('[data-faqtoggle]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      const i = Number(e.currentTarget.dataset.faqtoggle);
+      const list = Array.isArray(weddingSettings.guestFaqList) ? weddingSettings.guestFaqList.slice() : [];
+      if(!list[i]) return;
+      list[i] = Object.assign({}, list[i], { active: list[i].active===false ? true : false });
+      rsvpSaveFaqList(list);
+      _origRender();
+    });
+  });
+  document.querySelectorAll('[data-faqedit]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      rsvpFaqEditingIndex = Number(e.currentTarget.dataset.faqedit);
+      _origRender();
+    });
+  });
+  document.querySelectorAll('[data-faqdel]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      const i = Number(e.currentTarget.dataset.faqdel);
+      if(!confirm(ta('confirmDeleteFaq'))) return;
+      const list = Array.isArray(weddingSettings.guestFaqList) ? weddingSettings.guestFaqList.slice() : [];
+      list.splice(i,1);
+      rsvpFaqEditingIndex = null;
+      rsvpSaveFaqList(list);
+      _origRender();
+    });
+  });
+  const rsvpFaqAddBtn = document.getElementById('rsvp-faq-add');
+  if(rsvpFaqAddBtn) rsvpFaqAddBtn.addEventListener('click', ()=>{
+    rsvpFaqEditingIndex = 'new';
+    _origRender();
+  });
+  document.querySelectorAll('[data-faqcancel]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      rsvpFaqEditingIndex = null;
+      _origRender();
+    });
+  });
+  document.querySelectorAll('[data-faqsave]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      const key = e.currentTarget.dataset.faqsave;
+      const qInput = document.getElementById('rsvp-faq-edit-q');
+      const aInput = document.getElementById('rsvp-faq-edit-a');
+      const q = qInput? qInput.value.trim() : '';
+      const a = aInput? aInput.value.trim() : '';
+      if(!q && !a) return;
+      const list = Array.isArray(weddingSettings.guestFaqList) ? weddingSettings.guestFaqList.slice() : [];
+      if(key==='new'){
+        list.push({ q, a, active:true });
+      } else {
+        const i = Number(key);
+        if(!list[i]) return;
+        list[i] = Object.assign({}, list[i], { q, a });
+      }
+      rsvpFaqEditingIndex = null;
+      rsvpSaveFaqList(list);
+      _origRender();
+    });
+  });
+  // Fase 5 — RSVP Autopilot: em vez de copiar logo, abre um passo de
+  // revisão/confirmação (openRSVPAutopilotModal) — "Weddy prepara, casal
+  // confirma" — só depois copia o texto e regista o lembrete.
+  const rsvpAutopilotPrepare = document.getElementById('rsvp-autopilot-prepare');
+  if(rsvpAutopilotPrepare) rsvpAutopilotPrepare.addEventListener('click', ()=>{
+    const entries = rsvpAutopilotList().filter(x=>x.bucket==='due' || x.bucket==='late');
+    if(!entries.length) return;
+    openRSVPAutopilotModal(entries);
+  });
+  const rsvpExportCsv = document.getElementById('rsvp-export-csv');
+  if(rsvpExportCsv) rsvpExportCsv.addEventListener('click', ()=>{ exportRSVPToCSV(); });
+  document.querySelectorAll('[data-rsvpemail]').forEach(input=>{
+    input.addEventListener('blur', e=>{
+      const [side, catId, idxStr, token] = e.currentTarget.dataset.rsvpemail.split('|');
+      const idx = Number(idxStr);
+      const arr = getGuestNames(side, catId);
+      const entry = arr && arr[idx];
+      const email = e.currentTarget.value.trim();
+      if(!entry) return;
+      if(entry.rsvpEmail === email) return;
+      entry.rsvpEmail = email;
+      // Num convite de família, o documento é partilhado por várias pessoas,
+      // por isso o email de cada uma vive dentro de um mapa "emails" (por
+      // memberId) em vez de sobrescrever o campo "email" de topo, que só
+      // faz sentido para convites individuais.
+      const field = entry.rsvpMemberId ? ('emails.'+entry.rsvpMemberId) : 'email';
+      GUESTS().doc(token).update({ [field]: email }).catch(err=>{
+        console.error('Weddy RSVP email save error:', err.code, err.message);
+      });
+      pushRemote(true);
+    });
+  });
+  const rsvpToggleGroup = document.getElementById('rsvp-toggle-group');
+  if(rsvpToggleGroup) rsvpToggleGroup.addEventListener('click', ()=>{
+    rsvpGroupMode = !rsvpGroupMode;
+    rsvpGroupSelection = [];
+    _origRender();
+  });
+  const rsvpCancelGroup = document.getElementById('rsvp-cancel-group');
+  if(rsvpCancelGroup) rsvpCancelGroup.addEventListener('click', ()=>{
+    rsvpGroupMode = false;
+    rsvpGroupSelection = [];
+    _origRender();
+  });
+  document.querySelectorAll('[data-rsvpgroupcheck]').forEach(cb=>{
+    cb.addEventListener('change', e=>{
+      const key = e.currentTarget.dataset.rsvpgroupcheck;
+      if(e.currentTarget.checked){
+        if(!rsvpGroupSelection.includes(key)) rsvpGroupSelection.push(key);
+      } else {
+        rsvpGroupSelection = rsvpGroupSelection.filter(k=>k!==key);
+      }
+      _origRender();
+    });
+  });
+  const rsvpCreateFamily = document.getElementById('rsvp-create-family');
+  if(rsvpCreateFamily) rsvpCreateFamily.addEventListener('click', ()=>{
+    if(rsvpGroupSelection.length<2){ alert(ta('familyGroupTooFew')); return; }
+    const items = rsvpGroupSelection.map(key=>{
+      const [side, catId, idxStr] = key.split('|');
+      const idx = Number(idxStr);
+      const arr = getGuestNames(side, catId);
+      const entry = arr && arr[idx];
+      if(!entry) return null;
+      return { side, catId, idx, entry, name: entry.name||'' };
+    }).filter(Boolean);
+    if(items.length<2){ alert(ta('familyGroupTooFew')); return; }
+    rsvpCreateFamily.disabled = true;
+    rsvpCreateFamily.textContent = '…';
+    ensureFamilyRSVPLink(items).then(()=>{
+      rsvpGroupMode = false;
+      rsvpGroupSelection = [];
+      alert(ta('familyLinkCreated'));
+      render();
+    }).catch(err=>{
+      console.error('Weddy family RSVP link error:', err.code, err.message);
+      alert(ta('alertFamilyLinkError'));
+      render();
+    });
+  });
+
+  // Nota: o Assistente Weddy já não tem handlers aqui — vive só na janela
+  // flutuante (#chat-panel), cujo próprio conteúdo é ligado por
+  // bindChatPanelHandlers() sempre que essa janela é (re)desenhada.
+
+  // O grande dia
+  const addEventBtn = document.getElementById('add-event-btn');
+  if(addEventBtn) addEventBtn.addEventListener('click', ()=>openEventSheet());
+  document.querySelectorAll('[data-editevent]').forEach(el=>{
+    el.addEventListener('click', e=>{ openEventSheet(e.currentTarget.dataset.editevent); });
+  });
+  document.querySelectorAll('[data-delevent]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      e.stopPropagation();
+      if(confirm(ta('confirmDeleteMoment'))) deleteEvent(e.currentTarget.dataset.delevent);
+    });
+  });
+
+  // Orçamento
+  const inTotal = document.getElementById('in-total');
+  if(inTotal) inTotal.addEventListener('input', e=>{ state.budget.total = Math.max(0, Number(e.target.value)||0); softUpdateBudget(); });
+  const inGuests = document.getElementById('in-guests');
+  if(inGuests) inGuests.addEventListener('input', e=>{ state.budget.guestsEstimate = Math.max(0, Number(e.target.value)||0); softUpdateBudget(); });
+  document.querySelectorAll('[data-catvalue]').forEach(inp=>{
+    inp.addEventListener('input', e=>{
+      const id = e.currentTarget.dataset.catvalue;
+      softUpdateCategoryValue(id, Math.max(0, Number(e.currentTarget.value)||0));
+    });
+    inp.addEventListener('change', e=>{
+      const cat = state.categories.find(c=>c.id===e.currentTarget.dataset.catvalue);
+      if(cat) e.currentTarget.value = Math.round(Number(cat.value)||0);
+    });
+  });
+  document.querySelectorAll('[data-toggledesc]').forEach(el=>{
+    el.addEventListener('click', e=>{
+      const id = e.currentTarget.dataset.toggledesc;
+      openDesc[id] = !openDesc[id];
+      _origRender();
+    });
+  });
+  document.querySelectorAll('[data-renamecat]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      const id = e.currentTarget.dataset.renamecat;
+      const c = catById(id);
+      const novo = prompt(ta('promptRenameBudgetCategory'), c.name);
+      if(novo && novo.trim()){ c.name = novo.trim(); render(); }
+    });
+  });
+  document.querySelectorAll('[data-delcat]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      const id = e.currentTarget.dataset.delcat;
+      const c = catById(id);
+      const emUso = state.expenses.some(exp=>exp.category===id);
+      if(emUso){ alert(ta('alertCategoryInUse')(c.name)); return; }
+      if(!confirm(ta('confirmDeleteCategory')(c.name))) return;
+      state.categories = state.categories.filter(x=>x.id!==id);
+      render();
+    });
+  });
+  const addCatBtn = document.getElementById('addbtn-cat');
+  if(addCatBtn) addCatBtn.addEventListener('click', ()=>{
+    const input = document.getElementById('add-cat-name');
+    const name = input.value.trim();
+    if(!name) return;
+    const id = 'cat'+Date.now()+Math.random().toString(36).slice(2,6);
+    state.categories.push({ id, name, value:0, desc:[] });
+    render();
+  });
+  document.querySelectorAll('[data-deldesc]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      const [id,di] = e.currentTarget.dataset.deldesc.split('|');
+      const c = catById(id);
+      c.desc.splice(Number(di),1);
+      render();
+    });
+  });
+  document.querySelectorAll('[data-adddescbtn]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      const id = e.currentTarget.dataset.adddescbtn;
+      const input = document.querySelector(`[data-adddesc="${id}"]`);
+      const val = input.value.trim();
+      if(!val) return;
+      catById(id).desc.push(val);
+      render();
+    });
+  });
+  document.querySelectorAll('[data-adddesc]').forEach(inp=>{
+    inp.addEventListener('keydown', e=>{
+      if(e.key==='Enter'){
+        const id = e.currentTarget.dataset.adddesc;
+        const val = e.currentTarget.value.trim();
+        if(val){ catById(id).desc.push(val); render(); }
+      }
+    });
+  });
+
+  // Convidados
+  const openGuestSheetBtn = document.getElementById('open-guest-sheet');
+  if(openGuestSheetBtn) openGuestSheetBtn.addEventListener('click', openGuestSheet);
+  document.querySelectorAll('.segmented button[data-seg]').forEach(b=>{
+    b.addEventListener('click', ()=>{ guestSeg = b.dataset.seg; _origRender(); });
+  });
+  const gsearch = document.getElementById('guest-search');
+  if(gsearch){
+    gsearch.addEventListener('input', e=>{ guestFilter = e.target.value; softUpdateConvidados(); });
+  }
+  bindGuestGroupHandlers(document);
+
+  // Gastos
+  document.querySelectorAll('[data-exp]').forEach(inp=>{
+    inp.addEventListener('input', e=>{
+      const [field,idx] = e.currentTarget.dataset.exp.split('|');
+      const row = state.expenses[Number(idx)];
+      if(field==='value'||field==='paid') row[field] = Math.max(0, Number(e.target.value)||0);
+      else row[field] = e.target.value;
+      if(field==='paid') softUpdateGastos();
+      else if(field==='dueDate') { e.target.blur(); render(); }
+      else { pushRemote(); }
+    });
+  });
+  document.querySelectorAll('[data-delexp]').forEach(btn=>{
+    btn.addEventListener('click', e=>{ state.expenses.splice(Number(e.currentTarget.dataset.delexp),1); render(); });
+  });
+  const openSheetBtn = document.getElementById('open-sheet');
+  if(openSheetBtn) openSheetBtn.addEventListener('click', openExpenseSheet);
+
+  // Mesas
+  const addTableBtn = document.getElementById('add-table-btn');
+  if(addTableBtn) addTableBtn.addEventListener('click', ()=>{
+    const id = nextTableId();
+    state.seating.tables.push({ id, shape:'round', seats:8, x:null, y:null });
+    openTable[id] = true;
+    render();
+  });
+  document.querySelectorAll('[data-setshape]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      const [id,shape] = e.currentTarget.dataset.setshape.split('|');
+      getTable(Number(id)).shape = shape;
+      render();
+    });
+  });
+  document.querySelectorAll('[data-tableseat]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      const [id,dir] = e.currentTarget.dataset.tableseat.split('|');
+      const table = getTable(Number(id));
+      const newSeats = Math.max(2, Math.min(24, table.seats+Number(dir)));
+      if(newSeats < table.seats) clearSeatsAbove(table.id, newSeats);
+      table.seats = newSeats;
+      render();
+    });
+  });
+  document.querySelectorAll('[data-deltable]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      const id = Number(e.currentTarget.dataset.deltable);
+      if(!confirm(ta('confirmDeleteTable'))) return;
+      clearAllSeatsForTable(id);
+      state.seating.tables = state.seating.tables.filter(t=>t.id!==id);
+      render();
+    });
+  });
+  document.querySelectorAll('[data-tablenote]').forEach(el=>{
+    el.addEventListener('input', e=>{
+      const table = getTable(Number(e.currentTarget.dataset.tablenote));
+      if(table) table.notes = e.target.value;
+      pushRemote();
+    });
+    el.addEventListener('blur', ()=>{ pushRemote(true); });
+  });
+  document.querySelectorAll('[data-toggletable]').forEach(el=>{
+    el.addEventListener('click', e=>{
+      const t = e.currentTarget.dataset.toggletable;
+      openTable[t] = !openTable[t];
+      _origRender();
+    });
+  });
+  document.querySelectorAll('[data-openseat]').forEach(el=>{
+    el.addEventListener('click', e=>{ openSeatSheet(e.currentTarget.dataset.openseat); });
+  });
+  bindAISeatingHandlers();
+  bindGoogleCalendarHandlers();
+}
+
+// Fase 9.1 — Google Calendar. Handlers dos botões do ecrã Definições →
+// Weddy Premium → Google Calendar. Como bindHandlers() corre depois de
+// TODO render (não só quando este ecrã está aberto), os querySelectorAll
+// abaixo simplesmente não encontram nada e não fazem nada quando a
+// pessoa está noutro sítio da app — o mesmo padrão usado no resto do
+// ficheiro (ver bindAISeatingHandlers logo acima).
+function bindGoogleCalendarHandlers(){
+  const connectBtn = document.getElementById('gcal-connect-btn');
+  if(connectBtn) connectBtn.addEventListener('click', ()=>{
+    if(googleCalendarBusy) return;
+    googleCalendarBusy = true;
+    googleCalendarActionMsg = null;
+    render();
+    CalendarService.startOAuth().then(res=>{
+      if(res.ok){
+        // Sai da app a sério — o Google não pode ser aberto num iframe/SDK,
+        // tem de ser uma navegação de topo (spec §32/33).
+        window.location.href = res.authorizationUrl;
+      } else {
+        googleCalendarBusy = false;
+        googleCalendarActionMsg = { type:'error', text: res.message };
+        render();
+      }
+    });
+  });
+
+  // Nota: o botão de reconectar no estado REAUTH_REQUIRED reutiliza o
+  // mesmo id "gcal-connect-btn" (só muda o texto) — por isso o listener
+  // acima já trata dos dois casos.
+
+  document.querySelectorAll('[data-gcalpick]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      if(googleCalendarBusy) return;
+      const calendarId = el.dataset.gcalpick;
+      googleCalendarBusy = true;
+      googleCalendarActionMsg = null;
+      render();
+      CalendarService.connectCalendar(calendarId).then(res=>{
+        googleCalendarBusy = false;
+        googleCalendarCalendars = null; // força recarregar se voltar a este ecrã
+        if(res.ok){
+          googleCalendarActionMsg = { type:'success', text: ta('googleCalendarConnectSuccess') };
+          loadGoogleCalendarIntegration();
+        } else {
+          googleCalendarActionMsg = { type:'error', text: res.message };
+          render();
+        }
+      });
+    });
+  });
+
+  const syncBtn = document.getElementById('gcal-sync-btn');
+  if(syncBtn) syncBtn.addEventListener('click', ()=>{
+    if(googleCalendarBusy) return;
+    googleCalendarBusy = true;
+    googleCalendarActionMsg = null;
+    render();
+    CalendarService.sync().then(res=>{
+      googleCalendarBusy = false;
+      if(res.ok){
+        googleCalendarActionMsg = { type:'success', text: ta('googleCalendarSyncSuccess') };
+        loadGoogleCalendarIntegration();
+      } else {
+        googleCalendarActionMsg = { type:'error', text: res.message };
+        render();
+      }
+    });
+  });
+
+  const changeBtn = document.getElementById('gcal-change-btn');
+  if(changeBtn) changeBtn.addEventListener('click', ()=>{
+    googleCalendarCalendars = null;
+    googleCalendarIntegration = { ...googleCalendarIntegration, calendarId: null }; // só localmente, força mostrar a lista já — não escreve nada
+    render();
+  });
+
+  const disconnectBtn = document.getElementById('gcal-disconnect-btn');
+  if(disconnectBtn) disconnectBtn.addEventListener('click', ()=>{
+    if(googleCalendarBusy) return;
+    // Spec §40: aviso claro de que desligar NÃO apaga os eventos já
+    // criados no Google Calendar.
+    if(!confirm(ta('googleCalendarDisconnectConfirm'))) return;
+    googleCalendarBusy = true;
+    googleCalendarActionMsg = null;
+    render();
+    CalendarService.disconnect().then(res=>{
+      googleCalendarBusy = false;
+      googleCalendarCalendars = null;
+      if(res.ok){
+        googleCalendarActionMsg = { type:'success', text: ta('googleCalendarDisconnectSuccess') };
+        loadGoogleCalendarIntegration();
+      } else {
+        googleCalendarActionMsg = { type:'error', text: res.message };
+        render();
+      }
+    });
+  });
+}
+
+// Fase 8.1 — AI Seating. Todos os handlers do fluxo "Organizar com Weddy
+// AI" (entrada, construtor de preferências, proposta) — agrupados aqui,
+// chamados sempre a seguir aos outros handlers da tab Mesas, porque o
+// botão de entrada e o próprio ecrã só existem dentro de viewMesas().
+function bindAISeatingHandlers(){
+  const openBtn = document.getElementById('ai-seating-open-btn');
+  if(openBtn) openBtn.addEventListener('click', ()=>{
+    aiSeatingScreen = 'prefs';
+    aiSeatingConstraints = [];
+    aiSeatingFreeText = '';
+    aiSeatingProposal = null;
+    aiSeatingErrorMsg = null;
+    aiSeatingPicking = null;
+    aiSeatingPickIds = [];
+    aiSeatingNewPriority = 'STRONG';
+    render();
+  });
+  document.querySelectorAll('[data-aiseatback]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      aiSeatingScreen = null;
+      aiSeatingPicking = null;
+      render();
+    });
+  });
+  // (o botão .js-premium-subscribe já tem o seu próprio handler, ligado
+  // mais acima em bindHandlers via querySelectorAll — reaproveitado tal e
+  // qual aqui, sem precisar de nada específico deste ecrã.)
+
+  document.querySelectorAll('[data-aiseatstart]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      const [type, priority] = e.currentTarget.dataset.aiseatstart.split('|');
+      aiSeatingPicking = { type, priority };
+      aiSeatingPickIds = [];
+      aiSeatingPickQuery = '';
+      render();
+    });
+  });
+  document.querySelectorAll('[data-aiseatpriority]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      aiSeatingNewPriority = e.currentTarget.dataset.aiseatpriority;
+      render();
+    });
+  });
+  document.querySelectorAll('[data-aiseatpick]').forEach(row=>{
+    row.addEventListener('click', e=>{
+      const gid = e.currentTarget.dataset.aiseatpick;
+      if(aiSeatingPickIds.includes(gid)) aiSeatingPickIds = aiSeatingPickIds.filter(id=>id!==gid);
+      else aiSeatingPickIds.push(gid);
+      render();
+    });
+  });
+  const pickQuery = document.getElementById('ai-seat-pick-query');
+  if(pickQuery) pickQuery.addEventListener('input', e=>{
+    aiSeatingPickQuery = e.target.value;
+    render();
+  });
+  const pickCancel = document.querySelector('[data-aiseatpickcancel]');
+  if(pickCancel) pickCancel.addEventListener('click', ()=>{
+    aiSeatingPicking = null;
+    aiSeatingPickIds = [];
+    render();
+  });
+  const pickAdd = document.querySelector('[data-aiseatpickadd]');
+  if(pickAdd) pickAdd.addEventListener('click', ()=>{
+    if(aiSeatingPickIds.length<2 || !aiSeatingPicking) return;
+    aiSeatingConstraints.push({
+      type: aiSeatingPicking.type,
+      priority: aiSeatingPicking.priority,
+      guestIds: [...aiSeatingPickIds],
+      names: aiSeatingPickIds.map(aiSeatingGuestName),
+    });
+    aiSeatingPicking = null;
+    aiSeatingPickIds = [];
+    render();
+  });
+  document.querySelectorAll('[data-aiseatrmconstraint]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      aiSeatingConstraints.splice(Number(e.currentTarget.dataset.aiseatrmconstraint), 1);
+      render();
+    });
+  });
+  const freeTextEl = document.getElementById('ai-seat-freetext');
+  if(freeTextEl) freeTextEl.addEventListener('input', e=>{ aiSeatingFreeText = e.target.value; });
+
+  // Fase 8.1 (UI/Confirmation Flow): "Gerar"/"Regenerar" partilham a mesma
+  // runAISeatingGeneration() — nunca tocam em state.seating.assignments,
+  // só em aiSeatingProposal. "Aceitar"/"Aceitar e editar manualmente"
+  // partilham commitSeatingProposal(), o ÚNICO sítio que pode gravar uma
+  // proposta em state.seating.assignments (valida antes contra o estado
+  // atual — ver aiSeatingProposalIsStale). "Cancelar" reaproveita o mesmo
+  // handler do chevron de voltar ([data-aiseatback], já ligado acima).
+  const generateBtn = document.getElementById('ai-seat-generate-btn');
+  if(generateBtn) generateBtn.addEventListener('click', runAISeatingGeneration);
+  const acceptBtn = document.getElementById('ai-seat-accept-btn');
+  if(acceptBtn) acceptBtn.addEventListener('click', ()=>commitSeatingProposal(aiSeatingProposal));
+  const editBtn = document.getElementById('ai-seat-edit-btn');
+  if(editBtn) editBtn.addEventListener('click', ()=>commitSeatingProposal(aiSeatingProposal));
+  const regenBtn = document.getElementById('ai-seat-regenerate-btn');
+  if(regenBtn) regenBtn.addEventListener('click', runAISeatingGeneration);
+}
+
+function softUpdateBudget(){
+  const total = state.budget.total;
+  const guests = state.budget.guestsEstimate;
+  const perGuest = guests? total/guests : 0;
+  const pg = document.getElementById('perguest-display');
+  if(pg) pg.textContent = fmtEUR(perGuest);
+  state.categories.forEach(c=>{
+    const catTotal = Number(c.value)||0;
+    const catPerGuest = guests? catTotal/guests : 0;
+    const pctDisplay = total ? Math.round(catTotal/total*1000)/10 : 0;
+    const elTotal = document.querySelector(`[data-cattotal="${c.id}"]`);
+    if(elTotal) elTotal.textContent = fmtEUR(catTotal);
+    const elPerGuest = document.querySelector(`[data-catperguest="${c.id}"]`);
+    if(elPerGuest) elPerGuest.textContent = fmtEUR(catPerGuest)+ta('perGuestSuffix');
+    const elValueInput = document.querySelector(`[data-catvalue="${c.id}"]`);
+    if(elValueInput && document.activeElement!==elValueInput) elValueInput.value = Math.round(catTotal);
+    const elPct = document.querySelector(`[data-catpctdisplay="${c.id}"]`);
+    if(elPct) elPct.textContent = pctDisplay+'%';
+    const elBar = document.querySelector(`[data-catbar="${c.id}"]`);
+    if(elBar) elBar.style.width = pctDisplay+'%';
+  });
+  const donutWrap = document.getElementById('donut-section');
+  if(donutWrap) donutWrap.innerHTML = buildDonutSection();
+  pushRemote();
+}
+function saveSettingsNow(msgId){
+  const msgEl = document.getElementById(msgId);
+  if(msgEl){ msgEl.textContent = ta('btnSavingEllipsis'); msgEl.className = 'login-msg'; }
+  if(!FIREBASE_READY || !auth || !auth.currentUser || !currentWeddingId){
+    if(msgEl){ msgEl.textContent = ta('alertSaveNoConnection'); msgEl.className = 'login-msg error'; }
+    return;
+  }
+  clearTimeout(saveTimer);
+  CURRENT_DOC().set({
+    settings: weddingSettings,
+    json: JSON.stringify(state),
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+  }, { merge:true }).then(()=>{
+    if(msgEl){ msgEl.textContent = ta('savedSuccessMsg'); msgEl.className = 'login-msg success'; }
+    showSaveToast(false);
+  }).catch(()=>{
+    if(msgEl){ msgEl.textContent = ta('alertSaveError'); msgEl.className = 'login-msg error'; }
+  });
+}
+function bindCropDrag(el){
+  let dragging=false, startX=0, startY=0, startPosX=50, startPosY=50;
+  el.addEventListener('pointerdown', e=>{
+    dragging = true;
+    el.classList.add('dragging');
+    el.setPointerCapture(e.pointerId);
+    startX = e.clientX; startY = e.clientY;
+    startPosX = weddingSettings.heroPhotoPosX ?? 50;
+    startPosY = weddingSettings.heroPhotoPosY ?? 50;
+  });
+  el.addEventListener('pointermove', e=>{
+    if(!dragging) return;
+    const rect = el.getBoundingClientRect();
+    const dx = (e.clientX-startX) / rect.width * 100;
+    const dy = (e.clientY-startY) / rect.height * 100;
+    const posX = Math.max(0, Math.min(100, startPosX - dx));
+    const posY = Math.max(0, Math.min(100, startPosY - dy));
+    weddingSettings.heroPhotoPosX = posX;
+    weddingSettings.heroPhotoPosY = posY;
+    el.style.backgroundPosition = posX+'% '+posY+'%';
+  });
+  function finish(){
+    if(!dragging) return;
+    dragging = false;
+    el.classList.remove('dragging');
+  }
+  el.addEventListener('pointerup', finish);
+  el.addEventListener('pointercancel', finish);
+}
+function softUpdateGastos(){
+  const totalValue = totalExpenseValue();
+  const totalPaid = totalExpensePaid();
+  const budgetTotal = state.budget.total;
+
+  const pagoWrap = document.getElementById('pago-ring-wrap');
+  if(pagoWrap) pagoWrap.innerHTML = donutSVG(totalValue? totalPaid/totalValue : 0, 'var(--sage-dark)', 92, 9)
+    + `<div class="ring-center"><span class="num">${fmtPct(totalValue? Math.round(totalPaid/totalValue*100):0)}</span><span class="sub">${fmtEUR(totalPaid)}</span></div>`;
+  const porPagar = document.getElementById('pago-porpagar');
+  if(porPagar) porPagar.textContent = fmtEUR(totalValue-totalPaid);
+
+  const orcWrap = document.getElementById('orc-ring-wrap');
+  if(orcWrap) orcWrap.innerHTML = donutSVG(budgetTotal? totalPaid/budgetTotal : 0, 'var(--gold)', 92, 9)
+    + `<div class="ring-center"><span class="num">${fmtPct(budgetTotal? Math.round(totalPaid/budgetTotal*100):0)}</span><span class="sub">${fmtEUR(totalPaid)}</span></div>`;
+
+  state.expenses.forEach((e,i)=>{
+    const remaining = Math.max(0, Number(e.value)-Number(e.paid||0));
+    const remEl = document.querySelector(`[data-dueremaining="${i}"]`);
+    if(remEl) remEl.textContent = ta('remainingToPayLabel')(fmtEUR(remaining));
+    const rowEl = document.querySelector(`[data-duerow="${i}"]`);
+    if(rowEl) rowEl.style.display = remaining>0 ? '' : 'none';
+  });
+
+  // Pago vs. orçamentado, por categoria
+  state.categories.forEach(c=>{
+    const catBudget = Number(c.value)||0;
+    const paid = paidByCategory(c.id);
+    const pct = catBudget? Math.min(100,(paid/catBudget)*100) : 0;
+    const over = paid>catBudget;
+    const row = document.querySelector(`[data-catprogress="${c.id}"]`);
+    if(row){
+      const valSpan = row.querySelector('.cp-row span:last-child');
+      const fill = row.querySelector('.cp-fill');
+      if(valSpan){ valSpan.textContent = `${fmtEUR(paid)} / ${fmtEUR(catBudget)}`; valSpan.classList.toggle('over', over); }
+      if(fill){ fill.style.width = pct+'%'; fill.classList.toggle('over', over); }
+    }
+  });
+
+  // Início — o anel "Orçamento gasto" segue os mesmos números
+  const inicioRing = document.getElementById('inicio-orc-ring-wrap');
+  if(inicioRing) inicioRing.innerHTML = donutSVG(budgetTotal? totalValue/budgetTotal : 0, 'var(--blush-dark)', 92, 9)
+    + `<div class="ring-center"><span class="num">${fmtPct(budgetTotal? Math.round(totalValue/budgetTotal*100):0)}</span><span class="sub">${fmtEUR(totalValue)}</span></div>`;
+  const inicioPorGastar = document.getElementById('inicio-porgastar');
+  if(inicioPorGastar) inicioPorGastar.textContent = fmtEUR(budgetTotal-totalValue);
+
+  pushRemote();
+}
+
+/* ============================================================
+   SHEET: novo movimento
+============================================================ */
+function openExpenseSheet(){
+  closeAllSheets();
+  const sel = document.getElementById('sf-cat');
+  sel.innerHTML = state.categories.map(c=>`<option value="${c.id}">${escapeHTML(c.name)}</option>`).join('');
+  const supSel = document.getElementById('sf-supplier');
+  if(supSel) supSel.innerHTML = `<option value="">${ta('noSupplierOption')}</option>` + (state.suppliers||[]).map(s=>`<option value="${s.id}">${escapeHTML(s.name)}</option>`).join('');
+  document.getElementById('sf-desc').value='';
+  document.getElementById('sf-date').value='';
+  document.getElementById('sf-value').value='';
+  document.getElementById('sf-paid').value='';
+  document.getElementById('sf-duedate').value='';
+  document.getElementById('sf-method').value='';
+  if(supSel) supSel.value='';
+  document.getElementById('expense-sheet').classList.add('show');
+  document.getElementById('sheet-backdrop').classList.add('show');
+}
+function closeExpenseSheet(){
+  document.getElementById('expense-sheet').classList.remove('show');
+  document.getElementById('sheet-backdrop').classList.remove('show');
+}
+let editingEventId = null;
+function openEventSheet(eventId){
+  closeAllSheets();
+  editingEventId = eventId || null;
+  const ev = eventId ? (state.daySchedule||[]).find(e=>e.id===eventId) : null;
+  document.getElementById('event-sheet-title').textContent = ev ? ta('eventSheetTitleEdit') : ta('eventSheetTitleNew');
+  document.getElementById('ef-label').value = ev ? ev.label : '';
+  document.getElementById('ef-time').value = ev ? ev.time : '';
+  document.getElementById('ef-place').value = ev ? (ev.place||'') : '';
+  document.getElementById('ef-guestvisible').classList.toggle('on', !!(ev && ev.guestVisible));
+  document.getElementById('event-sheet').classList.add('show');
+  document.getElementById('sheet-backdrop').classList.add('show');
+}
+function closeEventSheet(){
+  document.getElementById('event-sheet').classList.remove('show');
+  document.getElementById('sheet-backdrop').classList.remove('show');
+  editingEventId = null;
+}
+let guestSheetSide = 'noiva';
+function fillGfCatSelect(side){
+  const sel = document.getElementById('gf-cat');
+  sel.innerHTML = allGuestCategoriesOf(side).map(c=>`<option value="${c.id}">${escapeHTML(c.label)}</option>`).join('');
+}
+function openGuestSheet(){
+  closeAllSheets();
+  guestSheetSide = 'noiva';
+  document.getElementById('gf-name').value = '';
+  document.querySelectorAll('#gf-side-seg button').forEach(b=>b.classList.toggle('active', b.dataset.gfside==='noiva'));
+  fillGfCatSelect('noiva');
+  document.getElementById('guest-sheet').classList.add('show');
+  document.getElementById('sheet-backdrop').classList.add('show');
+}
+function closeGuestSheet(){
+  document.getElementById('guest-sheet').classList.remove('show');
+  document.getElementById('sheet-backdrop').classList.remove('show');
+}
+document.getElementById('ef-cancel').addEventListener('click', closeEventSheet);
+document.getElementById('gf-cancel').addEventListener('click', closeGuestSheet);
+document.querySelectorAll('#gf-side-seg button').forEach(b=>{
+  b.addEventListener('click', ()=>{
+    guestSheetSide = b.dataset.gfside;
+    document.querySelectorAll('#gf-side-seg button').forEach(x=>x.classList.toggle('active', x===b));
+    fillGfCatSelect(guestSheetSide);
+  });
+});
+document.getElementById('gf-save').addEventListener('click', ()=>{
+  const nameEl = document.getElementById('gf-name');
+  const name = nameEl.value.trim();
+  if(!name){ flagRequiredField(nameEl); return; }
+  const cat = document.getElementById('gf-cat').value;
+  const arr = getGuestNames(guestSheetSide, cat);
+  if(arr){
+    arr.push(newGuestEntry(cat, name));
+    openGuestGroup[guestSheetSide+'|'+cat] = true;
+    guestSeg = guestSheetSide;
+  }
+  closeGuestSheet();
+  render();
+  pushRemote(true);
+});
+document.getElementById('ef-guestvisible').addEventListener('click', e=>{
+  e.currentTarget.classList.toggle('on');
+});
+// Fase 9.2 (parte 1) — sheet de telefone + consentimento WhatsApp de um
+// convidado. Guarda a localização (lado|categoria|índice) para conseguir
+// ler/escrever a entrada certa em state.guests, mas a gravação em si
+// nunca é feita diretamente — passa sempre por GuestCommsService
+// (updateGuestPhone), nunca por pushRemote().
+let editingGuestPhoneRef = null; // { side, cat, idx, guestId }
+function openGuestPhoneSheet(side, cat, idx){
+  closeAllSheets();
+  const arr = getGuestNames(side, cat);
+  const entry = arr && arr[idx];
+  if(!entry || typeof entry!=='object' || !entry.guestId) return; // convidados antigos (string simples) ainda não têm guestId — nada a fazer aqui
+  editingGuestPhoneRef = { side, cat, idx, guestId: entry.guestId };
+  const phoneEl = document.getElementById('gp-phone');
+  phoneEl.value = entry.phone || '';
+  phoneEl.classList.remove('field-error');
+  const consentOn = !!(entry.communicationPreferences && entry.communicationPreferences.whatsapp && entry.communicationPreferences.whatsapp.optedIn);
+  document.getElementById('gp-consent-toggle').classList.toggle('on', consentOn);
+  document.getElementById('gp-consent-row').style.display = phoneEl.value.trim() ? '' : 'none';
+  document.getElementById('gp-error').style.display = 'none';
+  document.getElementById('guest-phone-sheet').classList.add('show');
+  document.getElementById('sheet-backdrop').classList.add('show');
+}
+function closeGuestPhoneSheet(){
+  document.getElementById('guest-phone-sheet').classList.remove('show');
+  document.getElementById('sheet-backdrop').classList.remove('show');
+  editingGuestPhoneRef = null;
+}
+document.getElementById('gp-cancel').addEventListener('click', closeGuestPhoneSheet);
+document.getElementById('gp-phone').addEventListener('input', e=>{
+  e.target.classList.remove('field-error');
+  document.getElementById('gp-consent-row').style.display = e.target.value.trim() ? '' : 'none';
+});
+document.getElementById('gp-consent-toggle').addEventListener('click', e=>{
+  e.currentTarget.classList.toggle('on');
+});
+document.getElementById('gp-save').addEventListener('click', async ()=>{
+  if(!editingGuestPhoneRef) return;
+  const phoneEl = document.getElementById('gp-phone');
+  const errEl = document.getElementById('gp-error');
+  const phone = phoneEl.value.trim();
+  const optedIn = document.getElementById('gp-consent-toggle').classList.contains('on');
+  errEl.style.display = 'none';
+  const saveBtn = document.getElementById('gp-save');
+  saveBtn.disabled = true;
+  const originalLabel = saveBtn.textContent;
+  saveBtn.textContent = ta('btnSavingEllipsis') || originalLabel;
+  const { guestId } = editingGuestPhoneRef;
+  const res = await GuestCommsService.updateGuestPhone(guestId, phone, phone ? optedIn : null);
+  saveBtn.disabled = false;
+  saveBtn.textContent = originalLabel;
+  if(!res.ok){
+    phoneEl.classList.add('field-error');
+    errEl.textContent = res.message;
+    errEl.style.display = '';
+    return;
+  }
+  closeGuestPhoneSheet();
+  // Não escrevemos em "state" aqui de propósito — quem grava foi a Cloud
+  // Function (updateGuestPhone), diretamente no Firestore. O listener em
+  // tempo real (attachFirestoreSync) traz o valor novo em breve; nada
+  // mais a fazer aqui.
+});
+document.getElementById('ef-save').addEventListener('click', ()=>{
+  const labelEl = document.getElementById('ef-label');
+  const label = labelEl.value.trim();
+  const time = document.getElementById('ef-time').value;
+  const place = document.getElementById('ef-place').value.trim();
+  const guestVisible = document.getElementById('ef-guestvisible').classList.contains('on');
+  if(!label) { flagRequiredField(labelEl); return; }
+  if(!state.daySchedule) state.daySchedule = [];
+  if(editingEventId){
+    const ev = state.daySchedule.find(e=>e.id===editingEventId);
+    if(ev){ ev.label=label; ev.time=time; ev.place=place; ev.guestVisible=guestVisible; }
+  } else {
+    state.daySchedule.push({ id:'ev'+Date.now()+Math.random().toString(36).slice(2,6), label, time, place, guestVisible });
+  }
+  closeEventSheet();
+  render();
+  pushRemote(true);
+  syncGuestProgramToGuestDocs();
+});
+function deleteEvent(eventId){
+  state.daySchedule = (state.daySchedule||[]).filter(e=>e.id!==eventId);
+  render();
+  syncGuestProgramToGuestDocs();
+}
+function closeAllSheets(){
+  closeExpenseSheet(); closeSeatSheet(); closeEventSheet(); closeGuestSheet(); closeVisitSheet();
+  closeHmOptionSheet(); closeTodoNotesSheet(); closeTodoCatSheet();
+  closeDeleteAccountSheet(); closeGuestPhoneSheet();
+  // Rede de segurança: se um gesto de arrastar for interrompido a meio (ex: o
+  // dedo sai do ecrã sem soltar), pode ficar um "transform" preso na sheet.
+  // Ao fechar tudo, limpamos sempre esse estilo para nunca ficar uma sheet
+  // meio visível por cima de outra.
+  ['expense-sheet','event-sheet','guest-sheet','visit-sheet','seat-sheet','hm-option-sheet','todo-notes-sheet','todo-cat-sheet','delete-account-sheet','guest-phone-sheet'].forEach(id=>{
+    const el = document.getElementById(id);
+    if(el){
+      el.style.transform=''; el.style.transition='';
+      // O Safari, por vezes, não repinta a posição da sheet depois de lhe
+      // tirarmos a classe "show" — sobretudo se a página fizer scroll logo a
+      // seguir (ex: focar um campo). Isto obriga-o a recalcular tudo do zero.
+      void el.offsetHeight;
+      const prevDisplay = el.style.display;
+      el.style.display = 'none';
+      void el.offsetHeight;
+      el.style.display = prevDisplay;
+    }
+  });
+}
+document.getElementById('sheet-backdrop').addEventListener('click', closeAllSheets);
+
+function anySheetOpen(){
+  return !!document.querySelector('.sheet.show');
+}
+function weddyBackStep(){
+  // Devolve true se fechou alguma coisa (o gesto de recuar deve ficar "preso"
+  // dentro da app); devolve false quando já não há nada para fechar (já
+  // estamos no Início) — nesse caso o recuar pode seguir o curso normal.
+  const lightbox = document.getElementById('img-lightbox');
+  if(lightbox && lightbox.classList.contains('show')){
+    lightbox.classList.remove('show');
+    return true;
+  }
+  const paymentPopup = document.getElementById('payment-alert-popup');
+  if(paymentPopup && paymentPopup.classList.contains('show')){
+    paymentPopup.classList.remove('show');
+    return true;
+  }
+  const iabWarning = document.getElementById('iab-warning');
+  if(iabWarning && iabWarning.classList.contains('show')){
+    iabWarning.classList.remove('show');
+    return true;
+  }
+  if(anySheetOpen()){
+    closeAllSheets();
+    return true;
+  }
+  if(activeTab !== 'inicio'){
+    closeAllSheets();
+    activeTab = 'inicio';
+    if(typeof fornecedoresSubview !== 'undefined') fornecedoresSubview = 'lista';
+    if(typeof openSupplierDetailId !== 'undefined') openSupplierDetailId = null;
+    _origRender();
+    return true;
+  }
+  return false;
+}
+
+/* ============================================================
+   GESTOS — removidos a pedido (deslizar para trás e deslizar para
+   baixo para fechar as folhas causavam folhas "presas" a meio do
+   ecrã e sobrepostas). Fechar folhas é feito só por Cancelar/Guardar
+   ou ao tocar fora (sheet-backdrop). Navegar para trás é feito só
+   pelos botões de voltar.
+============================================================ */
+document.getElementById('sf-cancel').addEventListener('click', closeExpenseSheet);
+document.getElementById('sf-save').addEventListener('click', ()=>{
+  const descEl = document.getElementById('sf-desc');
+  const desc = descEl.value.trim();
+  const dateEl = document.getElementById('sf-date');
+  const date = dateEl.value;
+  const valueEl = document.getElementById('sf-value');
+  const paidEl = document.getElementById('sf-paid');
+  const dueDate = document.getElementById('sf-duedate').value;
+  const category = document.getElementById('sf-cat').value;
+  const method = document.getElementById('sf-method').value;
+  const supplierEl = document.getElementById('sf-supplier');
+  const supplierId = supplierEl ? (supplierEl.value || null) : null;
+  if(!desc){ flagRequiredField(descEl); return; }
+  if(!date){ flagRequiredField(dateEl); return; }
+  if(valueEl.value.trim()==='' || Number(valueEl.value)<=0){ flagRequiredField(valueEl); return; }
+  if(paidEl.value.trim()===''){ flagRequiredField(paidEl); return; }
+  const value = Math.max(0, Number(valueEl.value)||0);
+  const paid = Math.max(0, Number(paidEl.value)||0);
+  state.expenses.unshift({id:'exp'+Date.now()+Math.random().toString(36).slice(2,6),date,desc,value,paid,category,dueDate,method,supplierId});
+  closeExpenseSheet();
+  render();
+  pushRemote(true);
+});
+
+/* ============================================================
+   SHEET: atribuir lugar (mesas)
+============================================================ */
+function openSeatSheet(seatKey){
+  closeAllSheets();
+  editingSeatKey = seatKey;
+  seatQuery = '';
+  const t = seatKey.split('-')[0].replace('t','');
+  const s = seatKey.split('-')[1].replace('s','');
+  document.getElementById('seat-sheet-title').textContent = ta('seatSheetTitle')(t, s);
+  document.getElementById('seat-picker-search').value = '';
+  renderSeatPickerList();
+  document.getElementById('seat-sheet').classList.add('show');
+  document.getElementById('sheet-backdrop').classList.add('show');
+}
+function closeSeatSheet(){
+  document.getElementById('seat-sheet').classList.remove('show');
+  document.getElementById('sheet-backdrop').classList.remove('show');
+  editingSeatKey = null;
+}
+// Fase 8.0: o valor guardado em cada lugar é agora diretamente o guestId
+// do convidado (antes era "lado|categoria|índice::Nome", por isso a
+// comparação tinha de ser um startsWith) — agora é uma comparação exata.
+function findGuestSeatKey(guestId, excludeSeatKey){
+  for(const [seatKey, val] of Object.entries(state.seating.assignments)){
+    if(seatKey===excludeSeatKey) continue;
+    if(val && val===guestId) return seatKey;
+  }
+  return null;
+}
+function seatLabel(seatKey){
+  const m = seatKey.match(/^t(\d+)-s(\d+)$/);
+  return m ? ta('seatLabelFormat')(m[1], m[2]) : seatKey;
+}
+function renderSeatPickerList(){
+  const list = document.getElementById('seat-picker-list');
+  const current = state.seating.assignments[editingSeatKey] || '';
+  const q = seatQuery.toLowerCase();
+  let rows = `<div class="picker-row ${current===''?'is-selected':''}" data-pick=""><span class="side-tag" style="background:var(--ink-soft);">—</span><span class="pname">${ta('seatFreeLabel')}</span></div>`;
+  allAdultGuests().forEach(g=>{
+    if(!g.key) return; // sem guestId (não devia acontecer após a migração), ignora
+    if(q && !g.name.toLowerCase().includes(q)) return;
+    const val = g.key; // Fase 8.0: o valor gravado é o guestId, já não "lado|cat|idx::Nome"
+    const elsewhere = findGuestSeatKey(g.key, editingSeatKey);
+    const childInfo = g.cat==='criancas' ? getGuestNames(g.side,'criancas')[g.idx] : null;
+    const childTag = childInfo ? `<span class="pname-hint">${ta('childLabel')}${childInfo.age?' · '+ta('childAgeYears')(escapeHTML(String(childInfo.age))):''}</span>` : '';
+    rows += `<div class="picker-row ${current===val?'is-selected':''}" data-pick="${escapeHTML(val)}">
+      <span class="side-tag" style="background:${g.side==='noiva'?'var(--blush-dark)':'var(--dusty-dark)'};">${g.side==='noiva'?ta('sideBride'):ta('sideGroom')}</span>
+      <span class="pname">${escapeHTML(g.name)}${elsewhere?`<span class="pname-hint">${ta('alreadyAtLabel')(seatLabel(elsewhere))}</span>`:childTag}</span>
+    </div>`;
+  });
+  list.innerHTML = rows;
+  list.querySelectorAll('[data-pick]').forEach(row=>{
+    row.addEventListener('click', e=>{
+      const val = e.currentTarget.dataset.pick;
+      if(val){
+        const elsewhere = findGuestSeatKey(val, editingSeatKey);
+        if(elsewhere) delete state.seating.assignments[elsewhere];
+      }
+      state.seating.assignments[editingSeatKey] = val;
+      closeSeatSheet();
+      render();
+    });
+  });
+}
+document.getElementById('seat-picker-search').addEventListener('input', e=>{
+  seatQuery = e.target.value;
+  renderSeatPickerList();
+});
+
+/* ============================================================
+   MESA 3D — pré-visualização em 3D dos lugares
+   Reaproveita openSeatSheet() da tab Mesas para atribuir convidados.
+============================================================ */
+let mesa3dReady = false;
+let mesa3dSelectedTable = 1;
+let mesa3dViewMode = 'mesa';
+const mesa3d = { scene:null, camera:null, renderer:null, tableGroup:null, chairs:[], dragging:false, startX:0, startRotY:0, moved:0, raf:null };
+
+// Fase 8.0: antes, o valor gravado em cada lugar já trazia o nome embutido
+// ("lado|cat|idx::Nome"), por isso bastava separar a string. Agora o valor
+// é só o guestId — para mostrar side/name é preciso resolver o convidado.
+function resolveSeatGuest(guestId){
+  if(!guestId) return null;
+  const found = findGuestByGuestId(guestId);
+  if(!found) return null;
+  return { side: found.side, name: found.entry.name || '' };
+}
+
+function ensureMesa3DHeader(){
+  const el = document.getElementById('mesa3d-header');
+  const filled = mesa3d.chairs.length ? mesa3d.chairs.filter(c=>c.name).length : 0;
+  const selTable = getTable(mesa3dSelectedTable);
+  const seatsPerTable = selTable ? selTable.seats : 0;
+  const badge = mesa3dViewMode==='mesa'
+    ? `<div class="mini-ring">${donutSVG(seatsPerTable? filled/seatsPerTable : 0, 'var(--blush-dark)', 34, 4)}<span class="mini-ring-txt">${filled}/${seatsPerTable}</span></div>`
+    : `<span class="mesa3d-fillcount">${ta('mesa3dTablesCount')(state.seating.tables.length)}</span>`;
+  el.innerHTML = `
+    <div class="navbar navbar-row">
+      <div><h1>${ta('tabSeating')}</h1></div>
+      ${badge}
+    </div>
+    <div class="segmented">
+      <button data-mesa3dview="mesa" class="${mesa3dViewMode==='mesa'?'active':''}">${ta('mesa3dModeTableByTable')}</button>
+      <button data-mesa3dview="sala" class="${mesa3dViewMode==='sala'?'active':''}">${ta('mesa3dModeRoomView')}</button>
+    </div>
+    <button id="mesa3d-sync-btn" class="mesa3d-sync-btn">${ICONS.refresh} ${ta('mesa3dSyncBtn')}</button>
+  `;
+  el.querySelectorAll('[data-mesa3dview]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      mesa3dViewMode = e.currentTarget.dataset.mesa3dview;
+      syncMesa3DPanel();
+    });
+  });
+  const syncBtn = document.getElementById('mesa3d-sync-btn');
+  if(syncBtn){
+    syncBtn.addEventListener('click', ()=>{
+      syncSeatingToGuestDocs(syncBtn);
+    });
+  }
+}
+
+// Lê state.seating.assignments (que só existe no lado dos noivos) e escreve
+// em cada guests/{token} os campos assignedTable/assignedSeat/tablemates,
+// para que o rsvp.html (que nunca lê o documento do casamento) consiga
+// mostrar "a tua mesa" ao convidado sem expor a lista toda. Só nomes vão
+// para "tablemates" — nunca ids, tokens nem outros dados do convidado.
+// Fix 6 da auditoria RGPD/Segurança (Set 2026): isto enviava o link de
+// RSVP (que inclui o token de acesso do convidado) como parâmetro de URL
+// para a api.qrserver.com, um serviço de terceiros não documentado como
+// subprocessador. Passa a gerar o QR code inteiramente no browser, com a
+// biblioteca "qrcode-generator" (carregada uma vez, sob pedido, de um CDN
+// — mas o LINK em si nunca sai do dispositivo, só o código da biblioteca é
+// pedido à rede).
+let _qrCodeLibPromise = null;
+function loadQrCodeLib(){
+  if(window.qrcode) return Promise.resolve();
+  if(_qrCodeLibPromise) return _qrCodeLibPromise;
+  _qrCodeLibPromise = new Promise((resolve, reject)=>{
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js';
+    s.onload = ()=>resolve();
+    s.onerror = ()=>reject(new Error('Falha a carregar a biblioteca de QR code.'));
+    document.head.appendChild(s);
+  });
+  return _qrCodeLibPromise;
+}
+function buildRSVPQrDataUrl(link){
+  const qr = window.qrcode(0, 'M'); // 0 = deteta automaticamente o tamanho necessário
+  qr.addData(link);
+  qr.make();
+  return qr.createDataURL(6, 8); // 6px por módulo, margem de 8 módulos
+}
+// Modal simples e autónomo (não depende do sistema de "sheets") para
+// mostrar o QR code do link de RSVP de um convidado, pronto a imprimir.
+async function openRSVPQRModal(link, name){
+  closeRSVPQRModal();
+  let qrImg = '';
+  try{
+    await loadQrCodeLib();
+    qrImg = buildRSVPQrDataUrl(link);
+  }catch(err){
+    console.error('Weddy: falha a gerar o QR code do RSVP.', err && err.message);
+  }
+  const wrap = document.createElement('div');
+  wrap.id = 'rsvp-qr-modal';
+  wrap.className = 'rsvp-qr-modal';
+  wrap.innerHTML = `
+    <div class="rsvp-qr-card">
+      <button class="rsvp-qr-close" id="rsvp-qr-close">${ICONS.close||'&times;'}</button>
+      <div class="rsvp-qr-name">${escapeHTML(name||'')}</div>
+      ${qrImg ? `<img src="${qrImg}" alt="${ta('qrCodeAltText')}" width="220" height="220"/>` : `<div class="rsvp-qr-link" style="margin:12px 0;">${ta('qrCodeGenErrorText')}</div>`}
+      <div class="rsvp-qr-link">${escapeHTML(link)}</div>
+      <button class="rsvp-copy-btn" id="rsvp-qr-print">${ICONS.download||''} ${ta('btnPrint')}</button>
+    </div>
+  `;
+  document.body.appendChild(wrap);
+  document.getElementById('rsvp-qr-close').addEventListener('click', closeRSVPQRModal);
+  wrap.addEventListener('click', e=>{ if(e.target===wrap) closeRSVPQRModal(); });
+  document.getElementById('rsvp-qr-print').addEventListener('click', ()=>{
+    const w = window.open('', '_blank');
+    if(!w) return;
+    w.document.write(`<html><head><title>${escapeHTML(name||ta('inviteWordLabel'))}</title><style>
+      body{font-family:Georgia,serif; text-align:center; padding:40px;}
+      img{margin:24px 0;}
+      p{font-size:13px; color:#555; word-break:break-all;}
+    </style></head><body>
+      <h2>${escapeHTML(name||'')}</h2>
+      ${qrImg ? `<img src="${qrImg}" width="260" height="260"/>` : ''}
+      <p>${escapeHTML(link)}</p>
+    </body></html>`);
+    w.document.close();
+    w.focus();
+    setTimeout(()=>{ w.print(); }, 400);
+  });
+}
+function closeRSVPQRModal(){
+  const el = document.getElementById('rsvp-qr-modal');
+  if(el) el.remove();
+}
+// Fase 5 — RSVP Autopilot: passo de revisão antes de copiar o lembrete.
+// A Weddy já escolheu quem entra (atrasados + a precisar de lembrete),
+// mas nada é copiado nem marcado como enviado sem o casal carregar em
+// "Confirmar e copiar" aqui — nunca há envio automático nesta versão.
+function openRSVPAutopilotModal(entries){
+  closeRSVPAutopilotModal();
+  const wrap = document.createElement('div');
+  wrap.id = 'rsvp-autopilot-modal';
+  wrap.className = 'rsvp-qr-modal';
+  const rows = entries.map(({item, bucket})=>`
+    <div class="list-row" style="padding:8px 0;">
+      <span style="width:8px; height:8px; border-radius:50%; background:${bucket==='late'?'#C0523F':'#D8A657'}; flex-shrink:0;"></span>
+      <div style="flex:1;">${escapeHTML(item.name)}</div>
+    </div>`).join('');
+  const defaultMsg = ta('reminderDefaultGreeting');
+  wrap.innerHTML = `
+    <div class="rsvp-qr-card" style="max-width:380px; max-height:85vh; overflow-y:auto;">
+      <button class="rsvp-qr-close" id="rsvp-autopilot-close">${ICONS.close||'&times;'}</button>
+      <div class="reminder-modal-icon">${ICONS.bell}</div>
+      <div class="rsvp-row-name" style="margin-bottom:4px;">${ta('autopilotModalTitle')(entries.length)}</div>
+      <div class="empty-note" style="margin:0 0 4px; font-style:normal; text-align:left;">${ta('autopilotModalHint')}</div>
+      <div class="reminder-field-label">${ta('reminderChannelLabel')}</div>
+      <div class="lang-switch-pills" id="reminder-channel-switch" style="width:100%;">
+        <button type="button" data-reminderchannel="email" class="active" style="flex:1;">Email</button>
+        <button type="button" data-reminderchannel="sms" style="flex:1;">SMS</button>
+      </div>
+      <div class="reminder-field-label">${ta('reminderMsgLabel')}</div>
+      <textarea class="reminder-msg-textarea" id="rsvp-reminder-msg">${escapeHTML(defaultMsg)}</textarea>
+      <div class="reminder-char-count" id="rsvp-reminder-charcount">${ta('reminderCharCount')(defaultMsg.length)}</div>
+      <div class="reminder-recipients-note">${ta('reminderRecipientsLabel')(entries.length)}</div>
+      <div class="list-group" style="text-align:left; margin:8px 0 14px; max-height:120px; overflow-y:auto;">${rows}</div>
+      <button class="rsvp-deadline-save" id="rsvp-autopilot-confirm" style="width:100%;">${ICONS.mail} ${ta('autopilotConfirmBtn')}</button>
+    </div>
+  `;
+  document.body.appendChild(wrap);
+  document.getElementById('rsvp-autopilot-close').addEventListener('click', closeRSVPAutopilotModal);
+  wrap.addEventListener('click', e=>{ if(e.target===wrap) closeRSVPAutopilotModal(); });
+  // O canal (Email/SMS) é só uma preferência visual guardada com o lembrete
+  // — o envio em si continua a ser sempre "preparar e copiar", como a Rita
+  // confirmou; não há nenhuma integração real de email/SMS a acionar aqui.
+  wrap.querySelectorAll('[data-reminderchannel]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      wrap.querySelectorAll('[data-reminderchannel]').forEach(b=>b.classList.remove('active'));
+      e.currentTarget.classList.add('active');
+    });
+  });
+  const msgInput = document.getElementById('rsvp-reminder-msg');
+  const charCount = document.getElementById('rsvp-reminder-charcount');
+  if(msgInput) msgInput.addEventListener('input', ()=>{
+    if(charCount) charCount.textContent = ta('reminderCharCount')(msgInput.value.length);
+  });
+  document.getElementById('rsvp-autopilot-confirm').addEventListener('click', async (e)=>{
+    const btn = e.currentTarget;
+    btn.disabled = true;
+    const msg = (msgInput? msgInput.value.trim() : '') || defaultMsg;
+    const linhas = entries.map(({item, token})=>`${item.name}: ${RSVP_BASE_URL}?g=${token}`);
+    const texto = `${msg}\n\n${linhas.join('\n')}`;
+    try{
+      await navigator.clipboard.writeText(texto);
+    }catch(err){
+      prompt(ta('promptCopyReminderManually'), texto);
+    }
+    await markRemindersSent(entries);
+    closeRSVPAutopilotModal();
+    render();
+  });
+}
+function closeRSVPAutopilotModal(){
+  const el = document.getElementById('rsvp-autopilot-modal');
+  if(el) el.remove();
+}
+// Escreve em TODOS os guests/{token} o "programa do dia" — só os momentos
+// que os noivos marcaram como "Mostrar aos convidados" (nunca a agenda
+// interna toda, que pode ter coisas privadas como a hora do cabeleireiro).
+// Corre sozinho sempre que um momento é criado/editado/apagado, sem
+// precisar de um botão — silenciosamente, tal como a app já faz noutros
+// sítios (não há nada para o utilizador confirmar aqui).
+function syncGuestProgramToGuestDocs(){
+  if(!FIREBASE_READY || !auth || !auth.currentUser || !currentWeddingId) return;
+  const programa = buildGuestVisibleProgram();
+  const tokens = flattenAllGuestsForRSVP().map(g=>g.entry.rsvpToken).filter(Boolean);
+  // Fase 4E (LOG-02): continua sem UI síncrona (não há botão aqui, corre
+  // sozinho), mas já não fica 100% silenciosa — se algum token falhar,
+  // fica registado no _incident_log em vez de desaparecer sem rasto.
+  const failed = [];
+  Promise.all(tokens.map(t=>GUESTS().doc(t).update({ guestProgram: programa }).catch(()=>{ failed.push(t); }))).then(()=>{
+    logMassPropagationFailures('sync_guest_program_failed', failed);
+  });
+}
+function syncSeatingToGuestDocs(btn){
+  if(!FIREBASE_READY || !auth || !auth.currentUser || !currentWeddingId){
+    alert(ta('alertSyncNoConnection'));
+    return;
+  }
+  const original = btn ? btn.textContent : '';
+  if(btn){ btn.disabled = true; btn.textContent = ta('googleCalendarSyncing'); }
+  // Fase 8.0 (Set 2026): antes, esta função recalculava a "morada"
+  // lado|categoria|índice do convidado NO MOMENTO do sync e procurava-a
+  // num mapa cujas chaves tinham sido gravadas com o índice de QUANDO o
+  // lugar foi atribuído — se a lista tivesse sido reordenada ou outro
+  // convidado da mesma categoria tivesse sido removido/acrescentado entre
+  // as duas ações, o sync podia escrever a mesa errada no convidado
+  // errado, ou perder a atribuição sem avisar. Agora os lugares já estão
+  // gravados diretamente por guestId (estável, nunca muda com a posição),
+  // por isso já não há recálculo nenhum a fazer — só agrupar.
+  const byTable = {}; // tableId -> [{guestId, name, seat}]
+  Object.entries(state.seating.assignments).forEach(([seatKey, guestId])=>{
+    if(!guestId) return;
+    const found = findGuestByGuestId(guestId);
+    if(!found) return; // guestId órfão (convidado entretanto apagado) — ignora
+    const m = seatKey.match(/^t(\d+)-s(\d+)$/);
+    if(!m) return;
+    const tableId = Number(m[1]), seatNum = Number(m[2]);
+    if(!byTable[tableId]) byTable[tableId] = [];
+    byTable[tableId].push({ guestId, name: found.entry.name||'', seat:seatNum });
+  });
+  // guestId -> {tableId, seat, tablemates}
+  const assignmentByGuestId = {};
+  Object.entries(byTable).forEach(([tableId, list])=>{
+    list.forEach(item=>{
+      assignmentByGuestId[item.guestId] = {
+        tableId: Number(tableId),
+        seat: item.seat,
+        tablemates: list.filter(o=>o.guestId!==item.guestId).map(o=>o.name)
+      };
+    });
+  });
+  // Fase 8.2: um convite de família partilha UM SÓ documento
+  // guests/{token} entre vários guestIds — escrever "assignedTable" uma
+  // vez por membro (como isto fazia antes) significa que cada update()
+  // apaga a mesa do membro anterior, e só a mesa do ÚLTIMO membro
+  // escrito sobrevive (mesmo bug de fundo do Flow 5 da 8.0, aqui na
+  // sincronização de mesas — nunca tinha sido notado porque "a minha
+  // mesa" estava bloqueada para famílias no rsvp.html). Por isso
+  // agrupamos por token e fazemos UMA escrita por token: para um convite
+  // individual (1 guestId por token) continua a ir para
+  // assignedTable/assignedSeat/tablemates como sempre; para um convite
+  // de família (2+ guestIds a partilhar o token) vai para
+  // "memberTables", um mapa guestId → {table,seat,tablemates}, para que
+  // o rsvp.html possa mostrar a mesa de CADA membro no seu próprio
+  // cartão (ver renderFamilyMembers).
+  const guests = flattenAllGuestsForRSVP().filter(g=>g.entry.rsvpToken);
+  const byToken = new Map();
+  guests.forEach(g=>{
+    if(!byToken.has(g.entry.rsvpToken)) byToken.set(g.entry.rsvpToken, []);
+    byToken.get(g.entry.rsvpToken).push(g);
+  });
+  // Fix (Set 2026): a forma do payload (memberTables vs. assignedTable
+  // "achatado") NUNCA deve depender de "quantos guestIds partilham este
+  // token NESTE MOMENTO" (members.length>1) — um convite de família que
+  // encolhe para 1 único membro por sobrevivência (os outros foram
+  // removidos, ver deleteGuest) continua a ser um documento com
+  // isFamily:true e memberTables no Firestore, mesmo só com 1 pessoa lá
+  // dentro. Decidir pelo tamanho fazia com que, nesse caso, esta função
+  // escrevesse assignedTable/assignedSeat na RAIZ do documento (formato
+  // individual) em vez de atualizar memberTables — o rsvp.html só lê
+  // memberTables quando isFamily===true (ver renderFamilyMembers), por
+  // isso o membro sobrevivente ficava a ver a mesa ANTIGA (ou nenhuma),
+  // com o memberTables congelado desde a última vez que o link teve 2+
+  // pessoas, apesar da mesa nova ter sido escrita (no sítio errado). O
+  // sinal correto é se este convite foi alguma vez criado como família —
+  // rsvpMemberId só existe nas entries de quem passou por
+  // ensureFamilyRSVPLink, e sobrevive à remoção dos outros membros.
+  const writes = Array.from(byToken.entries()).map(([token, members])=>{
+    let payload;
+    const isFamilyToken = members.some(g=>g.entry.rsvpMemberId);
+    if(isFamilyToken){
+      const memberTables = {};
+      members.forEach(g=>{
+        const info = assignmentByGuestId[g.guestId];
+        memberTables[g.guestId] = info
+          ? { table: info.tableId, seat: info.seat, tablemates: info.tablemates }
+          : null;
+      });
+      payload = { memberTables };
+    } else {
+      const info = assignmentByGuestId[members[0].guestId];
+      payload = info
+        ? { assignedTable: info.tableId, assignedSeat: info.seat, tablemates: info.tablemates }
+        : { assignedTable: null, assignedSeat: null, tablemates: [] };
+    }
+    // Fase 4E (LOG-02): devolve o próprio token em vez de engolir o erro,
+    // para o botão poder distinguir "sincronizado" de "sincronizado com falhas".
+    return GUESTS().doc(token).update(payload).then(()=>null).catch(()=>token);
+  });
+  return Promise.all(writes).then(results=>{
+    const failedTokens = results.filter(Boolean);
+    logMassPropagationFailures('sync_seating_to_guests_failed', failedTokens);
+    if(btn){
+      if(failedTokens.length){
+        btn.textContent = original;
+        btn.disabled = false;
+        alert(ta('alertSeatingSyncPartialFailure')(failedTokens.length, writes.length));
+      } else {
+        btn.textContent = ta('btnSyncedCheck');
+        setTimeout(()=>{ btn.textContent = original; btn.disabled = false; }, 1400);
+      }
+    }
+  });
+}
+
+function renderMesa3DChips(){
+  const el = document.getElementById('mesa3d-chips');
+  let chips = '';
+  [...state.seating.tables].sort((a,b)=>a.id-b.id).forEach(table=>{
+    const t = table.id;
+    chips += `<button class="table-chip ${t===mesa3dSelectedTable?'active':''}" data-mesa3dsel="${t}">${t}</button>`;
+  });
+  el.innerHTML = chips;
+  el.querySelectorAll('[data-mesa3dsel]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      mesa3dSelectedTable = Number(e.currentTarget.dataset.mesa3dsel);
+      renderMesa3DChips();
+      loadMesa3DTable();
+    });
+  });
+}
+
+function buildMesa3DChairs(seatCount){
+  if(mesa3d.chairsGroup){
+    while(mesa3d.chairsGroup.children.length) mesa3d.chairsGroup.remove(mesa3d.chairsGroup.children[0]);
+  }
+  mesa3d.chairs = [];
+  for(let i=0; i<seatCount; i++){
+    const angle = (i/seatCount) * Math.PI * 2;
+    const radius = 2.75;
+    const group = new THREE.Group();
+    const mat = new THREE.MeshStandardMaterial({ color:0xFFFCF4, roughness:0.85 });
+    const seatMesh = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.14, 0.46), mat);
+    seatMesh.position.y = -0.02;
+    const backMat = new THREE.MeshStandardMaterial({ color:0xFFFCF4, roughness:0.85 });
+    const backMesh = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.5, 0.09), backMat);
+    backMesh.position.set(0, 0.25, -0.2);
+    const sash = new THREE.Mesh(
+      new THREE.BoxGeometry(0.48, 0.07, 0.11),
+      new THREE.MeshStandardMaterial({ color:0xC9A02E, roughness:0.35, metalness:0.4 })
+    );
+    sash.position.set(0, 0.1, -0.2);
+    group.add(seatMesh, backMesh, sash);
+    group.position.set(Math.sin(angle)*radius, 0, Math.cos(angle)*radius);
+    group.lookAt(0, 0.2, 0);
+    mesa3d.chairsGroup.add(group);
+    mesa3d.chairs.push({ group, seatMesh, backMesh, index:i+1, name:'', side:'', seatKey:'', worldPos:new THREE.Vector3() });
+  }
+  mesa3d.builtSeatCount = seatCount;
+}
+function initMesa3D(){
+  const canvas = document.getElementById('mesa3d-canvas');
+  const wrap = canvas.parentElement;
+  const w = Math.max(wrap.clientWidth, 10), h = Math.max(wrap.clientHeight, 10);
+
+  mesa3d.renderer = new THREE.WebGLRenderer({ canvas, antialias:true, alpha:true });
+  mesa3d.renderer.setPixelRatio(Math.min(window.devicePixelRatio||1, 2));
+  mesa3d.renderer.setSize(w, h, false);
+  if('outputColorSpace' in mesa3d.renderer) mesa3d.renderer.outputColorSpace = THREE.SRGBColorSpace;
+  else if('outputEncoding' in mesa3d.renderer) mesa3d.renderer.outputEncoding = THREE.sRGBEncoding;
+
+  mesa3d.scene = new THREE.Scene();
+  mesa3d.camera = new THREE.PerspectiveCamera(42, w/h, 0.1, 100);
+  mesa3d.camera.position.set(0, 5.7, 7.3);
+  mesa3d.camera.lookAt(0, 0, 0);
+
+  mesa3d.scene.add(new THREE.HemisphereLight(0xfff8ef, 0x7a6656, 1.5));
+  const dir = new THREE.DirectionalLight(0xfff5e0, 1.0);
+  dir.position.set(3, 6, 4);
+  mesa3d.scene.add(dir);
+  const fill = new THREE.DirectionalLight(0xffffff, 0.45);
+  fill.position.set(-4, 3, -3);
+  mesa3d.scene.add(fill);
+
+  mesa3d.tableGroup = new THREE.Group();
+  mesa3d.scene.add(mesa3d.tableGroup);
+
+  const tableTop = new THREE.Mesh(
+    new THREE.CylinderGeometry(2.15, 2.15, 0.16, 48),
+    new THREE.MeshStandardMaterial({ color:0xFFF9EE, roughness:0.92 })
+  );
+  mesa3d.tableGroup.add(tableTop);
+
+  // toalha a cair (sugere o pano de linho até ao chão)
+  const cloth = new THREE.Mesh(
+    new THREE.CylinderGeometry(2.05, 2.28, 0.9, 48, 1, true),
+    new THREE.MeshStandardMaterial({ color:0xFFFCF4, roughness:0.95, side:THREE.DoubleSide })
+  );
+  cloth.position.y = -0.48;
+  mesa3d.tableGroup.add(cloth);
+
+  const rim = new THREE.Mesh(
+    new THREE.TorusGeometry(2.15, 0.04, 12, 48),
+    new THREE.MeshStandardMaterial({ color:0xC9A02E, roughness:0.35, metalness:0.45 })
+  );
+  rim.rotation.x = Math.PI/2; rim.position.y = 0.085;
+  mesa3d.tableGroup.add(rim);
+
+  // corredor de mesa (runner) em tom blush
+  const runner = new THREE.Mesh(
+    new THREE.BoxGeometry(0.62, 0.012, 4.3),
+    new THREE.MeshStandardMaterial({ color:0xE3A79B, roughness:0.8 })
+  );
+  runner.position.y = 0.089;
+  mesa3d.tableGroup.add(runner);
+
+  // arranjo central: castiçal dourado + flores em tons pastel
+  const centerpiece = new THREE.Group();
+  const candlestick = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.03, 0.05, 0.42, 12),
+    new THREE.MeshStandardMaterial({ color:0xC9A02E, roughness:0.3, metalness:0.5 })
+  );
+  candlestick.position.y = 0.3;
+  centerpiece.add(candlestick);
+  const candle = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.028, 0.028, 0.14, 10),
+    new THREE.MeshStandardMaterial({ color:0xFFFCF4, roughness:0.7 })
+  );
+  candle.position.y = 0.58;
+  centerpiece.add(candle);
+  const flowerColors = [0xE3A79B, 0x93A87C, 0xCB8577, 0xC9A02E];
+  for(let f=0; f<6; f++){
+    const fAngle = (f/6)*Math.PI*2;
+    const bloom = new THREE.Mesh(
+      new THREE.SphereGeometry(0.075, 10, 10),
+      new THREE.MeshStandardMaterial({ color:flowerColors[f%flowerColors.length], roughness:0.75 })
+    );
+    bloom.position.set(Math.cos(fAngle)*0.14, 0.16+Math.random()*0.05, Math.sin(fAngle)*0.14);
+    centerpiece.add(bloom);
+  }
+  const foliage = new THREE.Mesh(
+    new THREE.SphereGeometry(0.13, 10, 10),
+    new THREE.MeshStandardMaterial({ color:0x93A87C, roughness:0.85 })
+  );
+  foliage.position.y = 0.12;
+  foliage.scale.set(1, 0.55, 1);
+  centerpiece.add(foliage);
+  centerpiece.position.y = 0.08;
+  mesa3d.tableGroup.add(centerpiece);
+
+  const leg = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.16, 0.26, 1.0, 20),
+    new THREE.MeshStandardMaterial({ color:0xD8CBAE, roughness:0.9 })
+  );
+  leg.position.y = -0.58;
+  mesa3d.tableGroup.add(leg);
+  const base = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.55, 0.55, 0.06, 32),
+    new THREE.MeshStandardMaterial({ color:0xD8CBAE, roughness:0.9 })
+  );
+  base.position.y = -1.05;
+  mesa3d.tableGroup.add(base);
+
+  mesa3d.chairsGroup = new THREE.Group();
+  mesa3d.tableGroup.add(mesa3d.chairsGroup);
+  mesa3d.builtSeatCount = 0;
+  buildMesa3DChairs((getTable(mesa3dSelectedTable)||{seats:8}).seats);
+
+  canvas.addEventListener('pointerdown', e=>{
+    mesa3d.dragging = true; mesa3d.moved = 0;
+    mesa3d.startX = e.clientX; mesa3d.startRotY = mesa3d.tableGroup.rotation.y;
+    canvas.setPointerCapture(e.pointerId);
+    startDragLoop();
+  });
+  canvas.addEventListener('pointermove', e=>{
+    if(!mesa3d.dragging) return;
+    const dx = e.clientX - mesa3d.startX;
+    mesa3d.moved = Math.max(mesa3d.moved, Math.abs(dx));
+    mesa3d.tableGroup.rotation.y = mesa3d.startRotY + dx*0.012;
+  });
+  canvas.addEventListener('pointerup', e=>{
+    mesa3d.dragging = false;
+    stopDragLoop();
+    // Achado ao vivo da Fase 4 (Rita): "ao fazer tap to assign nos lugares,
+    // não fica assigned à primeira vez, tenho de fazer sempre 2x". Causa
+    // mais provável: este limiar de 6px (para distinguir um toque de um
+    // arrastar a rodar a mesa) é apertado a mais para um dedo real num ecrã
+    // tátil — jitter normal do toque facilmente passa de 6px, fazendo o
+    // PRIMEIRO toque ser interpretado como um arrastar minúsculo (roda a
+    // mesa por uma fração impercetível) em vez de um toque — silenciosamente
+    // ignorado — e só o SEGUNDO toque, mais parado, fica abaixo do limiar e
+    // funciona. Subido para 12px, mais alinhado com os limiares habituais
+    // de "toque vs. arrastar" em interfaces táteis (tipicamente 8-16px,
+    // nunca tão apertado como 6).
+    if(mesa3d.moved < 12){ handleMesa3DTap(e); }
+  });
+
+  window.addEventListener('resize', resizeMesa3D);
+
+  loadMesa3DTable();
+}
+
+function resizeMesa3D(){
+  if(!mesa3d.renderer) return;
+  const canvas = document.getElementById('mesa3d-canvas');
+  const wrap = canvas.parentElement;
+  const w = wrap.clientWidth, h = wrap.clientHeight;
+  if(w < 10 || h < 10) return;
+  mesa3d.camera.aspect = w/h;
+  mesa3d.camera.updateProjectionMatrix();
+  mesa3d.renderer.setSize(w, h, false);
+  renderMesa3DFrame();
+}
+
+function loadMesa3DTable(){
+  if(!getTable(mesa3dSelectedTable) && state.seating.tables.length){
+    mesa3dSelectedTable = state.seating.tables[0].id;
+  }
+  const table = getTable(mesa3dSelectedTable);
+  if(!table) return;
+  const t = table.id;
+  if(mesa3d.builtSeatCount !== table.seats) buildMesa3DChairs(table.seats);
+  mesa3d.chairs.forEach(ch=>{
+    const key = 't'+t+'-s'+ch.index;
+    const info = resolveSeatGuest(state.seating.assignments[key] || '');
+    const color = info ? (info.side==='noiva' ? 0xCB8577 : 0x6C8296) : 0xFFFCF4;
+    ch.seatMesh.material.color.setHex(color);
+    ch.backMesh.material.color.setHex(color);
+    ch.name = info ? info.name : '';
+    ch.side = info ? info.side : '';
+    ch.seatKey = key;
+  });
+  ensureMesa3DHeader();
+  renderMesa3DFrame();
+}
+
+function renderMesa3DFrame(){
+  if(!mesa3d.renderer) return;
+  mesa3d.renderer.render(mesa3d.scene, mesa3d.camera);
+  updateMesa3DLabels();
+}
+function updateMesa3DLabels(){
+  const canvas = document.getElementById('mesa3d-canvas');
+  const labelsEl = document.getElementById('mesa3d-labels');
+  const rect = canvas.getBoundingClientRect();
+  if(rect.width < 10){ return; }
+  let html = '';
+  mesa3d.chairs.forEach(ch=>{
+    ch.group.getWorldPosition(ch.worldPos);
+    const above = ch.worldPos.clone(); above.y += 0.74;
+    const p = above.project(mesa3d.camera);
+    if(p.z > 1) return;
+    const x = (p.x*0.5+0.5) * rect.width;
+    const y = (1-(p.y*0.5+0.5)) * rect.height;
+    const cls = ch.name ? ('assigned '+ch.side) : '';
+    html += `<div class="mesa3d-label ${cls}" style="left:${x}px; top:${y}px;">${ch.name ? escapeHTML(ch.name) : ch.index}</div>`;
+  });
+  labelsEl.innerHTML = html;
+}
+
+function handleMesa3DTap(e){
+  const canvas = document.getElementById('mesa3d-canvas');
+  const rect = canvas.getBoundingClientRect();
+  const mouse = new THREE.Vector2(
+    ((e.clientX-rect.left)/rect.width)*2-1,
+    -((e.clientY-rect.top)/rect.height)*2+1
+  );
+  const raycaster = new THREE.Raycaster();
+  raycaster.setFromCamera(mouse, mesa3d.camera);
+  const hits = raycaster.intersectObjects(mesa3d.chairs.map(c=>c.seatMesh));
+  if(hits.length){
+    const chair = mesa3d.chairs.find(c=>c.seatMesh===hits[0].object);
+    if(chair) openSeatSheet(chair.seatKey);
+  }
+}
+
+function startDragLoop(){
+  if(mesa3d.raf) return;
+  const loop = ()=>{
+    mesa3d.raf = requestAnimationFrame(loop);
+    renderMesa3DFrame();
+  };
+  loop();
+}
+function stopDragLoop(){
+  if(mesa3d.raf){ cancelAnimationFrame(mesa3d.raf); mesa3d.raf = null; }
+  renderMesa3DFrame();
+}
+
+function syncMesa3DPanel(){
+  const isMesa3D = activeTab === 'mesa3d';
+  document.getElementById('app-body').style.display = isMesa3D ? 'none' : 'flex';
+  document.getElementById('mesa3d-panel').classList.toggle('active', isMesa3D);
+  if(!isMesa3D){ stopDragLoop(); return; }
+
+  ensureMesa3DHeader();
+  document.getElementById('mesa3d-view-mesa').classList.toggle('active', mesa3dViewMode==='mesa');
+  document.getElementById('mesa3d-view-sala').classList.toggle('active', mesa3dViewMode==='sala');
+
+  if(mesa3dViewMode==='mesa'){
+    if(!mesa3dReady){ renderMesa3DChips(); initMesa3D(); mesa3dReady = true; }
+    else { renderMesa3DChips(); loadMesa3DTable(); resizeMesa3D(); }
+  } else {
+    renderSalaView();
+  }
+}
+
+/* ---- Visão da sala: mapa 2D de todas as mesas, vista de cima ---- */
+function tableSVG(table){
+  const t = table.id;
+  const seatCount = table.seats;
+  const seatR = 5;
+
+  function seatDot(sx, sy, angle, s){
+    const info = resolveSeatGuest(state.seating.assignments['t'+t+'-s'+s] || '');
+    const dotColor = info ? (info.side==='noiva' ? '#CB8577' : '#6C8296') : '#E7DEC8';
+    return `<circle cx="${sx}" cy="${sy}" r="${seatR}" fill="${dotColor}" stroke="#FFFDF8" stroke-width="1"/>`;
   }
 
-  // O papel nunca vem só do que o cliente diz: só é tratado como "couple"
-  // quem tiver mesmo uma sessão Firebase Auth válida neste pedido — o
-  // rsvp.html (lado do convidado) nunca inicia sessão, por isso não há
-  // forma de um convidado se fazer passar pelo casal só mudando "role".
-  const isCouple = !!request.auth && requestedRole === 'couple';
-  const allowedIntents = isCouple ? COUPLE_INTENTS : GUEST_INTENTS;
-
-  try {
-    const weddingId = await resolveWeddingId(request, isCouple);
-    const usage = await checkAndIncrementAiUsage(weddingId);
-    if (!usage.allowed) {
-      logger.info(`classifyWeddyIntent: limite diário atingido para o casamento ${weddingId}.`);
-      return { intent: 'UNKNOWN' };
+  let inner = '';
+  if(table.shape==='long'){
+    const cx=80, cy=78, halfW=42, halfH=15;
+    const perSide = Math.ceil(seatCount/2);
+    inner += `<rect x="${cx-halfW}" y="${cy-halfH}" width="${halfW*2}" height="${halfH*2}" rx="7" fill="#FFF9EE" stroke="#C9A02E" stroke-width="1.4"/>`;
+    inner += `<text x="${cx}" y="${cy+4}" font-size="13" font-family="Cormorant Garamond, serif" font-weight="600" fill="#96453A" text-anchor="middle">${t}</text>`;
+    for(let s=1; s<=seatCount; s++){
+      const onTop = s<=perSide;
+      const idxOnSide = onTop? s-1 : s-perSide-1;
+      const sideCount = onTop? perSide : seatCount-perSide;
+      const spacing = sideCount>1 ? (halfW*2-14)/(sideCount-1) : 0;
+      const sx = sideCount>1 ? (cx-halfW+7) + spacing*idxOnSide : cx;
+      const sy = onTop ? cy-halfH-16 : cy+halfH+16;
+      inner += seatDot(sx, sy, onTop?-Math.PI/2:Math.PI/2, s);
     }
-    return await callOpenAI(question.trim(), allowedIntents);
-  } catch (err) {
-    logger.error('Erro a chamar a OpenAI em classifyWeddyIntent:', err);
-    // Nunca propaga o erro ao frontend como falha — do ponto de vista de
-    // quem está a conversar, "não percebi" é sempre uma resposta válida,
-    // e o Concierge/Assistente já sabem cair na resposta genérica quando
-    // recebem UNKNOWN.
-    return { intent: 'UNKNOWN' };
+  } else if(table.shape==='serpentine'){
+    const P0={x:32,y:28}, P1={x:150,y:28}, P2={x:10,y:148}, P3={x:128,y:148};
+    function bez(tt){
+      const mt=1-tt;
+      return {
+        x: mt*mt*mt*P0.x + 3*mt*mt*tt*P1.x + 3*mt*tt*tt*P2.x + tt*tt*tt*P3.x,
+        y: mt*mt*mt*P0.y + 3*mt*mt*tt*P1.y + 3*mt*tt*tt*P2.y + tt*tt*tt*P3.y
+      };
+    }
+    function tangent(tt){
+      const mt=1-tt;
+      const dx = 3*mt*mt*(P1.x-P0.x) + 6*mt*tt*(P2.x-P1.x) + 3*tt*tt*(P3.x-P2.x);
+      const dy = 3*mt*mt*(P1.y-P0.y) + 6*mt*tt*(P2.y-P1.y) + 3*tt*tt*(P3.y-P2.y);
+      const len = Math.sqrt(dx*dx+dy*dy)||1;
+      return {x:dx/len, y:dy/len};
+    }
+    const pathD = `M ${P0.x} ${P0.y} C ${P1.x} ${P1.y} ${P2.x} ${P2.y} ${P3.x} ${P3.y}`;
+    inner += `<path d="${pathD}" fill="none" stroke="#FFF9EE" stroke-width="20" stroke-linecap="round"/>`;
+    inner += `<path d="${pathD}" fill="none" stroke="#C9A02E" stroke-width="1.3" stroke-linecap="round"/>`;
+    const mid = bez(0.5);
+    inner += `<circle cx="${mid.x}" cy="${mid.y}" r="10" fill="#FFF9EE" stroke="#C9A02E" stroke-width="1.2"/>`;
+    inner += `<text x="${mid.x}" y="${mid.y+4}" font-size="11" font-family="Cormorant Garamond, serif" font-weight="600" fill="#96453A" text-anchor="middle">${t}</text>`;
+    for(let s=1; s<=seatCount; s++){
+      const tt = (s-0.5)/seatCount;
+      const p = bez(tt);
+      const tan = tangent(tt);
+      const perp = {x:-tan.y, y:tan.x};
+      const side = (s%2===0) ? 1 : -1;
+      const sx = p.x + perp.x*13*side;
+      const sy = p.y + perp.y*13*side;
+      const angle = Math.atan2(perp.y*side, perp.x*side);
+      inner += seatDot(sx, sy, angle, s);
+    }
+  } else {
+    const cx=80, cy=78, tableR=34, orbit=55;
+    inner += `<circle cx="${cx}" cy="${cy}" r="${tableR}" fill="#FFF9EE" stroke="#C9A02E" stroke-width="1.4"/>`;
+    inner += `<circle cx="${cx}" cy="${cy}" r="${tableR-9}" fill="none" stroke="#E3A79B" stroke-width="1" opacity="0.55"/>`;
+    inner += `<text x="${cx}" y="${cy+4}" font-size="13" font-family="Cormorant Garamond, serif" font-weight="600" fill="#96453A" text-anchor="middle">${t}</text>`;
+    for(let s=1; s<=seatCount; s++){
+      const angle = (s/seatCount)*Math.PI*2 - Math.PI/2;
+      const sx = cx + Math.cos(angle)*orbit;
+      const sy = cy + Math.sin(angle)*orbit;
+      inner += seatDot(sx, sy, angle, s);
+    }
+  }
+  return `<svg viewBox="0 0 160 176" xmlns="http://www.w3.org/2000/svg">${inner}</svg>`;
+}
+function ensureTablePositions(){
+  const spacing = 132, perRow = 3, startX = 16, startY = 16, tol = 20;
+  let changed = false;
+  function isOccupied(x, y, skipTable){
+    return state.seating.tables.some(other =>
+      other!==skipTable && typeof other.x==='number' && typeof other.y==='number' &&
+      Math.abs(other.x-x)<tol && Math.abs(other.y-y)<tol
+    );
+  }
+  state.seating.tables.forEach(t=>{
+    if(typeof t.x !== 'number' || typeof t.y !== 'number'){
+      // Procura a primeira posição da grelha que ainda não esteja ocupada
+      // por outra mesa — nunca duas mesas ficam exatamente sobrepostas,
+      // escondendo uma a outra.
+      let gi = 0, x, y;
+      do {
+        x = startX + (gi % perRow) * spacing;
+        y = startY + Math.floor(gi / perRow) * spacing;
+        gi++;
+      } while(isOccupied(x, y, t) && gi < 500);
+      t.x = x; t.y = y;
+      changed = true;
+    }
+  });
+  return changed;
+}
+function bindSalaTableDrag(el){
+  const tableId = Number(el.dataset.tableid);
+  let dragging = false, startX=0, startY=0, origLeft=0, origTop=0, moved=0;
+  el.addEventListener('pointerdown', e=>{
+    dragging = true;
+    moved = 0;
+    el.classList.add('dragging');
+    el.setPointerCapture(e.pointerId);
+    startX = e.clientX; startY = e.clientY;
+    origLeft = parseFloat(el.style.left)||0;
+    origTop = parseFloat(el.style.top)||0;
+  });
+  el.addEventListener('pointermove', e=>{
+    if(!dragging) return;
+    const dx = e.clientX-startX, dy = e.clientY-startY;
+    moved = Math.max(moved, Math.hypot(dx,dy));
+    el.style.left = Math.max(0, origLeft+dx)+'px';
+    el.style.top = Math.max(0, origTop+dy)+'px';
+  });
+  function finishDrag(){
+    if(!dragging) return;
+    dragging = false;
+    el.classList.remove('dragging');
+    if(moved < 6){
+      el.style.left = origLeft+'px';
+      el.style.top = origTop+'px';
+      mesa3dSelectedTable = tableId;
+      mesa3dViewMode = 'mesa';
+      render();
+      return;
+    }
+    const table = getTable(tableId);
+    if(table){
+      table.x = Math.max(0, parseFloat(el.style.left)||0);
+      table.y = Math.max(0, parseFloat(el.style.top)||0);
+    }
+    render();
+  }
+  el.addEventListener('pointerup', finishDrag);
+  el.addEventListener('pointercancel', finishDrag);
+}
+function renderSalaView(){
+  const changed = ensureTablePositions();
+  const wrap = document.getElementById('sala-scroll');
+  const itemSize = 108, pad = 40;
+  const maxX = Math.max(340, ...state.seating.tables.map(t=>t.x+itemSize)) + pad;
+  const maxY = Math.max(420, ...state.seating.tables.map(t=>t.y+itemSize+16)) + pad;
+  let items = '';
+  state.seating.tables.forEach(table=>{
+    items += `<div class="sala-table-item" data-tableid="${table.id}" style="left:${table.x}px; top:${table.y}px;">${tableSVG(table)}</div>`;
+  });
+  wrap.innerHTML = `
+    <div class="sala-legend">
+      <span class="sala-legend-item"><span class="sala-legend-dot" style="background:#CB8577;"></span>${ta('sideBride')}</span>
+      <span class="sala-legend-item"><span class="sala-legend-dot" style="background:#6C8296;"></span>${ta('sideGroom')}</span>
+      <span class="sala-legend-item"><span class="sala-legend-dot" style="background:#E7DEC8;"></span>${ta('salaLegendFree')}</span>
+    </div>
+    <div class="sala-hint">${ta('salaViewHint')}</div>
+    <div class="sala-canvas" id="sala-canvas" style="width:${maxX}px; height:${maxY}px;">${items}</div>
+  `;
+  wrap.querySelectorAll('.sala-table-item').forEach(bindSalaTableDrag);
+  if(changed) pushRemote();
+}
+
+/* ============================================================
+   INSPIRAÇÃO — guarda as imagens no telemóvel (só este protótipo)
+============================================================ */
+function resizeImageFile(file, maxDim, quality){
+  return new Promise((resolve, reject)=>{
+    const reader = new FileReader();
+    reader.onload = ()=>{
+      const img = new Image();
+      img.onload = ()=>{
+        let w = img.width, h = img.height;
+        if(w >= h && w > maxDim){ h = Math.round(h*maxDim/w); w = maxDim; }
+        else if(h > maxDim){ w = Math.round(w*maxDim/h); h = maxDim; }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.onerror = reject;
+      img.src = reader.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+// Fix 6 da auditoria pós-fixes (Set 2026): "weddy-inspiracoes" era uma
+// chave global ao browser, não ao casamento — num dispositivo partilhado
+// entre duas contas, as fotos de inspiração de uma apareciam na outra.
+// Passa a existir uma chave por casamento; mantém-se a migração das
+// contas antigas (globais, de antes deste fix e de quando a app ainda se
+// chamava "Rita & Tiago") para a primeira conta que abrir no dispositivo.
+function inspirationsKey(){ return 'weddy-inspiracoes-'+(currentWeddingId||'none'); }
+function saveInspirations(){
+  try{ localStorage.setItem(inspirationsKey(), JSON.stringify(inspirations)); }
+  catch(e){ showSaveToast(true); alert(ta('alertPhotoSaveError')); }
+}
+function loadInspirations(){
+  try{
+    let raw = localStorage.getItem(inspirationsKey());
+    if(!raw){
+      // Migração de contas antigas (antes do namespacing por casamento, e
+      // de quando a app ainda se chamava "Rita & Tiago")
+      const legacyGlobal = localStorage.getItem('weddy-inspiracoes');
+      const legacy = legacyGlobal || localStorage.getItem('rita-tiago-inspiracoes');
+      if(legacy){ raw = legacy; localStorage.setItem(inspirationsKey(), legacy); }
+    }
+    // Fix 6 da auditoria pós-fixes (Set 2026): se não houver dados
+    // (locais nem legado) para este casamento, o array em memória tem de
+    // ser esvaziado — caso contrário, ao trocar de conta na mesma sessão
+    // do browser (sem recarregar a página), as inspirações da conta
+    // anterior continuavam visíveis em memória mesmo sem estarem no
+    // localStorage desta conta.
+    inspirations = raw ? JSON.parse(raw) : [];
+  }catch(e){ inspirations = []; }
+}
+document.getElementById('insp-file-input').addEventListener('change', async (e)=>{
+  const files = Array.from(e.target.files || []);
+  for(const file of files){
+    if(inspirations.length>=6) break;
+    try{
+      const dataUrl = await resizeImageFile(file, 1080, 0.82);
+      inspirations.push({ id:'insp'+Date.now()+Math.random().toString(36).slice(2,7), dataUrl });
+    }catch(err){}
+  }
+  saveInspirations();
+  render();
+  e.target.value = '';
+});
+// Fix 6 da auditoria pós-fixes (Set 2026): mesmo problema e correção de
+// "weddy-inspiracoes" acima, aplicado às fotos de inspiração de vestido.
+function dressInspirationsKey(){ return 'weddy-dress-inspiracoes-'+(currentWeddingId||'none'); }
+function saveDressInspirations(){
+  try{ localStorage.setItem(dressInspirationsKey(), JSON.stringify(dressInspirations)); }
+  catch(e){ showSaveToast(true); alert(ta('alertPhotoSaveError')); }
+}
+function loadDressInspirations(){
+  try{
+    let raw = localStorage.getItem(dressInspirationsKey());
+    if(!raw){
+      // Migração de contas antigas (antes do namespacing por casamento)
+      const legacy = localStorage.getItem('weddy-dress-inspiracoes');
+      if(legacy){ raw = legacy; localStorage.setItem(dressInspirationsKey(), legacy); }
+    }
+    // Fix 6 da auditoria pós-fixes (Set 2026): mesmo cuidado que em
+    // loadInspirations() — esvaziar o array em memória quando não há
+    // dados para este casamento, para não mostrar dados da conta anterior
+    // ao trocar de conta sem recarregar a página.
+    dressInspirations = raw ? JSON.parse(raw) : [];
+  }catch(e){ dressInspirations = []; }
+}
+document.getElementById('dress-insp-file-input').addEventListener('change', async (e)=>{
+  const files = Array.from(e.target.files || []);
+  for(const file of files){
+    if(dressInspirations.length>=6) break;
+    try{
+      const dataUrl = await resizeImageFile(file, 1080, 0.82);
+      dressInspirations.push({ id:'dinsp'+Date.now()+Math.random().toString(36).slice(2,7), dataUrl });
+    }catch(err){}
+  }
+  saveDressInspirations();
+  render();
+  e.target.value = '';
+});
+// Fase Feedback (Set 2026): imagens escolhidas em "Reporta um problema".
+// Reaproveita resizeImageFile (já usada nas inspirações) para comprimir
+// cada imagem antes de a guardar em memória — isso mantém o total bem
+// dentro do limite de 5MB mesmo com screenshots de ecrã inteiro, que em
+// bruto podem facilmente passar de vários MB cada.
+const REPORTAR_MAX_IMAGES = 5;
+const REPORTAR_MAX_BYTES = 5 * 1024 * 1024;
+document.getElementById('def-reportar-photo-input').addEventListener('change', async (e)=>{
+  const files = Array.from(e.target.files || []);
+  const msg = document.getElementById('def-msg-reportar');
+  for(const file of files){
+    if(reportarScreenshots.length >= REPORTAR_MAX_IMAGES){
+      if(msg){ msg.style.color = 'var(--rust-dark)'; msg.textContent = ta('reportTooManyImages'); }
+      break;
+    }
+    try{
+      const dataUrl = await resizeImageFile(file, 1600, 0.8);
+      const size = Math.round((dataUrl.length - dataUrl.indexOf(',') - 1) * 0.75);
+      const totalSoFar = reportarScreenshots.reduce((s,sc)=>s+(sc.size||0),0);
+      if(totalSoFar + size > REPORTAR_MAX_BYTES){
+        if(msg){ msg.style.color = 'var(--rust-dark)'; msg.textContent = ta('reportImagesTooLarge'); }
+        continue;
+      }
+      reportarScreenshots.push({ dataUrl, size, name:file.name });
+    }catch(err){}
+  }
+  render();
+  e.target.value = '';
+});
+
+let editingVisitId = null;
+function openVisitSheet(visitId){
+  closeAllSheets();
+  editingVisitId = visitId || null;
+  const v = visitId ? state.dressVisits.find(x=>x.id===visitId) : null;
+  document.getElementById('visit-sheet-title').textContent = v ? ta('visitSheetTitleEdit') : ta('visitSheetTitleNew');
+  document.getElementById('vf-loja').value = v ? v.loja : '';
+  document.getElementById('vf-morada').value = v ? v.morada : '';
+  document.getElementById('vf-data').value = v ? v.data : '';
+  document.getElementById('vf-convidados').value = v ? v.convidados : '';
+  document.getElementById('vf-notas').value = v ? v.notas : '';
+  document.getElementById('visit-sheet').classList.add('show');
+  document.getElementById('sheet-backdrop').classList.add('show');
+}
+function closeVisitSheet(){
+  document.getElementById('visit-sheet').classList.remove('show');
+  document.getElementById('sheet-backdrop').classList.remove('show');
+  editingVisitId = null;
+}
+document.getElementById('vf-cancel').addEventListener('click', closeVisitSheet);
+document.getElementById('vf-save').addEventListener('click', ()=>{
+  const lojaEl = document.getElementById('vf-loja');
+  const loja = lojaEl.value.trim();
+  const morada = document.getElementById('vf-morada').value.trim();
+  const data = document.getElementById('vf-data').value;
+  const convidados = document.getElementById('vf-convidados').value.trim();
+  const notas = document.getElementById('vf-notas').value.trim();
+  if(!loja){ flagRequiredField(lojaEl); return; }
+  if(editingVisitId){
+    const v = state.dressVisits.find(x=>x.id===editingVisitId);
+    if(v){ v.loja=loja; v.morada=morada; v.data=data; v.convidados=convidados; v.notas=notas; }
+  } else {
+    const id = 'visit'+Date.now()+Math.random().toString(36).slice(2,6);
+    state.dressVisits.unshift({ id, loja, morada, data, convidados, notas });
+    openDressVisit[id] = true;
+  }
+  closeVisitSheet();
+  render();
+  pushRemote(true);
+});
+
+function closeTodoNotesSheet(){
+  document.getElementById('todo-notes-sheet').classList.remove('show');
+  document.getElementById('sheet-backdrop').classList.remove('show');
+}
+document.getElementById('todo-notes-cancel').addEventListener('click', closeTodoNotesSheet);
+document.getElementById('todo-notes-save').addEventListener('click', ()=>{
+  state.todoNotes = document.getElementById('todo-notes-text').value;
+  closeTodoNotesSheet();
+  render();
+  pushRemote(true);
+});
+document.getElementById('todo-notes-delete').addEventListener('click', ()=>{
+  if(!state.todoNotes || confirm(ta('confirmDeleteNotes'))){
+    state.todoNotes = '';
+    closeTodoNotesSheet();
+    render();
   }
 });
+let editingTodoCatId = null;
+function closeTodoCatSheet(){
+  document.getElementById('todo-cat-sheet').classList.remove('show');
+  document.getElementById('sheet-backdrop').classList.remove('show');
+  editingTodoCatId = null;
+}
+
+// Fix 7 da auditoria RGPD/Segurança (Set 2026) — direito à portabilidade
+// dos dados (Art. 20 RGPD). Monta um ficheiro JSON com tudo o que a app
+// guarda sobre este casamento: o documento principal (orçamento,
+// convidados, mesas, gastos, fornecedores, etc. — tudo o que já está em
+// "state"), as definições do casamento, e os documentos "guests"/
+// "memories" do Firestore (que não vivem dentro de "state"). Corre
+// inteiramente com os dados que o próprio casal já tem permissão para
+// ler (mesmas Firestore Rules de sempre) — não é um caminho novo de
+// acesso a dados, só uma forma de os levar consigo.
+async function exportMyDataAsJson(btn){
+  if(!FIREBASE_READY || !auth || !auth.currentUser || !currentWeddingId){
+    alert(ta('exportDataError'));
+    return;
+  }
+  const original = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = ta('exportDataPreparing');
+  try{
+    const [guestsSnap, memoriesSnap] = await Promise.all([
+      GUESTS().where('weddingId', '==', currentWeddingId).get(),
+      MEMORIES().where('weddingId', '==', currentWeddingId).get(),
+    ]);
+    // Fase 8.0 (Set 2026): "guestId" (dentro de "data.guests" e, para cada
+    // convite, também no próprio documento RSVP) é o identificador interno
+    // e permanente do convidado — nunca muda. "id"/"rsvpToken" aqui é a
+    // CREDENCIAL de acesso ao link de RSVP desse convidado — quem tiver
+    // este ficheiro consegue abrir/editar a resposta de qualquer um deles,
+    // por isso deve ser tratado com o mesmo cuidado que os próprios links.
+    const guests = guestsSnap.docs.map(d=>({ id: d.id, ...d.data() }));
+    const memories = memoriesSnap.docs.map(d=>({ id: d.id, ...d.data() }));
+    const exportObj = {
+      exportedAt: new Date().toISOString(),
+      weddingId: currentWeddingId,
+      settings: weddingSettings,
+      note: 'guestId = identificador interno do convidado (permanente). id/rsvpToken em "rsvps" = credencial de acesso ao link de RSVP — trata com cuidado.',
+      data: state,
+      rsvps: guests,
+      memories: memories,
+    };
+    const blob = new Blob([JSON.stringify(exportObj, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `weddy-dados-${currentWeddingId}-${new Date().toISOString().slice(0,10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url), 5000);
+  }catch(err){
+    console.error('Weddy: falha a exportar os dados.', err && err.message);
+    alert(ta('exportDataError'));
+  }finally{
+    btn.disabled = false;
+    btn.textContent = original;
+  }
+}
+function openDeleteAccountSheet(){
+  const isSoleOwner = currentWeddingOwners.length<=1;
+  document.getElementById('delete-account-explain').innerHTML = isSoleOwner
+    ? ta('deleteAccountSoleOwnerHtml')
+    : ta('deleteAccountSharedHtml');
+  document.getElementById('delete-account-pass').value = '';
+  document.getElementById('delete-account-msg').textContent = '';
+  document.getElementById('delete-account-msg').className = 'login-msg';
+  document.getElementById('delete-account-sheet').classList.add('show');
+  document.getElementById('sheet-backdrop').classList.add('show');
+}
+function closeDeleteAccountSheet(){
+  const el = document.getElementById('delete-account-sheet');
+  if(el) el.classList.remove('show');
+}
+document.getElementById('delete-account-cancel').addEventListener('click', closeDeleteAccountSheet);
+document.getElementById('delete-account-confirm').addEventListener('click', ()=>{
+  const passEl = document.getElementById('delete-account-pass');
+  const msgEl = document.getElementById('delete-account-msg');
+  const pass = passEl.value;
+  if(!pass){ flagRequiredField(passEl); return; }
+  if(!auth || !auth.currentUser){ msgEl.textContent = ta('msgInvalidSession'); msgEl.className='login-msg error'; return; }
+
+  const btn = document.getElementById('delete-account-confirm');
+  btn.textContent = ta('btnDeletingEllipsis');
+  msgEl.textContent = '';
+  msgEl.className = 'login-msg';
+
+  const user = auth.currentUser;
+  const email = user.email;
+  const credential = firebase.auth.EmailAuthProvider.credential(email, pass);
+
+  user.reauthenticateWithCredential(credential).then(()=>{
+    // Fix 2 da auditoria RGPD/Segurança (Set 2026): o apagamento já não é
+    // feito diretamente daqui. A Firestore Rule bloqueia de propósito o
+    // delete direto de "weddings" (allow delete: if false), porque apagar
+    // só este documento deixava para trás convidados, memórias, ficheiros
+    // no Storage e o contador de uso de IA — dados órfãos, sem dono, e sem
+    // forma de os apagar depois. Agora tudo passa pela Cloud Function
+    // deleteWeddingAccount, que faz a cascata completa (ou só remove este
+    // dono, se o casamento tiver mais do que um) com o Admin SDK, e só
+    // apaga a conta de autenticação depois de confirmar que os dados foram
+    // tratados. Precisa do deploy do Fix 2 — ver SEGURANCA-RGPD-README.md.
+    if(!cloudFunctions){
+      return Promise.reject(new Error('Função de eliminação de conta não disponível (Cloud Functions não configuradas).'));
+    }
+    const call = cloudFunctions.httpsCallable('deleteWeddingAccount');
+    return call({});
+  }).then(()=>{
+    closeDeleteAccountSheet();
+    if(unsubscribeSnapshot) unsubscribeSnapshot();
+    currentWeddingId = null;
+    document.getElementById('app-body').innerHTML = '';
+    document.getElementById('login-screen').classList.remove('hidden');
+    document.documentElement.classList.add('login-active');
+    renderLoginForm(ta('msgAccountDeletedSuccess'), false, true);
+  }).catch(err=>{
+    btn.textContent = ta('btnDeletePermanently');
+    console.error('Weddy delete account error:', err.code, err.message);
+    if(err.code==='auth/wrong-password' || err.code==='auth/invalid-credential'){
+      msgEl.textContent = ta('msgWrongPassword');
+    } else if(err.code==='auth/too-many-requests'){
+      msgEl.textContent = ta('msgTooManyAttempts');
+    } else {
+      msgEl.textContent = ta('msgDeleteAccountError');
+    }
+    msgEl.className = 'login-msg error';
+  });
+});
+document.getElementById('tc-cancel').addEventListener('click', closeTodoCatSheet);
+document.getElementById('tc-save').addEventListener('click', ()=>{
+  const label = document.getElementById('tc-label').value.trim();
+  const titleEl = document.getElementById('tc-title');
+  const title = titleEl.value.trim();
+  const desc = document.getElementById('tc-desc').value.trim();
+  if(!title){ flagRequiredField(titleEl); return; }
+  if(editingTodoCatId){
+    const cat = state.todoCategories.find(c=>c.id===editingTodoCatId);
+    if(cat){ cat.label = label||'Geral'; cat.title = title; cat.desc = desc; }
+  } else {
+    const id = 'tc'+Date.now()+Math.random().toString(36).slice(2,6);
+    state.todoCategories.push({ id, icon:'doc', label:label||'Geral', title, desc, items:[] });
+  }
+  closeTodoCatSheet();
+  render();
+  pushRemote(true);
+});
+
+let editingHmOptionId = null;
+function openHmOptionSheet(ideaId){
+  closeAllSheets();
+  editingHmOptionId = ideaId || null;
+  const o = ideaId ? state.honeymoon.ideas.find(x=>x.id===ideaId) : null;
+  document.getElementById('hm-option-sheet-title').textContent = o ? ta('hmOptionSheetTitleEdit') : ta('hmOptionSheetTitleNew');
+  document.getElementById('hm-name').value = o ? o.name : '';
+  document.getElementById('hm-category').innerHTML = HM_CATEGORIES.map(c=>`<option value="${c.id}">${c.label}</option>`).join('');
+  document.getElementById('hm-category').value = o ? o.category : hmFilter;
+  document.getElementById('hm-price-min').value = o ? o.priceMin : '';
+  document.getElementById('hm-price-max').value = o ? o.priceMax : '';
+  document.getElementById('hm-duedate').value = o ? (o.dueDate||'') : '';
+  document.getElementById('hm-theme-value').value = o ? (o.theme||'') : '';
+  document.querySelectorAll('.hm-theme-btn').forEach(b=>b.classList.toggle('active', o && o.theme===b.dataset.theme));
+  document.getElementById('hm-option-delete').style.display = o ? '' : 'none';
+  document.getElementById('hm-option-sheet').classList.add('show');
+  document.getElementById('sheet-backdrop').classList.add('show');
+}
+function closeHmOptionSheet(){
+  document.getElementById('hm-option-sheet').classList.remove('show');
+  document.getElementById('sheet-backdrop').classList.remove('show');
+  editingHmOptionId = null;
+}
+document.getElementById('hm-option-cancel').addEventListener('click', closeHmOptionSheet);
+document.getElementById('hm-option-delete').addEventListener('click', ()=>{
+  if(editingHmOptionId && confirm(ta('confirmDeleteHmIdea'))){
+    state.honeymoon.ideas = state.honeymoon.ideas.filter(x=>x.id!==editingHmOptionId);
+    closeHmOptionSheet();
+    render();
+  }
+});
+document.querySelectorAll('.hm-theme-btn').forEach(btn=>{
+  btn.addEventListener('click', e=>{
+    document.querySelectorAll('.hm-theme-btn').forEach(b=>b.classList.remove('active'));
+    e.currentTarget.classList.add('active');
+    document.getElementById('hm-theme-value').value = e.currentTarget.dataset.theme;
+  });
+});
+document.getElementById('hm-option-save').addEventListener('click', ()=>{
+  const nameEl = document.getElementById('hm-name');
+  const name = nameEl.value.trim();
+  const category = document.getElementById('hm-category').value;
+  const theme = document.getElementById('hm-theme-value').value;
+  let priceMin = Math.max(0, Number(document.getElementById('hm-price-min').value)||0);
+  let priceMax = Math.max(0, Number(document.getElementById('hm-price-max').value)||0);
+  if(priceMin && priceMax && priceMin>priceMax){ const t=priceMin; priceMin=priceMax; priceMax=t; }
+  const dueDate = document.getElementById('hm-duedate').value;
+  if(!name){ flagRequiredField(nameEl); return; }
+  if(editingHmOptionId){
+    const o = state.honeymoon.ideas.find(x=>x.id===editingHmOptionId);
+    if(o){ o.name=name; o.category=category; o.theme=theme; o.priceMin=priceMin; o.priceMax=priceMax; o.dueDate=dueDate; }
+  } else {
+    const id = 'hm'+Date.now()+Math.random().toString(36).slice(2,6);
+    state.honeymoon.ideas.push({ id, name, category, theme, priceMin, priceMax, dueDate, hearts:0 });
+  }
+  closeHmOptionSheet();
+  render();
+  pushRemote(true);
+});
+
+// Criar fornecedor: já não há sheet — cria-se logo o registo (com um nome
+// por omitir) e abre-se a ficha completa, onde a pessoa escreve o nome real
+// e o resto dos dados diretamente. Contas antigas continuam a funcionar
+// normalmente: os fornecedores já guardados só têm os campos de sempre
+// (name, category, contact, price, status, notas) e todos os campos novos
+// (email, website, valorTotal, payments, etc.) têm "|| valor por omissão"
+// em todo o código, para não rebentar com dados já sincronizados.
+function createSupplier(presetCat){
+  closeAllSheets();
+  const category = presetCat || (state.categories[0] ? state.categories[0].id : '');
+  const id = 'sup'+Date.now()+Math.random().toString(36).slice(2,6);
+  state.suppliers.push({ id, name:'Novo fornecedor', category, contact:'', email:'', website:'', price:'', status:'considerar', notas:'', valorTotal:0, payments:[], nextPaymentDate:'', nextPaymentAmount:0, nextStep:'', lastContact:'' });
+  openSupplierCat[category] = true;
+  openSupplierDetail(id);
+  pushRemote(true);
+  const nameInput = document.getElementById('supd-name-input');
+  if(nameInput){ nameInput.focus(); nameInput.select(); }
+}
+
+let lightboxZoom = 1, lightboxPanX = 0, lightboxPanY = 0;
+function applyLightboxTransform(){
+  const img = document.getElementById('img-lightbox-img');
+  img.style.transform = `translate(${lightboxPanX}px, ${lightboxPanY}px) scale(${lightboxZoom})`;
+}
+function openImgLightbox(src){
+  lightboxZoom = 1; lightboxPanX = 0; lightboxPanY = 0;
+  const img = document.getElementById('img-lightbox-img');
+  img.src = src;
+  img.style.transform = 'none';
+  document.getElementById('img-lightbox').classList.add('show');
+}
+function closeImgLightbox(){
+  document.getElementById('img-lightbox').classList.remove('show');
+}
+document.getElementById('img-lightbox-close').addEventListener('click', closeImgLightbox);
+document.getElementById('img-lightbox').addEventListener('click', e=>{
+  if(e.target.id === 'img-lightbox') closeImgLightbox();
+});
+// Pré-visualização de PDFs (Lua de mel / contratos). Primeira versão usava
+// um <iframe src="urlDoPdf">, mas isso deixa o motor de PDF nativo do
+// telemóvel decidir sozinho o zoom inicial — no Safari iOS isso mostrava só
+// um canto ampliado da 1ª página, cortado, sem dar para ver as outras
+// páginas (visto ao vivo, Set 2026). Desenha-se agora o PDF com o pdf.js
+// que a app já usa para ler texto dos PDFs (ver extractPdfText): cada
+// página é desenhada num <canvas> à largura do ecrã (tamanho previsível,
+// "standard", em vez do zoom que o browser decidisse), todas empilhadas
+// com scroll normal — dá sempre para ver o documento inteiro, página a
+// página.
+let docLightboxToken = 0;
+async function openDocLightbox(url){
+  const myToken = ++docLightboxToken;
+  const pagesEl = document.getElementById('doc-lightbox-pages');
+  pagesEl.innerHTML = `<div class="empty-note" style="color:#fff; margin-top:40px;">${ta('loadingLabel')||'A carregar…'}</div>`;
+  document.getElementById('doc-lightbox').classList.add('show');
+  try{
+    if(typeof pdfjsLib === 'undefined') throw new Error('pdfjsLib not loaded');
+    const pdf = await pdfjsLib.getDocument(url).promise;
+    if(myToken !== docLightboxToken) return; // entretanto fechou/trocou de documento
+    pagesEl.innerHTML = '';
+    const targetWidth = Math.min(pagesEl.clientWidth || 340, 700);
+    for(let n=1; n<=pdf.numPages; n++){
+      if(myToken !== docLightboxToken) return;
+      const page = await pdf.getPage(n);
+      const baseViewport = page.getViewport({ scale:1 });
+      const scale = targetWidth / baseViewport.width;
+      const viewport = page.getViewport({ scale });
+      const canvas = document.createElement('canvas');
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      canvas.style.cssText = 'max-width:100%; height:auto; border-radius:8px; box-shadow:0 4px 16px rgba(0,0,0,0.3); background:#fff;';
+      pagesEl.appendChild(canvas);
+      await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+    }
+    if(!pdf.numPages && myToken===docLightboxToken){
+      pagesEl.innerHTML = `<div class="empty-note" style="color:#fff; margin-top:40px;">${ta('errOpenAttachmentFailed')}</div>`;
+    }
+  }catch(err){
+    if(myToken !== docLightboxToken) return;
+    console.error('Weddy doc preview error:', err && err.message);
+    // Nunca deixar o ecrã vazio sem explicação — se o pdf.js falhar por
+    // algum motivo (ex.: ficheiro corrompido), ainda se consegue abrir o
+    // PDF fora da app como último recurso.
+    pagesEl.innerHTML = `
+      <div class="empty-note" style="color:#fff; margin-top:40px; text-align:center; padding:0 20px;">${ta('errOpenAttachmentFailed')}</div>
+      <a href="${escapeHTML(url)}" target="_blank" rel="noopener" class="rsvp-copy-btn" style="margin-top:12px;">${ta('btnOpenInNewTab')}</a>`;
+  }
+}
+function closeDocLightbox(){
+  docLightboxToken++; // invalida qualquer renderização de páginas em curso
+  document.getElementById('doc-lightbox').classList.remove('show');
+  document.getElementById('doc-lightbox-pages').innerHTML = '';
+}
+document.getElementById('doc-lightbox-close').addEventListener('click', closeDocLightbox);
+document.getElementById('doc-lightbox').addEventListener('click', e=>{
+  if(e.target.id === 'doc-lightbox') closeDocLightbox();
+});
+// Ponto único usado por qualquer sítio da app que precise de mostrar um
+// anexo (imagem ou PDF) com uma forma óbvia de sair, sem depender de
+// window.open() (que abre um separador novo e nem sempre existe forma
+// clara de "voltar", sobretudo dentro da app instalada como PWA).
+function previewAttachment(url, fileName){
+  const isPdf = /\.pdf($|\?)/i.test(fileName||'') || /^data:application\/pdf/i.test(url||'');
+  if(isPdf) openDocLightbox(url);
+  else openImgLightbox(url);
+}
+(function bindLightboxZoom(){
+  const img = document.getElementById('img-lightbox-img');
+  let lastTap = 0;
+  let pinchStartDist = 0, pinchStartZoom = 1;
+  let dragging = false, dragStartX=0, dragStartY=0, panStartX=0, panStartY=0;
+
+  function dist(t0,t1){ return Math.hypot(t1.clientX-t0.clientX, t1.clientY-t0.clientY); }
+
+  img.addEventListener('touchstart', e=>{
+    if(e.touches.length===2){
+      dragging = false;
+      pinchStartDist = dist(e.touches[0], e.touches[1]);
+      pinchStartZoom = lightboxZoom;
+    } else if(e.touches.length===1){
+      const now = Date.now();
+      if(now - lastTap < 300){
+        lightboxZoom = lightboxZoom > 1.1 ? 1 : 2.4;
+        lightboxPanX = 0; lightboxPanY = 0;
+        applyLightboxTransform();
+        lastTap = 0;
+        return;
+      }
+      lastTap = now;
+      if(lightboxZoom > 1.05){
+        dragging = true;
+        dragStartX = e.touches[0].clientX; dragStartY = e.touches[0].clientY;
+        panStartX = lightboxPanX; panStartY = lightboxPanY;
+      }
+    }
+  }, {passive:true});
+  img.addEventListener('touchmove', e=>{
+    if(e.touches.length===2){
+      const d = dist(e.touches[0], e.touches[1]);
+      lightboxZoom = Math.max(1, Math.min(4, pinchStartZoom * (d/pinchStartDist)));
+      applyLightboxTransform();
+    } else if(dragging && e.touches.length===1){
+      lightboxPanX = panStartX + (e.touches[0].clientX-dragStartX);
+      lightboxPanY = panStartY + (e.touches[0].clientY-dragStartY);
+      applyLightboxTransform();
+    }
+  }, {passive:true});
+  img.addEventListener('touchend', e=>{
+    dragging = false;
+    if(lightboxZoom < 1.05){ lightboxZoom=1; lightboxPanX=0; lightboxPanY=0; applyLightboxTransform(); }
+  }, {passive:true});
+})();
+
+/* ============================================================
+   LOGIN — entrar / criar conta / configurar o casamento
+============================================================ */
+let authMode = 'login'; // 'login' | 'signup'
+let lastLoginRender = null; // permite redesenhar o ecrã de login atual ao trocar de idioma
+
+// Fase Consentimento (Set 2026): pequeno overlay para ler os Termos e
+// Condições ou a Política de Privacidade a partir do ecrã de registo (antes
+// de a pessoa ter sequer um casamento criado, por isso não pode ainda
+// entrar em Definições) — e também do ecrã "Antes de continuares"
+// (reconsentimento). Criado uma única vez (top-level, fora de
+// bindHandlers()) porque tanto o ecrã de login como o de reconsentimento
+// vivem fora do ciclo normal de render()/bindHandlers() da app.
+function openLegalOverlay(titleKey, bodyHtml){
+  let el = document.getElementById('legal-overlay');
+  if(!el){
+    el = document.createElement('div');
+    el.id = 'legal-overlay';
+    el.style.cssText = 'position:fixed; inset:0; background:rgba(30,26,23,0.55); z-index:9999; display:none; align-items:flex-end; justify-content:center;';
+    document.body.appendChild(el);
+    el.addEventListener('click', e=>{ if(e.target===el) el.style.display='none'; });
+  }
+  el.innerHTML = `
+    <div style="background:var(--card,#fff); width:100%; max-width:480px; max-height:86vh; overflow-y:auto; -webkit-overflow-scrolling:touch; border-radius:20px 20px 0 0; padding:20px 18px 28px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+        <div style="font-weight:700; font-size:16px; color:var(--ink);">${ta(titleKey)}</div>
+        <button type="button" id="legal-overlay-close" style="border:none; background:transparent; cursor:pointer; color:var(--ink-soft); padding:4px;">${ICONS.x}</button>
+      </div>
+      <div class="privacy-text">${bodyHtml}</div>
+    </div>
+  `;
+  el.style.display = 'flex';
+  document.getElementById('legal-overlay-close').addEventListener('click', ()=>{ el.style.display='none'; });
+}
+// Delegação global (em vez de religar a cada render) — apanha os links
+// "Política de Privacidade"/"Termos e Condições" tanto no formulário de
+// registo como no ecrã de reconsentimento.
+document.addEventListener('click', e=>{
+  const privacyLink = e.target.closest && e.target.closest('[data-openprivacy]');
+  if(privacyLink){ e.preventDefault(); openLegalOverlay('privacyTitle', privacyBodyHtml()); return; }
+  const termsLink = e.target.closest && e.target.closest('[data-openterms]');
+  if(termsLink){ e.preventDefault(); openLegalOverlay('termsTitle', termsBodyHtml()); }
+});
+
+function renderLoginForm(msg, isError, isSuccess){
+  lastLoginRender = ()=>renderLoginForm(msg, isError, isSuccess);
+  const isSignup = authMode === 'signup';
+  document.getElementById('login-inner').innerHTML = `
+
+    <div class="login-tag">${isSignup? ta('loginTagSignup') : ta('loginTagLogin')}</div>
+    <div class="login-field">
+      <span class="login-field-icon">${ICONS.mail}</span>
+      <input type="email" class="has-icon" id="login-email" placeholder="${ta('emailPlaceholder')}" autocomplete="email" autocapitalize="none" autocorrect="off">
+    </div>
+    <div class="login-field" style="margin-top:10px;">
+      <span class="login-field-icon">${ICONS.lock}</span>
+      <input type="password" class="has-icon has-toggle" id="login-pass" placeholder="${ta('passPlaceholder')}" autocomplete="${isSignup?'new-password':'current-password'}">
+      <button type="button" class="login-field-toggle" id="login-pass-toggle" data-shown="0" aria-label="${ta('btnShowPassword')}">${ICONS.eye}</button>
+    </div>
+    ${isSignup? `<div class="login-field" style="margin-top:10px;">
+      <span class="login-field-icon">${ICONS.lock}</span>
+      <input type="password" class="has-icon has-toggle" id="login-pass-confirm" placeholder="${ta('passConfirmPlaceholder')}" autocomplete="new-password">
+      <button type="button" class="login-field-toggle" id="login-pass-confirm-toggle" data-shown="0" aria-label="${ta('btnShowPassword')}">${ICONS.eye}</button>
+    </div>` : ''}
+    ${isSignup? `<label style="display:flex; flex-direction:column; align-items:center; gap:6px; margin:12px auto 0; text-align:center; font-size:12.5px; color:var(--ink-soft); line-height:1.5; cursor:pointer; max-width:280px;">
+      <input type="checkbox" id="login-consent" style="flex-shrink:0;">
+      <span>${ta('consentCheckboxHtml')()}</span>
+    </label>` : ''}
+    <button class="login-btn" id="login-send">${isSignup? ta('btnCreateAccount') : ta('btnEnter')}</button>
+    <div class="login-msg ${isError?'error':isSuccess?'success':''}">${msg||''}</div>
+    ${!isSignup? `<div class="login-note" style="cursor:pointer;" id="login-forgot">${ta('forgotPassword')}</div>` : ''}
+    <div class="login-note" style="cursor:pointer;" id="login-toggle">${isSignup? ta('toggleToLogin') : ta('toggleToSignup')}</div>
+
+    <div style="display:flex; align-items:center; gap:10px; margin:16px 0;">
+      <div style="flex:1; height:1px; background:var(--line);"></div>
+      <span style="font-size:11.5px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.04em;">${ta('orSeparatorLabel')}</span>
+      <div style="flex:1; height:1px; background:var(--line);"></div>
+    </div>
+    <button type="button" class="login-btn" id="login-google" style="margin-top:0; background:#fff; color:#3c4043; border:1px solid var(--line); display:flex; align-items:center; justify-content:center; gap:10px;">${GOOGLE_G_ICON}<span>${ta('btnContinueGoogle')}</span></button>
+  `;
+  document.getElementById('login-send').addEventListener('click', handleAuthSubmit);
+  document.getElementById('login-pass').addEventListener('keydown', e=>{ if(e.key==='Enter') handleAuthSubmit(); });
+  const passConfirmEl = document.getElementById('login-pass-confirm');
+  if(passConfirmEl) passConfirmEl.addEventListener('keydown', e=>{ if(e.key==='Enter') handleAuthSubmit(); });
+  // Mostrar/ocultar password: só troca o type do input entre "password" e
+  // "text" no próprio browser da pessoa — nunca lê, guarda nem envia a
+  // password para lado nenhum, é puramente visual.
+  document.querySelectorAll('.login-field-toggle').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const input = btn.previousElementSibling;
+      if(!input) return;
+      const shown = btn.dataset.shown === '1';
+      input.type = shown ? 'password' : 'text';
+      btn.dataset.shown = shown ? '0' : '1';
+      btn.innerHTML = shown ? ICONS.eye : ICONS.eyeOff;
+      btn.setAttribute('aria-label', shown ? ta('btnShowPassword') : ta('btnHidePassword'));
+    });
+  });
+  document.getElementById('login-toggle').addEventListener('click', ()=>{ authMode = isSignup?'login':'signup'; renderLoginForm(); });
+  const forgotLink = document.getElementById('login-forgot');
+  if(forgotLink) forgotLink.addEventListener('click', handleForgotPassword);
+  document.getElementById('login-google').addEventListener('click', handleGoogleSignIn);
+}
+function handleForgotPassword(){
+  const email = document.getElementById('login-email').value.trim();
+  if(!email){ renderLoginForm(ta('forgotNeedsEmail'), true); return; }
+  if(!FIREBASE_READY || !auth){ renderLoginForm(ta('firebaseNotReady'), true); return; }
+  auth.sendPasswordResetEmail(email).then(()=>{
+    renderLoginForm(ta('forgotSuccess')(email), false, true);
+    const emailEl = document.getElementById('login-email');
+    if(emailEl) emailEl.value = email;
+  }).catch(err=>{
+    console.error('Weddy reset error:', err.code, err.message);
+    const msg = err.code==='auth/user-not-found' ? ta('forgotUserNotFound') : ta('forgotGenericError');
+    renderLoginForm(msg, true);
+    const emailEl = document.getElementById('login-email');
+    if(emailEl) emailEl.value = email;
+  });
+}
+function renderLoginSetupNeeded(){
+  lastLoginRender = renderLoginSetupNeeded;
+  document.getElementById('login-inner').innerHTML = `
+
+    <div class="login-tag">${ta('setupNeededTitle')}</div>
+    <div class="login-msg">${ta('setupNeededMsg')}</div>
+  `;
+}
+function renderLoading(msg){
+  lastLoginRender = ()=>renderLoading(msg);
+  document.getElementById('login-inner').innerHTML = `
+
+    <div class="login-tag">${msg||ta('loginLoading')}</div>
+  `;
+}
+function renderVerifyEmail(user){
+  lastLoginRender = ()=>renderVerifyEmail(user);
+  document.getElementById('login-inner').innerHTML = `
+    <div class="login-tag">${ta('verifyEmailTitle')}</div>
+    <div class="login-msg">${ta('verifyEmailMsg')(escapeHTML(user.email))}</div>
+    <button class="login-btn" id="verify-resend">${ta('btnResendEmail')}</button>
+    <button class="login-btn" id="verify-check" style="margin-top:10px;background:rgba(60,51,43,0.08);color:var(--ink);">${ta('btnAlreadyConfirmed')}</button>
+    <button class="login-btn" id="verify-signout" style="margin-top:10px;background:transparent;color:var(--ink-soft);">${ta('signOut')}</button>
+    <div class="login-msg" id="verify-msg"></div>
+  `;
+  document.getElementById('verify-resend').addEventListener('click', ()=>{
+    const msgEl = document.getElementById('verify-msg');
+    user.sendEmailVerification().then(()=>{ msgEl.textContent = ta('resendSuccess'); msgEl.className='login-msg success'; })
+      .catch(()=>{ msgEl.textContent = ta('resendError'); msgEl.className='login-msg error'; });
+  });
+  document.getElementById('verify-check').addEventListener('click', ()=>{
+    const msgEl = document.getElementById('verify-msg');
+    msgEl.textContent = ta('verifying'); msgEl.className='login-msg';
+    user.reload().then(()=>{
+      if(auth.currentUser.emailVerified){
+        activeTab = 'inicio';
+        auth.currentUser.getIdToken(true).finally(()=>{ findOrCreateFlow(auth.currentUser); });
+      } else {
+        msgEl.textContent = ta('notConfirmedYet');
+        msgEl.className='login-msg error';
+      }
+    });
+  });
+  document.getElementById('verify-signout').addEventListener('click', ()=>auth.signOut());
+}
+function handleAuthSubmit(){
+  const email = document.getElementById('login-email').value.trim().toLowerCase();
+  const pass = document.getElementById('login-pass').value;
+  if(!email || !pass){ renderLoginForm(ta('fillEmailPass'), true); return; }
+  if(authMode==='signup'){
+    const passConfirm = document.getElementById('login-pass-confirm').value;
+    if(pass !== passConfirm){ renderLoginForm(ta('passwordMismatch'), true); return; }
+    // Fase Consentimento (Set 2026): sem a caixa marcada, nem sequer
+    // tentamos criar a conta — a Rita quer o versionamento explícito
+    // (termsVersion/privacyVersion/acceptedAt), por isso uma conta nunca
+    // deve chegar a existir sem um consentimento registado.
+    const consentEl = document.getElementById('login-consent');
+    if(!consentEl || !consentEl.checked){ renderLoginForm(ta('consentRequiredError'), true); return; }
+  }
+  if(!FIREBASE_READY || !auth){ renderLoginForm(ta('firebaseNotReadyFile'), true); return; }
+  const btn = document.getElementById('login-send');
+  if(btn){ btn.textContent = ta('btnWait'); btn.disabled = true; }
+  const action = authMode==='signup'
+    ? auth.createUserWithEmailAndPassword(email, pass).then(cred=>{
+        // Guarda já o momento real da aceitação (não o momento, possivelmente
+        // muito mais tarde, em que o assistente de configuração do casamento
+        // é concluído) — handleOnboardingSubmit lê isto do localStorage para
+        // gravar em weddings/{weddingId}.consent. Fica em localStorage (não
+        // só em memória) para sobreviver a um refresh durante a confirmação
+        // do email, que acontece entre estes dois passos.
+        try{
+          localStorage.setItem('weddy-signup-consent', JSON.stringify({
+            termsVersion: CURRENT_TERMS_VERSION,
+            privacyVersion: CURRENT_PRIVACY_VERSION,
+            acceptedAt: new Date().toISOString()
+          }));
+        }catch(e){}
+        return cred.user.sendEmailVerification().catch(()=>{});
+      })
+    : auth.signInWithEmailAndPassword(email, pass);
+  action.catch(err=>{
+    console.error('Weddy auth error:', err.code, err.message);
+    let msg;
+    if(err.code==='auth/email-already-in-use') msg = ta('authErrEmailInUse');
+    else if(err.code==='auth/unauthorized-domain') msg = ta('authErrUnauthorizedDomain');
+    else if(err.code==='auth/invalid-credential' || err.code==='auth/wrong-password' || err.code==='auth/user-not-found') msg = ta('authErrBadCredentials');
+    else if(err.code==='auth/weak-password') msg = ta('authErrWeakPassword');
+    else if(err.code==='auth/invalid-email') msg = ta('authErrInvalidEmail');
+    else msg = ta('authErrGeneric')(err.code||err.message||'unknown error');
+    renderLoginForm(msg, true);
+    // Mantém o email já escrito para a pessoa não ter de o voltar a escrever
+    const emailEl = document.getElementById('login-email');
+    if(emailEl) emailEl.value = email;
+  });
+}
+
+// Fase Login Google (Set 2026), pedido direto da Rita ("claramente a
+// funcionalidade que falta"). Ao contrário do email/password, a Google não
+// distingue "criar conta" de "entrar" — é o mesmo popup/ecrã dos dois
+// lados. Por isso o consentimento (Termos/Privacidade) não é pedido aqui: é
+// pedido mais tarde, dentro do próprio Assistente de Configuração
+// (renderOnboarding), que só aparece mesmo para contas novas sem nenhum
+// casamento ainda associado — ver o bloco "sem pendingConsent" lá, que
+// mostra a mesma caixa de consentimento como rede de segurança para
+// qualquer método de registo que não passe pelo formulário de
+// email/password (hoje só a Google, mas serve para futuros métodos
+// também). Uma conta Google já vem com o email verificado pela própria
+// Google, por isso nunca passa pelo ecrã "confirma o teu email".
+//
+// Em contexto de PWA instalada (ecrã inicial do iPhone/Android, sem barra
+// de navegador), signInWithPopup costuma falhar ou comportar-se mal — por
+// isso aqui usamos sempre signInWithRedirect nesse caso, e só usamos popup
+// no browser normal (ecrã mais amigável, sem sair da página).
+function isStandaloneApp(){
+  try{
+    return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
+  }catch(e){ return false; }
+}
+function handleGoogleSignIn(){
+  if(!FIREBASE_READY || !auth){ renderLoginForm(ta('firebaseNotReadyFile'), true); return; }
+  const btn = document.getElementById('login-google');
+  if(btn) btn.disabled = true;
+  const provider = new firebase.auth.GoogleAuthProvider();
+  provider.setCustomParameters({ prompt: 'select_account' });
+  const showError = (err)=>{
+    console.error('Weddy Google sign-in error:', err && err.code, err && err.message);
+    // "popup-closed-by-user"/"cancelled-popup-request": a pessoa desistiu a
+    // meio, não é um erro real — não vale a pena assustar com uma
+    // mensagem vermelha.
+    if(err && (err.code==='auth/popup-closed-by-user' || err.code==='auth/cancelled-popup-request')){
+      if(btn) btn.disabled = false;
+      return;
+    }
+    let msg;
+    if(err && err.code==='auth/account-exists-with-different-credential') msg = ta('authErrAccountExistsDifferentCred');
+    else if(err && err.code==='auth/unauthorized-domain') msg = ta('authErrUnauthorizedDomain');
+    else if(err && err.code==='auth/popup-blocked') msg = ta('authErrPopupBlocked');
+    else msg = ta('authErrGeneric')((err && (err.code||err.message))||'unknown error');
+    renderLoginForm(msg, true);
+  };
+  if(isStandaloneApp()){
+    auth.signInWithRedirect(provider).catch(showError);
+  } else {
+    auth.signInWithPopup(provider).catch(showError);
+  }
+}
+// Recolhe o resultado de signInWithRedirect (PWA instalada) ao recarregar a
+// página depois do login na Google. Em caso de sucesso não há nada a fazer
+// aqui — onAuthStateChanged (mais abaixo) já trata da navegação; isto serve
+// só para apanhar erros que de outra forma passariam em silêncio.
+if(FIREBASE_READY && auth){
+  auth.getRedirectResult().catch(err=>{
+    if(!err || err.code==='auth/popup-closed-by-user' || err.code==='auth/cancelled-popup-request') return;
+    console.error('Weddy Google redirect error:', err.code, err.message);
+    let msg;
+    if(err.code==='auth/account-exists-with-different-credential') msg = ta('authErrAccountExistsDifferentCred');
+    else if(err.code==='auth/unauthorized-domain') msg = ta('authErrUnauthorizedDomain');
+    else msg = ta('authErrGeneric')(err.code||err.message||'unknown error');
+    renderLoginForm(msg, true);
+  });
+}
+
+/* ---- Assistente de configuração (primeira vez) ---- */
+function renderOnboarding(){
+  lastLoginRender = renderOnboarding;
+  // Fase Login Google (Set 2026): o formulário de email/password já capta o
+  // consentimento (Termos/Privacidade) na própria caixa de registo, antes de
+  // sequer chegar aqui — guardado em localStorage (ver handleAuthSubmit) e
+  // lido abaixo em handleOnboardingSubmit. Um método de registo que não
+  // passe por esse formulário (hoje só a Google) nunca teve oportunidade de
+  // mostrar essa caixa, por isso este ecrã mostra-a aqui como rede de
+  // segurança sempre que não há nenhum consentimento pendente — garante que
+  // NENHUMA conta cria um casamento sem consentimento registado,
+  // independentemente do método de login.
+  let pendingConsentCheck = null;
+  try{ pendingConsentCheck = JSON.parse(localStorage.getItem('weddy-signup-consent')||'null'); }catch(e){ pendingConsentCheck = null; }
+  const needsConsentHere = !pendingConsentCheck;
+  document.getElementById('login-inner').innerHTML = `
+
+    <div class="login-tag">${ta('obTitle')}</div>
+    <div class="login-field"><input type="text" id="ob-name1" placeholder="${ta('obName1')}"></div>
+    <div class="login-field" style="margin-top:10px;"><input type="text" id="ob-name2" placeholder="${ta('obName2')}"></div>
+    <div class="login-field" style="margin-top:10px;">
+      <label style="display:block; text-align:left; font-size:11px; color:var(--ink-soft); margin:0 0 4px 2px;">${ta('obDateLabel')}</label>
+      <input type="date" id="ob-date">
+    </div>
+    <div class="login-field" style="margin-top:10px;"><input type="text" id="ob-venue" placeholder="${ta('obVenue')}"></div>
+    ${needsConsentHere? `<label style="display:flex; flex-direction:column; align-items:center; gap:6px; margin-top:12px; text-align:center; font-size:12.5px; color:var(--ink-soft); line-height:1.45; cursor:pointer;">
+      <input type="checkbox" id="ob-consent" style="flex-shrink:0;">
+      <span>${ta('consentCheckboxHtml')()}</span>
+    </label>` : ''}
+    <button class="login-btn" id="ob-save">${ta('obStart')}</button>
+    <div class="login-msg" id="ob-msg"></div>
+  `;
+  document.getElementById('ob-save').addEventListener('click', handleOnboardingSubmit);
+}
+function handleOnboardingSubmit(){
+  const name1El = document.getElementById('ob-name1');
+  const name2El = document.getElementById('ob-name2');
+  const dateEl = document.getElementById('ob-date');
+  const name1 = name1El.value.trim();
+  const name2 = name2El.value.trim();
+  const date = dateEl.value;
+  const venue = document.getElementById('ob-venue').value.trim();
+  if(!name1 || !name2){
+    document.getElementById('ob-msg').textContent = ta('obErrNames');
+    document.getElementById('ob-msg').classList.add('error');
+    flagRequiredField(!name1 ? name1El : name2El);
+    return;
+  }
+  if(!date){
+    document.getElementById('ob-msg').textContent = ta('obErrDate');
+    document.getElementById('ob-msg').classList.add('error');
+    flagRequiredField(dateEl);
+    return;
+  }
+  // Fase Login Google (Set 2026): quando não há consentimento pendente do
+  // formulário de email/password (ver renderOnboarding), a caixa aparece
+  // aqui — e é obrigatória, exatamente como no registo por email/password.
+  let pendingConsent = null;
+  try{ pendingConsent = JSON.parse(localStorage.getItem('weddy-signup-consent')||'null'); }catch(e){ pendingConsent = null; }
+  const obConsentEl = document.getElementById('ob-consent');
+  if(!pendingConsent && obConsentEl && !obConsentEl.checked){
+    document.getElementById('ob-msg').textContent = ta('consentRequiredError');
+    document.getElementById('ob-msg').classList.add('error');
+    return;
+  }
+  renderLoading(ta('obCreating'));
+  const email = auth.currentUser.email.toLowerCase();
+  weddingSettings = defaultSettings(name1, name2, date, venue);
+  state = seedData();
+  // Fase Consentimento (Set 2026): lê o consentimento dado na caixa
+  // obrigatória do registo (guardado em handleAuthSubmit) ou, para métodos
+  // sem esse formulário (Google), a caixa mostrada mesmo aqui em cima —
+  // ambas as origens produzem exatamente o mesmo formato em localStorage,
+  // por isso este bloco não precisa de saber qual das duas foi usada.
+  const acceptedAtDate = (pendingConsent && pendingConsent.acceptedAt) ? new Date(pendingConsent.acceptedAt) : new Date();
+  const consent = {
+    termsVersion: (pendingConsent && pendingConsent.termsVersion) || CURRENT_TERMS_VERSION,
+    privacyVersion: (pendingConsent && pendingConsent.privacyVersion) || CURRENT_PRIVACY_VERSION,
+    acceptedAt: firebase.firestore.Timestamp.fromDate(isNaN(acceptedAtDate.getTime()) ? new Date() : acceptedAtDate)
+  };
+  try{ localStorage.removeItem('weddy-signup-consent'); }catch(e){}
+  WEDDINGS().add({
+    ownerEmails: [email],
+    ownerUids: [auth.currentUser.uid],
+    creatorEmail: email,
+    settings: weddingSettings,
+    json: JSON.stringify(state),
+    consent,
+    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+  }).then(docRef=>{
+    currentWeddingId = docRef.id;
+    attachFirestoreSync();
+  }).catch(()=>{
+    renderOnboarding();
+  });
+}
+
+/* ============================================================
+   SINCRONIZAÇÃO — autenticação + dados partilhados em tempo real
+============================================================ */
+const _origRender = render;
+let saveTimer = null;
+let firstSyncDone = false;
+let unsubscribeSnapshot = null;
+let dataLossGuardTripped = false;
+
+let saveToastTimer = null;
+function showSaveToast(isError){
+  const el = document.getElementById('save-toast');
+  if(!el) return;
+  el.innerHTML = isError
+    ? `${ICONS.warn} ${ta('toastSaveFailed')}`
+    : `${ICONS.check} ${ta('toastSaved')}`;
+  el.className = 'save-toast show' + (isError? ' error' : '');
+  clearTimeout(saveToastTimer);
+  saveToastTimer = setTimeout(()=>{ el.classList.remove('show'); }, isError ? 2600 : 1500);
+}
+const XL_COLORS = { terracotaDark:'9A4F3D', terracota:'B96752', creme:'FAF3EC', cremeEscuro:'F0E4D8', tinta:'302C29', tintaSuave:'8E8780', branco:'FFFFFF', sage:'A8B39C' };
+function xlCell(v, style){
+  const isNum = typeof v === 'number';
+  return { v: (v===null||v===undefined) ? '' : v, t: isNum?'n':'s', s: style||{} };
+}
+const XL_THIN_BORDER = { top:{style:'thin',color:{rgb:'E5DDD3'}}, bottom:{style:'thin',color:{rgb:'E5DDD3'}}, left:{style:'thin',color:{rgb:'E5DDD3'}}, right:{style:'thin',color:{rgb:'E5DDD3'}} };
+const XL_STYLES = {
+  title: { font:{ name:'Calibri', sz:18, bold:true, color:{rgb:XL_COLORS.terracotaDark} } },
+  subtitle: { font:{ name:'Calibri', sz:11, italic:true, color:{rgb:XL_COLORS.tintaSuave} } },
+  sectionLabel: { font:{ name:'Calibri', sz:13, bold:true, color:{rgb:XL_COLORS.terracotaDark} } },
+  header: { font:{ name:'Calibri', sz:11, bold:true, color:{rgb:XL_COLORS.branco} }, fill:{fgColor:{rgb:XL_COLORS.terracotaDark}}, alignment:{horizontal:'center', vertical:'center', wrapText:true}, border:XL_THIN_BORDER },
+  cell: { font:{ name:'Calibri', sz:10.5, color:{rgb:XL_COLORS.tinta} }, border:XL_THIN_BORDER, alignment:{vertical:'center'} },
+  cellAlt: { font:{ name:'Calibri', sz:10.5, color:{rgb:XL_COLORS.tinta} }, fill:{fgColor:{rgb:XL_COLORS.creme}}, border:XL_THIN_BORDER, alignment:{vertical:'center'} },
+  cellCenter: { font:{ name:'Calibri', sz:10.5, color:{rgb:XL_COLORS.tinta} }, border:XL_THIN_BORDER, alignment:{horizontal:'center', vertical:'center'} },
+  cellCenterAlt: { font:{ name:'Calibri', sz:10.5, color:{rgb:XL_COLORS.tinta} }, fill:{fgColor:{rgb:XL_COLORS.creme}}, border:XL_THIN_BORDER, alignment:{horizontal:'center', vertical:'center'} },
+  money: { font:{ name:'Calibri', sz:10.5, color:{rgb:XL_COLORS.tinta} }, border:XL_THIN_BORDER, alignment:{horizontal:'right', vertical:'center'}, numFmt:'#,##0.00" €"' },
+  moneyAlt: { font:{ name:'Calibri', sz:10.5, color:{rgb:XL_COLORS.tinta} }, fill:{fgColor:{rgb:XL_COLORS.creme}}, border:XL_THIN_BORDER, alignment:{horizontal:'right', vertical:'center'}, numFmt:'#,##0.00" €"' },
+  total: { font:{ name:'Calibri', sz:11, bold:true, color:{rgb:XL_COLORS.branco} }, fill:{fgColor:{rgb:XL_COLORS.terracota}}, border:XL_THIN_BORDER, alignment:{vertical:'center'} },
+  totalMoney: { font:{ name:'Calibri', sz:11, bold:true, color:{rgb:XL_COLORS.branco} }, fill:{fgColor:{rgb:XL_COLORS.terracota}}, border:XL_THIN_BORDER, alignment:{horizontal:'right', vertical:'center'}, numFmt:'#,##0.00" €"' },
+  confirmedYes: { font:{ name:'Calibri', sz:10.5, bold:true, color:{rgb:'2F5233'} }, fill:{fgColor:{rgb:'DCE8DC'}}, border:XL_THIN_BORDER, alignment:{horizontal:'center', vertical:'center'} },
+  confirmedNo: { font:{ name:'Calibri', sz:10.5, color:{rgb:XL_COLORS.tintaSuave} }, border:XL_THIN_BORDER, alignment:{horizontal:'center', vertical:'center'} }
+};
+function buildStyledSheet(title, subtitle, headers, dataRows, colWidths){
+  const aoa = [];
+  aoa.push([xlCell(title, XL_STYLES.title)]);
+  aoa.push([xlCell(subtitle, XL_STYLES.subtitle)]);
+  aoa.push([]);
+  aoa.push(headers.map(h=>xlCell(h, XL_STYLES.header)));
+  dataRows.forEach(row=> aoa.push(row));
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = colWidths.map(w=>({wch:w}));
+  ws['!merges'] = [
+    { s:{r:0,c:0}, e:{r:0,c:headers.length-1} },
+    { s:{r:1,c:0}, e:{r:1,c:headers.length-1} }
+  ];
+  ws['!freeze'] = { xSplit:0, ySplit:4 };
+  if(ws['!sheetViews']===undefined) ws['!sheetViews'] = [{ state:'frozen', ySplit:4 }];
+  return ws;
+}
+
+function exportToExcel(){
+  const msgEl = document.getElementById('export-excel-msg');
+  msgEl.textContent = '';
+  msgEl.className = 'login-msg';
+  try {
+    if(typeof XLSX === 'undefined'){
+      msgEl.textContent = ta('xlLoadExcelError');
+      msgEl.className = 'login-msg error';
+      return;
+    }
+    const wb = XLSX.utils.book_new();
+    const coupleTitle = `${weddingSettings.coupleName1||''} & ${weddingSettings.coupleName2||''}`.trim() || ta('xlDefaultCoupleTitle');
+    const subInfo = `${formatDatePT(weddingSettings.weddingDate)} · ${weddingSettings.venue||ta('genericVenueTBD')}`;
+
+    // Orçamento
+    const orcDataRows = state.categories.map((c,i)=>{
+      const val = Number(c.value)||0;
+      const pct = state.budget.total ? (val/state.budget.total) : 0;
+      const alt = i%2===1;
+      return [
+        xlCell(c.name, alt?XL_STYLES.cellAlt:XL_STYLES.cell),
+        xlCell(val, alt?XL_STYLES.moneyAlt:XL_STYLES.money),
+        xlCell(pct, { ...(alt?XL_STYLES.cellCenterAlt:XL_STYLES.cellCenter), numFmt:'0.0%' })
+      ];
+    });
+    const orcTotal = state.categories.reduce((s,c)=>s+(Number(c.value)||0),0);
+    orcDataRows.push([
+      xlCell(ta('xlTotalLabel'), XL_STYLES.total),
+      xlCell(orcTotal, XL_STYLES.totalMoney),
+      xlCell(state.budget.total ? orcTotal/state.budget.total : 0, { ...XL_STYLES.total, alignment:{horizontal:'center'}, numFmt:'0.0%' })
+    ]);
+    const orcSheet = buildStyledSheet(coupleTitle, ta('xlBudgetSubtitle')(subInfo, fmtEUR(state.budget.total)), [ta('xlColCategory'),ta('xlColBudgeted'),'%'], orcDataRows, [30,16,10]);
+    XLSX.utils.book_append_sheet(wb, orcSheet, ta('xlSheetBudget'));
+
+    // Gastos
+    const gastosDataRows = state.expenses.map((e,i)=>{
+      const cat = catById(e.category);
+      const alt = i%2===1;
+      const c = alt?XL_STYLES.cellAlt:XL_STYLES.cell;
+      const cc = alt?XL_STYLES.cellCenterAlt:XL_STYLES.cellCenter;
+      const m = alt?XL_STYLES.moneyAlt:XL_STYLES.money;
+      return [
+        xlCell(e.desc||'', c),
+        xlCell(e.date ? formatDateShortPT(e.date) : '', cc),
+        xlCell(cat?cat.name:'', c),
+        xlCell(Number(e.value)||0, m),
+        xlCell(Number(e.paid)||0, m),
+        xlCell(Math.max(0,(Number(e.value)||0)-(Number(e.paid)||0)), m),
+        xlCell(e.dueDate ? formatDateShortPT(e.dueDate) : '', cc),
+        xlCell(e.method ? (EXPENSE_METHOD_LABELS[e.method]||e.method) : '', cc)
+      ];
+    });
+    if(gastosDataRows.length){
+      const totalValor = state.expenses.reduce((s,e)=>s+(Number(e.value)||0),0);
+      const totalPago = state.expenses.reduce((s,e)=>s+(Number(e.paid)||0),0);
+      gastosDataRows.push([
+        xlCell(ta('xlTotalLabel'), XL_STYLES.total), xlCell('', XL_STYLES.total), xlCell('', XL_STYLES.total),
+        xlCell(totalValor, XL_STYLES.totalMoney), xlCell(totalPago, XL_STYLES.totalMoney),
+        xlCell(Math.max(0,totalValor-totalPago), XL_STYLES.totalMoney), xlCell('', XL_STYLES.total), xlCell('', XL_STYLES.total)
+      ]);
+    }
+    const gastosSheet = buildStyledSheet(coupleTitle, ta('xlExpensesSubtitle')(subInfo), [ta('xlColDescription'),ta('xlColDate'),ta('xlColCategory'),ta('xlColTotalValue'),ta('xlColPaid'),ta('xlColRemaining'),ta('xlColDueDate'),ta('xlColMethod')], gastosDataRows, [28,12,20,14,14,14,14,16]);
+    XLSX.utils.book_append_sheet(wb, gastosSheet, ta('xlSheetExpenses'));
+
+    // Convidados
+    const guestList = [];
+    ['noiva','noivo'].forEach(side=>{
+      allGuestCategoriesOf(side).forEach(c=>{
+        (getGuestNames(side,c.id)||[]).forEach((n,idx)=>{
+          const isObj = n && typeof n==='object';
+          const hasPay = isPaymentTrackingCat(c.id);
+          guestList.push({
+            name: isObj ? (n.name||'') : n,
+            side: side==='noiva'?ta('sideBride'):ta('sideGroom'),
+            group: c.label,
+            confirmed: isConfirmed(side,c.id,idx),
+            age: (isObj && c.id==='criancas') ? (n.age||'') : '',
+            paying: hasPay ? fmtGuestCount(guestWeight(n)*100)+'%' : ''
+          });
+        });
+      });
+    });
+    const guestDataRows = guestList.map((g,i)=>{
+      const alt = i%2===1;
+      const c = alt?XL_STYLES.cellAlt:XL_STYLES.cell;
+      const cc = alt?XL_STYLES.cellCenterAlt:XL_STYLES.cellCenter;
+      return [
+        xlCell(g.name, c),
+        xlCell(g.side, cc),
+        xlCell(g.group, cc),
+        xlCell(g.confirmed?ta('xlStatusConfirmed'):ta('xlStatusPending'), g.confirmed?XL_STYLES.confirmedYes:XL_STYLES.confirmedNo),
+        xlCell(g.age, cc),
+        xlCell(g.paying, cc)
+      ];
+    });
+    const nConfirmed = guestList.filter(g=>g.confirmed).length;
+    const guestSheet = buildStyledSheet(coupleTitle, ta('xlGuestsSubtitle')(guestList.length, nConfirmed), [ta('xlColName'),ta('xlColSide'),ta('xlColGroup'),ta('xlColStatus'),ta('xlColAge'),ta('xlColPaying')], guestDataRows, [26,12,16,18,10,12]);
+    XLSX.utils.book_append_sheet(wb, guestSheet, ta('xlSheetGuests'));
+
+    // Mesas
+    const tableDataRows = [];
+    state.seating.tables.forEach((t,ti)=>{
+      for(let s=1; s<=t.seats; s++){
+        // Fase 8.0: corrigido também um bug independente aqui — faltava o
+        // prefixo "t"/"s" na chave (era "3-5" em vez de "t3-s5"), pelo que
+        // esta coluna nunca batia certo com state.seating.assignments e a
+        // aba "Mesas" do Excel aparecia sempre sem nomes de convidados.
+        const key = 't'+t.id+'-s'+s;
+        const alt = ti%2===1;
+        const c = alt?XL_STYLES.cellAlt:XL_STYLES.cell;
+        const cc = alt?XL_STYLES.cellCenterAlt:XL_STYLES.cellCenter;
+        const seatGuest = state.seating.assignments[key] ? resolveSeatGuest(state.seating.assignments[key]) : null;
+        const guestName = seatGuest ? seatGuest.name : '';
+        tableDataRows.push([
+          xlCell(ta('tableLabel')(t.id), cc),
+          xlCell((TABLE_SHAPES[t.shape]||{}).label || t.shape, cc),
+          xlCell(s, cc),
+          xlCell(guestName, guestName? c : { ...c, font:{...c.font, color:{rgb:XL_COLORS.tintaSuave}, italic:true} })
+        ]);
+      }
+    });
+    const tableSheet = buildStyledSheet(coupleTitle, ta('xlTablesSubtitle')(state.seating.tables.length), [ta('xlColTable'),ta('xlColShape'),ta('xlColSeat'),ta('xlColGuest')], tableDataRows, [14,14,10,26]);
+    XLSX.utils.book_append_sheet(wb, tableSheet, ta('xlSheetTables'));
+
+    // Fornecedores
+    const supDataRows = state.suppliers.map((s,i)=>{
+      const cat = catById(s.category);
+      const alt = i%2===1;
+      const c = alt?XL_STYLES.cellAlt:XL_STYLES.cell;
+      const cc = alt?XL_STYLES.cellCenterAlt:XL_STYLES.cellCenter;
+      return [
+        xlCell(s.name||'', c),
+        xlCell(cat?cat.name:'', cc),
+        xlCell(s.contact||'', cc),
+        xlCell(s.price||'', cc),
+        xlCell((SUPPLIER_STATUS[s.status]||{}).label || s.status || '', cc),
+        xlCell(s.notas||'', c)
+      ];
+    });
+    const supSheet = buildStyledSheet(coupleTitle, ta('xlSuppliersSubtitle')(state.suppliers.length), [ta('xlColName'),ta('xlColCategory'),ta('xlColContact'),ta('xlColPrice'),ta('xlColStatus'),ta('xlColNotes')], supDataRows, [24,18,16,14,16,30]);
+    XLSX.utils.book_append_sheet(wb, supSheet, ta('xlSheetSuppliers'));
+
+    const coupleName = `${weddingSettings.coupleName1||''}-${weddingSettings.coupleName2||''}`.replace(/[^a-zA-Z0-9-]/g,'') || ta('xlDefaultFilenameSlug');
+    XLSX.writeFile(wb, `weddy-${coupleName}.xlsx`);
+    msgEl.textContent = ta('xlDownloadSuccess');
+    msgEl.className = 'login-msg success';
+  } catch(err){
+    console.error('Weddy export excel error:', err);
+    msgEl.textContent = ta('xlGenericFileError');
+    msgEl.className = 'login-msg error';
+  }
+}
+
+function exportToPDF(){
+  const msgEl = document.getElementById('export-pdf-msg');
+  if(msgEl){ msgEl.textContent = ''; msgEl.className = 'login-msg'; }
+  if(typeof window.jspdf === 'undefined'){
+    if(msgEl){ msgEl.textContent = ta('xlLoadPdfError'); msgEl.className = 'login-msg error'; }
+    return;
+  }
+  try {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit:'mm', format:'a4' });
+  const MARGIN_L = 14, MARGIN_R = 14, BOTTOM_LIMIT = 270;
+  const RUST = [154,79,61];
+  const SOFT = [142,135,128];
+
+  const c1 = weddingSettings.coupleName1||'';
+  const c2 = weddingSettings.coupleName2||'';
+  const dateStr = formatDatePT(weddingSettings.weddingDate);
+  const venue = weddingSettings.venue||ta('genericVenueTBD');
+
+  let y = 20;
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(22);
+  doc.setTextColor(...RUST);
+  doc.text(`${c1} & ${c2}`, MARGIN_L, y);
+  y += 7;
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(11);
+  doc.setTextColor(...SOFT);
+  doc.text(`${dateStr} · ${venue}`, MARGIN_L, y);
+  y += 10;
+
+  function ensureRoom(needed){
+    if(y + needed > BOTTOM_LIMIT){ doc.addPage(); y = 20; }
+  }
+  function addSection(title, head, body){
+    ensureRoom(20);
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(14);
+    doc.setTextColor(...RUST);
+    doc.text(title, MARGIN_L, y);
+    doc.autoTable({
+      startY: y+4,
+      head: [head],
+      body: body,
+      theme: 'striped',
+      headStyles: { fillColor: RUST, fontSize:9.5 },
+      styles: { font:'helvetica', fontSize:9, textColor:[48,44,41] },
+      margin: { left:MARGIN_L, right:MARGIN_R }
+    });
+    y = doc.lastAutoTable.finalY + 12;
+  }
+
+  const orcBody = state.categories.map(c=>{
+    const val = Number(c.value)||0;
+    const pct = state.budget.total ? Math.round((val/state.budget.total)*1000)/10 : 0;
+    return [c.name, fmtEUR(val), pct+'%'];
+  });
+  addSection(ta('xlPdfSectionBudget'), [ta('xlColCategory'),ta('xlColBudgeted'),'%'], orcBody);
+
+  const gastosBody = state.expenses.length ? state.expenses.map(e=>{
+    const cat = catById(e.category);
+    return [e.desc||'', cat?cat.name:'', fmtEUR(Number(e.value)||0), fmtEUR(Number(e.paid)||0), e.method ? (EXPENSE_METHOD_LABELS[e.method]||e.method) : '—'];
+  }) : [[ta('xlEmptyExpenses'),'','','','']];
+  addSection(ta('xlSheetExpenses'), [ta('xlColDescription'),ta('xlColCategory'),ta('xlColValue'),ta('xlColPaid'),ta('xlColMethod')], gastosBody);
+
+  const guestBody = [];
+  ['noiva','noivo'].forEach(side=>{
+    allGuestCategoriesOf(side).forEach(c=>{
+      (getGuestNames(side,c.id)||[]).forEach((n,idx)=>{
+        const isObj = n && typeof n==='object';
+        const hasPay = isPaymentTrackingCat(c.id);
+        const name = isObj ? (n.name||'') : n;
+        const extra = [
+          (isObj && c.id==='criancas' && n.age) ? ta('childAgeYears')(n.age) : '',
+          hasPay ? `${fmtGuestCount(guestWeight(n)*100)}%` : ''
+        ].filter(Boolean).join(' · ');
+        guestBody.push([name, `${side==='noiva'?ta('sideBride'):ta('sideGroom')} · ${c.label}${extra?' · '+extra:''}`, isConfirmed(side,c.id,idx)?ta('xlStatusConfirmed'):'—']);
+      });
+    });
+  });
+  addSection(ta('xlSheetGuests'), [ta('xlColName'),ta('xlColGroup'),ta('xlColStatus')], guestBody.length ? guestBody : [[ta('xlEmptyGuests'),'','']]);
+
+  const supBody = state.suppliers.length ? state.suppliers.map(s=>{
+    const cat = catById(s.category);
+    return [s.name||'', cat?cat.name:'', s.contact||'', (SUPPLIER_STATUS[s.status]||{}).label||''];
+  }) : [[ta('xlEmptySuppliers'),'','','']];
+  addSection(ta('xlSheetSuppliers'), [ta('xlColName'),ta('xlColCategory'),ta('xlColContact'),ta('xlColStatus')], supBody);
+
+  const coupleName = `${c1}-${c2}`.replace(/[^a-zA-Z0-9-]/g,'') || ta('xlDefaultFilenameSlug');
+  doc.save(`weddy-${coupleName}.pdf`);
+  if(msgEl){ msgEl.textContent = ta('xlDownloadSuccess'); msgEl.className = 'login-msg success'; }
+  } catch(err){
+    console.error('Weddy export pdf error:', err);
+    if(msgEl){ msgEl.textContent = ta('xlGenericFileError'); msgEl.className = 'login-msg error'; }
+  }
+}
+
+function flushPendingSave(){
+  if(!FIREBASE_READY || !auth || !auth.currentUser || !currentWeddingId) return Promise.resolve();
+  clearTimeout(saveTimer);
+  return CURRENT_DOC().set({
+    settings: weddingSettings,
+    json: JSON.stringify(state),
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+  }, { merge:true }).catch((err)=>{
+    // Fase 4B da auditoria (LOG-01, P1): antes, uma falha aqui era 100%
+    // silenciosa — nem aviso ao utilizador, nem registo nenhum. Esta
+    // função é chamada sobretudo mesmo antes de recarregar a página (ver
+    // showUpdateBanner), por isso um toast que desaparece com o reload não
+    // ajuda muito aqui — mas registamos o incidente na mesma coleção
+    // `_incident_log` já usada por attachFirestoreSync() para o mesmo
+    // tipo de situação (falha/anomalia de gravação), para ser possível
+    // perceber depois, ao rever os incidentes, que uma gravação falhou
+    // aqui — em vez de desaparecer sem deixar vestígio nenhum.
+    try{
+      firebase.firestore().collection('_incident_log').add({
+        weddingId: currentWeddingId,
+        type: 'flush_pending_save_failed',
+        error: String(err && err.message || err),
+        at: firebase.firestore.FieldValue.serverTimestamp(),
+        userAgent: (typeof navigator!=='undefined' ? navigator.userAgent : '')
+      }).catch(()=>{});
+    }catch(e){}
+  });
+}
+// Fase 4A da auditoria (COPILOT-01, P1): grava imediatamente (sem o
+// debounce de 500ms do pushRemote normal) e devolve a Promise da escrita,
+// para quem precisar de confirmar que os dados chegaram mesmo ao
+// Firestore antes de dizer "sucesso" ao utilizador — usado por
+// WeddyActions.write.createTask (Assistente Weddy).
+function pushRemoteImmediate(){
+  if(!FIREBASE_READY || !auth || !auth.currentUser || !currentWeddingId){
+    return Promise.reject(new Error('not-ready'));
+  }
+  clearTimeout(saveTimer);
+  return CURRENT_DOC().set({
+    settings: weddingSettings,
+    json: JSON.stringify(state),
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+  }, { merge:true }).then(()=>{
+    scheduleGoogleCalendarAutoSync();
+  });
+}
+// Fase 4E da auditoria (LOG-02): propagação em massa para vários
+// guests/{token} (settings, programa do dia, mesas) escrevia cada
+// documento com o seu próprio .catch(()=>{}) dentro do Promise.all — se
+// 3 de 50 falhassem, os 47 restantes eram atualizados, o Promise.all
+// resolvia na mesma (o erro nunca chegava lá) e não ficava nenhum
+// registo de quais tokens falharam. Esta função dá aos chamadores uma
+// forma de saber (para poderem avisar o utilizador, no caso de haver um
+// botão de "Guardar"/"Sincronizar") E de deixar sempre um rasto no
+// _incident_log, mesmo quando não há UI síncrona para mostrar o erro
+// (ex.: sync automático do programa do dia).
+function logMassPropagationFailures(type, failedTokens){
+  if(!failedTokens || !failedTokens.length) return;
+  try{
+    firebase.firestore().collection('_incident_log').add({
+      weddingId: currentWeddingId,
+      type,
+      failedCount: failedTokens.length,
+      failedTokens: failedTokens.slice(0, 50), // limite defensivo, nunca um array sem fim
+      at: firebase.firestore.FieldValue.serverTimestamp(),
+      userAgent: (typeof navigator!=='undefined' ? navigator.userAgent : '')
+    }).catch(()=>{});
+  }catch(e){}
+}
+function pushRemote(confirmToast){
+  if(!FIREBASE_READY || !auth || !auth.currentUser || !currentWeddingId) return;
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(()=>{
+    CURRENT_DOC().set({
+      settings: weddingSettings,
+      json: JSON.stringify(state),
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    }, { merge:true }).then(()=>{
+      if(confirmToast) showSaveToast(false);
+      // Fase 9.2 — depois de QUALQUER gravação bem sucedida, agenda uma
+      // sincronização silenciosa do Google Calendar (só faz alguma coisa
+      // se a integração já estiver ligada — ver scheduleGoogleCalendarAutoSync).
+      scheduleGoogleCalendarAutoSync();
+    }).catch(()=>{
+      showSaveToast(true);
+    });
+  }, confirmToast ? 0 : 500);
+}
+render = function(){ _origRender(); pushRemote(); };
+
+/* ============================================================
+   HISTÓRICO DO CASAMENTO — cópias de segurança e restauro
+   (Fase Histórico, Set 2026, pedido direto da Rita). Ver SNAPSHOTS() para o
+   porquê de viver como subcoleção do próprio casamento.
+============================================================ */
+// createSnapshot grava exatamente o mesmo par de campos (settings + json)
+// que já vive no documento principal — um snapshot é, por desenho, "o
+// documento inteiro tal como estava neste momento", nunca um resumo.
+function createSnapshot(kind, label){
+  if(!FIREBASE_READY || !auth || !auth.currentUser || !currentWeddingId) return Promise.reject(new Error('not-ready'));
+  return SNAPSHOTS().add({
+    settings: weddingSettings,
+    json: JSON.stringify(state),
+    label: label || '',
+    kind, // 'auto' | 'manual'
+    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    createdByEmail: auth.currentUser.email || ''
+  }).then(docRef=>{
+    if(kind==='auto') pruneOldAutoSnapshots();
+    return docRef;
+  });
+}
+// Evita crescimento sem fim dos backups automáticos (os manuais, criados
+// deliberadamente pela pessoa, nunca são apagados sozinhos). Busca só pela
+// data (índice simples, sem precisar de nenhum índice composto no
+// Firestore) e filtra "kind" do lado do cliente.
+function pruneOldAutoSnapshots(){
+  SNAPSHOTS().orderBy('createdAt','desc').limit(60).get().then(qs=>{
+    const autoDocs = qs.docs.filter(d=> d.data().kind==='auto');
+    if(autoDocs.length <= SNAPSHOT_AUTO_KEEP) return;
+    autoDocs.slice(SNAPSHOT_AUTO_KEEP).forEach(d=> d.ref.delete().catch(()=>{}));
+  }).catch(()=>{});
+}
+// No máximo um backup automático a cada ~20h (nunca a cada gravação) —
+// chamado uma vez por sessão, logo a seguir à primeira sincronização
+// completa (ver attachFirestoreSync). currentLastAutoSnapshotAt vem do
+// próprio documento do casamento (data.lastAutoSnapshotAt), por isso o
+// intervalo é respeitado mesmo entre dispositivos diferentes.
+function maybeCreateAutoSnapshot(){
+  if(!FIREBASE_READY || !auth || !auth.currentUser || !currentWeddingId) return;
+  const last = currentLastAutoSnapshotAt && currentLastAutoSnapshotAt.toDate ? currentLastAutoSnapshotAt.toDate() : null;
+  const MIN_INTERVAL_MS = 20 * 60 * 60 * 1000;
+  if(last && (Date.now() - last.getTime()) < MIN_INTERVAL_MS) return;
+  createSnapshot('auto', ta('snapshotAutoLabel')).then(()=>{
+    CURRENT_DOC().update({ lastAutoSnapshotAt: firebase.firestore.FieldValue.serverTimestamp() }).catch(()=>{});
+  }).catch(err=>{ console.error('Weddy auto snapshot error:', err && err.code, err && err.message); });
+}
+function loadHistoricoSnapshots(){
+  if(!FIREBASE_READY || !currentWeddingId) return;
+  historicoLoading = true; historicoError = false; _origRender();
+  SNAPSHOTS().orderBy('createdAt','desc').limit(30).get().then(qs=>{
+    historicoSnapshots = qs.docs.map(d=>({ id:d.id, ...d.data() }));
+    historicoLoading = false;
+    _origRender();
+  }).catch(err=>{
+    console.error('Weddy load snapshots error:', err && err.code, err && err.message);
+    historicoLoading = false; historicoError = true;
+    _origRender();
+  });
+}
+function formatSnapshotDate(ts){
+  if(!ts) return '';
+  const d = ts.toDate ? ts.toDate() : new Date(ts);
+  if(isNaN(d.getTime())) return '';
+  const meses = ta('monthNamesShort');
+  const hh = String(d.getHours()).padStart(2,'0');
+  const mm = String(d.getMinutes()).padStart(2,'0');
+  return `${d.getDate()} ${meses[d.getMonth()]} ${ta('dateAtTimeSeparator')} ${hh}:${mm}`;
+}
+// Cria já a cópia de segurança manual pedida no ecrã "Histórico do
+// casamento" — mesma função createSnapshot() dos backups automáticos, só
+// muda o "kind" e o rótulo (escrito pela própria pessoa, ex.: "Antes de
+// reorganizar mesas").
+function createManualSnapshot(label){
+  historicoCreatingBackup = true; _origRender();
+  createSnapshot('manual', label).then(()=>{
+    historicoCreatingBackup = false;
+    loadHistoricoSnapshots();
+  }).catch(err=>{
+    console.error('Weddy manual snapshot error:', err && err.code, err && err.message);
+    historicoCreatingBackup = false;
+    _origRender();
+    alert(ta('alertSnapshotCreateError'));
+  });
+}
+// Restaurar: pedido explícito da Rita para NUNCA ser um simples "carrega o
+// JSON e substitui tudo" (o que a app concorrente faz) — cria sempre,
+// primeiro, uma cópia de segurança automática do estado ATUAL, e só depois
+// aplica os dados do snapshot escolhido. Se essa cópia de segurança falhar,
+// o restauro é cancelado por completo (nunca troca dados sem essa rede de
+// segurança).
+function restoreSnapshot(snapshotId){
+  const snap = historicoSnapshots.find(s=>s.id===snapshotId);
+  if(!snap) return;
+  if(!confirm(ta('confirmRestoreSnapshotText'))) return;
+  // Faz o parse ANTES de mexer em seja o que for — se o JSON guardado
+  // estiver corrompido, falha aqui, sem sequer chegar a criar o backup de
+  // segurança nem a tocar em nada.
+  let restoredState, restoredSettings;
+  try{
+    restoredState = JSON.parse(snap.json);
+    restoredSettings = snap.settings;
+  }catch(e){
+    alert(ta('alertRestoreError'));
+    return;
+  }
+  historicoRestoringId = snapshotId; _origRender();
+  createSnapshot('auto', ta('snapshotBeforeRestoreLabel')).then(()=>{
+    // Auditoria pós-fixes (Set 2026): a primeira versão desta função
+    // trocava "state"/"weddingSettings" locais ANTES de escrever no
+    // Firestore — se o write falhasse (rede em baixo, a meio), a pessoa
+    // ficava a olhar para dados restaurados que nunca chegaram a ser
+    // gravados, exatamente ao mesmo tempo que via um alerta a dizer "os teus
+    // dados atuais não foram alterados" (falso). Agora o Firestore é escrito
+    // primeiro, a partir dos dados do snapshot (não de "state"/
+    // "weddingSettings"); só depois de confirmado o sucesso é que a app
+    // troca a cópia local — a escrita em si é uma única operação sobre um
+    // único documento, que o Firestore trata sempre como tudo-ou-nada,
+    // nunca fica "meio gravada".
+    return CURRENT_DOC().set({
+      settings: restoredSettings,
+      json: JSON.stringify(restoredState),
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    }, { merge:true });
+  }).then(()=>{
+    state = restoredState;
+    weddingSettings = restoredSettings;
+    historicoRestoringId = null;
+    closeAllSheets();
+    definicoesSection = null;
+    activeTab = 'inicio';
+    _origRender();
+    showSaveToast(false);
+  }).catch(err=>{
+    // Nada local foi alterado (ver nota acima) — a mensagem de erro
+    // continua verdadeira mesmo se o passo que falhou foi o próprio
+    // restauro (não só o backup de segurança).
+    console.error('Weddy restore snapshot error:', err && err.message);
+    historicoRestoringId = null;
+    _origRender();
+    alert(ta('alertRestoreError'));
+  });
+}
+// "Ver" — mostra um resumo rápido do snapshot (nomes, data, local, nº de
+// convidados, total do orçamento) sem restaurar nada, para a pessoa decidir
+// com confiança antes de tocar em "Restaurar". Reaproveita a bottom-sheet
+// já usada para Termos/Privacidade (openLegalOverlay).
+function showSnapshotPreview(snapshotId){
+  const snap = historicoSnapshots.find(s=>s.id===snapshotId);
+  if(!snap) return;
+  let summaryHtml = `<p>${ta('historicoPreviewParseError')}</p>`;
+  try{
+    const st = JSON.parse(snap.json);
+    const set = snap.settings || {};
+    const coupleNames = (set.coupleName1 && set.coupleName2) ? `${set.coupleName1} & ${set.coupleName2}` : ta('notIdentifiedLabel');
+    const dateStr = set.weddingDate ? formatDatePT(set.weddingDate) : ta('notIdentifiedLabel');
+    const venue = set.venue || ta('notIdentifiedLabel');
+    const guestCount = countMeaningfulData(st).guests;
+    const budgetTotal = (st.budget && st.budget.total) ? Number(st.budget.total)||0 : 0;
+    summaryHtml = `
+      <p><b>${ta('historicoPreviewCoupleLabel')}:</b> ${escapeHTML(coupleNames)}</p>
+      <p><b>${ta('historicoPreviewDateLabel')}:</b> ${escapeHTML(dateStr)}</p>
+      <p><b>${ta('historicoPreviewVenueLabel')}:</b> ${escapeHTML(venue)}</p>
+      <p><b>${ta('historicoPreviewGuestsLabel')}:</b> ${guestCount}</p>
+      <p><b>${ta('historicoPreviewBudgetLabel')}:</b> ${fmtEUR(budgetTotal)}</p>
+    `;
+  }catch(e){ /* summaryHtml já tem a mensagem de erro */ }
+  openLegalOverlay('historicoPreviewTitle', summaryHtml);
+}
+
+/* Rede de segurança: nunca aceitar um snapshot do Firestore que pareça uma
+   perda de dados. Se o que está guardado localmente tem uma quantidade
+   substancial de convidados/tarefas e o que chega agora do Firestore está
+   subitamente vazio nos dois ao mesmo tempo, é muito mais provável ser uma
+   leitura corrompida (rede, cache antiga, bug) do que uma pessoa a apagar
+   tudo de propósito — nesse caso, ignora o snapshot e mantém o que já lá
+   está, em vez de aceitar cegamente e arriscar gravar por cima dos dados
+   reais na próxima interação. */
+function countMeaningfulData(s){
+  let guests = 0, todos = 0;
+  try{
+    ['noiva','noivo'].forEach(side=>{
+      const g = s.guests && s.guests[side];
+      if(!g) return;
+      ['familia','amigos','duvida','staff'].forEach(k=>{ if(Array.isArray(g[k])) guests += g[k].length; });
+      if(Array.isArray(g.custom)) g.custom.forEach(cc=>{ guests += (cc.names||[]).length; });
+    });
+  }catch(e){}
+  try{ (s.todoCategories||[]).forEach(cat=>{ todos += (cat.items||[]).length; }); }catch(e){}
+  return { guests, todos };
+}
+function looksLikeDataLoss(before, after){
+  const b = countMeaningfulData(before), a = countMeaningfulData(after);
+  const wasPopulated = (b.guests + b.todos) >= 5;
+  const nowEmpty = (a.guests + a.todos) === 0;
+  return wasPopulated && nowEmpty;
+}
+function attachFirestoreSync(){
+  if(unsubscribeSnapshot) unsubscribeSnapshot();
+  unsubscribeSnapshot = CURRENT_DOC().onSnapshot(snap=>{
+    let changed = false;
+    if(snap.exists){
+      const data = snap.data();
+      if(data.json){
+        const incoming = JSON.parse(data.json);
+        if(JSON.stringify(incoming) !== JSON.stringify(state)){
+          if(looksLikeDataLoss(state, incoming)){
+            console.error('[Weddy] Snapshot recebido do Firestore parece ter perdido dados (convidados/tarefas foram todos a zero) — a IGNORAR este snapshot para não gravar por cima dos dados reais.', { local: countMeaningfulData(state), recebido: countMeaningfulData(incoming) });
+            if(!dataLossGuardTripped){
+              dataLossGuardTripped = true;
+              try{
+                firebase.firestore().collection('_incident_log').add({
+                  weddingId: currentWeddingId,
+                  type: 'possible_data_loss_snapshot_blocked',
+                  local: countMeaningfulData(state),
+                  recebido: countMeaningfulData(incoming),
+                  at: firebase.firestore.FieldValue.serverTimestamp(),
+                  userAgent: (typeof navigator!=='undefined' ? navigator.userAgent : '')
+                }).catch(()=>{});
+              }catch(e){}
+              setTimeout(()=>{ alert(ta('alertDataAnomaly')); }, 300);
+            }
+          } else {
+            state = incoming; changed = true;
+          }
+        }
+        // Contas criadas antes de existirem certos campos podem não os ter guardado — preenche em falta
+        const defaults = seedData();
+        Object.keys(defaults).forEach(key=>{
+          if(state[key] === undefined) state[key] = defaults[key];
+        });
+        if(state.payments === undefined) state.payments = [];
+        if(!state.honeymoon || !Array.isArray(state.honeymoon.options)){
+          state.honeymoon = { options:[] };
+        }
+        if(state.budget && state.budget.total === undefined) state.budget.total = 20000;
+        normalizeCategories();
+        migrateCategoryDescriptions();
+        migrateGuestCategories();
+        migrateConfirmedAndSeatingToGuestId();
+        // Fase 6.1.1 — migração financeira idempotente (ver
+        // migrateLegacySupplierPayments): corre a cada snapshot, mas só
+        // produz alterações reais na primeira vez que encontra pagamentos
+        // legados por migrar. Quando migra algo, força a gravação para o
+        // Firestore deixar de depender de isto voltar a correr no próximo
+        // load — sem isto, um export/CSV ou uma leitura direta ao
+        // Firestore continuaria a ver os dois livros por reconciliar.
+        if(migrateLegacySupplierPayments()){
+          changed = true;
+          pushRemote(true);
+        }
+        // Fase 9.2 — idem, mas para dar id às despesas antigas (ver
+        // migrateExpenseIds acima).
+        if(migrateExpenseIds()){
+          changed = true;
+          pushRemote(true);
+        }
+      }
+      if(data.settings && JSON.stringify(data.settings) !== JSON.stringify(weddingSettings)){ weddingSettings = data.settings; changed = true; }
+      if(data.ownerEmails) currentWeddingOwners = data.ownerEmails;
+      if(data.creatorEmail) currentWeddingCreator = data.creatorEmail;
+      if(data.lastLoginByEmail) currentLastLogins = data.lastLoginByEmail;
+      if(data.uidByEmail) currentUidByEmail = data.uidByEmail;
+      if(data.subscription !== undefined) currentSubscription = data.subscription;
+      if(data.lastAutoSnapshotAt !== undefined) currentLastAutoSnapshotAt = data.lastAutoSnapshotAt;
+      // Pedido (Set 2026): a conversa do Assistente já NÃO deve continuar de
+      // onde ficou ao reabrir a app ou trocar de sessão — por isso deixámos
+      // de restaurar "assistantChatHistory" aqui. "assistChatHistory" começa
+      // sempre vazio a cada abertura da página (é uma variável normal,
+      // reiniciada nesse momento) e só existe em memória durante a sessão
+      // atual.
+    }
+    let renderNeeded = changed || !firstSyncDone;
+    if(renderNeeded && isEditingTextField()){
+      pendingRenderAfterEdit = true;
+      renderNeeded = false;
+    }
+    if(renderNeeded){
+      _origRender();
+    }
+    if(!firstSyncDone){
+      firstSyncDone = true;
+      document.getElementById('login-screen').classList.add('hidden');
+      document.documentElement.classList.remove('login-active');
+      // Vai já buscar as respostas de RSVP em segundo plano (sem esperar que
+      // a pessoa abra essa página), só para o indicador de "novas respostas"
+      // no menu de Definições poder aparecer correto desde o início.
+      if(hasActiveSubscription() && !rsvpResponsesLoaded && !rsvpLoadingResponses) loadRSVPResponses();
+      // Fase Histórico (Set 2026): backup automático — no máximo um por
+      // sessão/dia (ver maybeCreateAutoSnapshot), nunca a cada gravação.
+      maybeCreateAutoSnapshot();
+    }
+  }, err=>{
+    if(err.code === 'permission-denied'){
+      firstSyncDone = false;
+      document.getElementById('login-screen').classList.remove('hidden'); document.documentElement.classList.add('login-active');
+      renderLoginForm(ta('loginErrorAccessData'), true);
+    }
+  });
+}
+
+function sanitizeEmailKey(email){ return email.replace(/\./g,'_dot_').replace(/@/g,'_at_'); }
+// Fase Consentimento (Set 2026): tudo o que antes acontecia logo a seguir a
+// encontrar o casamento (findOrCreateFlow) foi movido para aqui, para poder
+// ser chamado tanto de imediato (consentimento já em dia) como só depois de
+// a pessoa aceitar a versão atual no ecrã "Antes de continuares"
+// (renderReconsentGate) — nunca antes disso.
+function proceedIntoExistingWedding(user){
+  // Fix 6 da auditoria pós-fixes (Set 2026): as inspirações de
+  // fotos/vestido só podem ser lidas do localStorage DEPOIS de
+  // currentWeddingId estar definido (as chaves agora são por
+  // casamento) — chamado aqui, e não uma única vez ao carregar a
+  // página, também garante que trocar de conta na mesma sessão do
+  // browser recarrega as inspirações certas para a nova conta.
+  loadInspirations();
+  loadDressInspirations();
+  attachFirestoreSync();
+  CURRENT_DOC().update({
+    ['lastLoginByEmail.'+sanitizeEmailKey(user.email.toLowerCase())]: firebase.firestore.FieldValue.serverTimestamp(),
+    ownerUids: firebase.firestore.FieldValue.arrayUnion(user.uid),
+    ['uidByEmail.'+sanitizeEmailKey(user.email.toLowerCase())]: user.uid
+  }).catch(()=>{});
+  // Fase 9.1 — se acabámos de voltar do OAuth do Google Calendar,
+  // leva a pessoa direto de volta ao ecrã onde estava, com a
+  // mensagem certa (nunca a deixa perdida no Início sem explicação).
+  if(pendingGoogleCalendarReturn){
+    activeTab = 'definicoes';
+    definicoesSection = 'googlecalendar';
+    if(pendingGoogleCalendarReturn==='success') googleCalendarActionMsg = { type:'success', text: ta('googleCalendarOAuthSuccess') };
+    else if(pendingGoogleCalendarReturn==='cancelled') googleCalendarActionMsg = { type:'error', text: ta('googleCalendarOAuthCancelled') };
+    else googleCalendarActionMsg = { type:'error', text: ta('googleCalendarOAuthError') };
+    pendingGoogleCalendarReturn = null;
+    googleCalendarIntegration = null; // força recarregar do zero
+  }
+}
+// Fase Consentimento (Set 2026): ecrã "Antes de continuares" — mostrado a
+// contas já existentes cujo weddings/{weddingId}.consent está em falta ou
+// tem uma versão mais antiga do que CURRENT_TERMS_VERSION/
+// CURRENT_PRIVACY_VERSION. Só depois de aceitarem é que onAccept() é
+// chamado (proceedIntoExistingWedding), nunca antes — este ecrã fica no
+// lugar do resto da app, não por cima dela.
+function renderReconsentGate(user, onAccept){
+  lastLoginRender = ()=>renderReconsentGate(user, onAccept);
+  document.getElementById('login-inner').innerHTML = `
+    <h1 style="font-family:'Cormorant Garamond',serif; font-weight:500; font-size:30px; line-height:1.2; color:var(--heading); text-align:center; margin:0 0 14px;">${ta('reconsentTitle')}</h1>
+    <div class="login-msg" style="margin:16px auto 20px;">${ta('reconsentIntro')}</div>
+    <div style="display:flex; flex-direction:column; gap:10px; max-width:320px; margin:0 auto 18px; text-align:left;">
+      <div class="list-row tappable" id="reconsent-read-privacy" style="cursor:pointer; background:var(--card); border:1px solid var(--line); border-radius:14px;">
+        <div class="def-row-icon" style="background:rgba(193,88,62,0.12); color:var(--rust-dark);">${ICONS.docnote}</div>
+        <div class="def-row-mid">
+          <div class="def-row-title">${ta('reconsentPrivacyRowTitle')}</div>
+          <div class="def-row-desc">${ta('privacyDesc')}</div>
+        </div>
+        ${ICONS.chev}
+      </div>
+      <div class="list-row tappable" id="reconsent-read-terms" style="cursor:pointer; background:var(--card); border:1px solid var(--line); border-radius:14px;">
+        <div class="def-row-icon" style="background:rgba(193,88,62,0.12); color:var(--rust-dark);">${ICONS.checklist}</div>
+        <div class="def-row-mid">
+          <div class="def-row-title">${ta('termsTitle')}</div>
+          <div class="def-row-desc">${ta('termsDesc')}</div>
+        </div>
+        ${ICONS.chev}
+      </div>
+    </div>
+    <label style="display:flex; flex-direction:column; align-items:center; gap:6px; text-align:center; font-size:12.5px; color:var(--ink-soft); line-height:1.5; cursor:pointer; max-width:280px; margin:0 auto;">
+      <input type="checkbox" id="reconsent-check" style="flex-shrink:0;">
+      <span>${ta('consentCheckboxHtml')()}</span>
+    </label>
+    <button class="login-btn" id="reconsent-accept" style="margin-top:14px;">${ta('btnAcceptContinue')}</button>
+    <div class="login-msg" id="reconsent-msg"></div>
+    <div class="login-note" style="cursor:pointer; margin-top:14px;" id="reconsent-signout">${ta('signOut')}</div>
+  `;
+  document.getElementById('reconsent-read-privacy').addEventListener('click', ()=>openLegalOverlay('privacyTitle', privacyBodyHtml()));
+  document.getElementById('reconsent-read-terms').addEventListener('click', ()=>openLegalOverlay('termsTitle', termsBodyHtml()));
+  document.getElementById('reconsent-signout').addEventListener('click', ()=>{ if(typeof auth!=='undefined' && auth) auth.signOut(); });
+  document.getElementById('reconsent-accept').addEventListener('click', ()=>{
+    const check = document.getElementById('reconsent-check');
+    const msg = document.getElementById('reconsent-msg');
+    if(!check || !check.checked){ msg.textContent = ta('consentRequiredError'); msg.className = 'login-msg error'; return; }
+    const btn = document.getElementById('reconsent-accept');
+    btn.disabled = true; btn.textContent = ta('btnWait');
+    CURRENT_DOC().update({
+      consent: {
+        termsVersion: CURRENT_TERMS_VERSION,
+        privacyVersion: CURRENT_PRIVACY_VERSION,
+        acceptedAt: firebase.firestore.FieldValue.serverTimestamp()
+      }
+    }).then(()=>{
+      onAccept();
+    }).catch(err=>{
+      console.error('Weddy reconsent error:', err && err.code, err && err.message);
+      btn.disabled = false; btn.textContent = ta('btnAcceptContinue');
+      msg.textContent = ta('msgSendError'); msg.className = 'login-msg error';
+    });
+  });
+}
+function findOrCreateFlow(user, isRetry){
+  renderLoading(ta('verifyingAccount'));
+  WEDDINGS().where('ownerEmails','array-contains', user.email.toLowerCase()).limit(1).get().then(qs=>{
+    if(!qs.empty){
+      const weddingDoc = qs.docs[0];
+      currentWeddingId = weddingDoc.id;
+      const consent = weddingDoc.data().consent;
+      const needsReconsent = !consent || consent.termsVersion !== CURRENT_TERMS_VERSION || consent.privacyVersion !== CURRENT_PRIVACY_VERSION;
+      if(needsReconsent){
+        renderReconsentGate(user, ()=>proceedIntoExistingWedding(user));
+        return;
+      }
+      proceedIntoExistingWedding(user);
+    } else {
+      currentWeddingId = null;
+      inspirations = [];
+      dressInspirations = [];
+      renderOnboarding();
+    }
+  }).catch(err=>{
+    // O "bilhete de acesso" (token) pode estar desatualizado — por exemplo logo depois
+    // de confirmares o email. Força um token novo e tenta mais uma vez antes de desistir.
+    if(err.code==='permission-denied' && !isRetry){
+      user.getIdToken(true).then(()=>{ findOrCreateFlow(user, true); }).catch(()=>{
+        console.error('Weddy Firestore error:', err.code, err.message);
+        renderLoginForm(ta('loginErrorVerifyAccount'), true);
+      });
+      return;
+    }
+    console.error('Weddy Firestore error:', err.code, err.message);
+    const extra = err.code==='permission-denied' ? ta('loginErrorPermExtra') : ' ('+(err.code||'')+')';
+    renderLoginForm(ta('loginErrorVerifyGeneric')+extra, true);
+  });
+}
+
+function closePaymentAlert(){
+  paymentAlertDismissed = true;
+  try{ localStorage.setItem('weddy-payment-alert-dismissed-date', new Date().toDateString()); }catch(e){}
+  document.getElementById('payment-alert-popup').classList.remove('show');
+}
+document.getElementById('payment-alert-ok').addEventListener('click', closePaymentAlert);
+document.getElementById('payment-alert-popup').addEventListener('click', e=>{
+  if(e.target.id==='payment-alert-popup') closePaymentAlert();
+});
+
+(function guardAndroidBackGesture(){
+  // No Android, deslizar da borda (ou o botão de recuar) navega no histórico
+  // do browser. Como esta app nunca muda o URL, não há nada nesse histórico
+  // para "consumir" — por isso o primeiro gesto fechava a app de repente,
+  // mesmo a meio de uma sub-página ou de um formulário aberto.
+  // Isto não muda nada no iOS: lá não existe um gesto de sistema equivalente
+  // ligado ao histórico do browser, por isso o comportamento fica igual.
+  try{
+    history.pushState({weddyGuard:true}, '', location.href);
+  }catch(e){ return; }
+  window.addEventListener('popstate', ()=>{
+    if(weddyBackStep()){
+      try{ history.pushState({weddyGuard:true}, '', location.href); }catch(e){}
+    }
+  });
+})();
+
+/* ============================================================
+   BLOQUEAR "DESLIZAR DA MARGEM PARA VOLTAR" — reforço por JavaScript
+   O CSS (overscroll-behavior-x) já trata da maior parte dos casos, mas em
+   versões mais antigas do Safari esse CSS pode não chegar. Isto impede que
+   o gesto sequer comece: se o toque nasce mesmo junto à margem (esquerda ou
+   direita), ignoramos esse arrasto por completo. Toques que começam mais
+   para dentro do ecrã continuam a funcionar normalmente (scroll, arrastar
+   para reordenar convidados, etc.).
+============================================================ */
+(function preventEdgeSwipeBack(){
+  const EDGE_PX = 14;
+  let watching = false;
+  document.addEventListener('touchstart', function(e){
+    if(e.touches.length !== 1){ watching = false; return; }
+    const x = e.touches[0].clientX;
+    watching = (x <= EDGE_PX || x >= window.innerWidth - EDGE_PX);
+  }, { passive:true });
+  document.addEventListener('touchmove', function(e){
+    if(watching) e.preventDefault();
+  }, { passive:false });
+  document.addEventListener('touchend', function(){ watching = false; });
+  document.addEventListener('touchcancel', function(){ watching = false; });
+})();
+
+(function lockOrientation(){
+  try{
+    if(screen.orientation && screen.orientation.lock){
+      screen.orientation.lock('portrait').catch(()=>{});
+    }
+  }catch(e){}
+
+  function isDesktopLike(){
+    return window.matchMedia('(min-width:760px) and (hover:hover)').matches;
+  }
+  function isTouchDevice(){
+    return ('ontouchstart' in window) || (navigator.maxTouchPoints>0) || (navigator.msMaxTouchPoints>0);
+  }
+  function setBodySize(){
+    document.body.style.width = window.innerWidth + 'px';
+    document.body.style.height = window.innerHeight + 'px';
+  }
+  // Decide, de forma explícita em JS (não só por CSS), se a app deve
+  // mostrar o aviso a bloquear o ecrã. Isto garante que a barra de
+  // navegação nunca fica visível/tocável por baixo de um layout virado —
+  // só um aparelho tátil (telemóvel/tablet) em paisagem ativa o bloqueio;
+  // um PC com rato nunca o faz, mesmo que a janela seja "larga".
+  function updateRotationLock(){
+    if(isDesktopLike()){
+      document.documentElement.classList.remove('rotate-blocked');
+      return;
+    }
+    const isLandscape = window.innerWidth > window.innerHeight;
+    document.documentElement.classList.toggle('rotate-blocked', isTouchDevice() && isLandscape);
+  }
+
+  // Estado inicial: mede o ecrã e fixa a app nesse tamanho em pixels.
+  setBodySize();
+  updateRotationLock();
+
+  // PC: a janela pode ser redimensionada de verdade — acompanha.
+  window.addEventListener('resize', function(){
+    if(isDesktopLike()) setBodySize();
+  });
+
+  // Telemóvel: só reage a mudanças reais de orientação (rodar o
+  // aparelho) — nunca a pequenas variações de altura causadas pela
+  // barra de endereço do browser a aparecer/desaparecer durante o
+  // scroll, que não devem mexer no tamanho fixo da app.
+  function onOrientationChange(){
+    setTimeout(function(){
+      updateRotationLock();
+      if(!isDesktopLike() && window.innerWidth <= window.innerHeight){
+        setBodySize(); // voltou a vertical — reajusta ao ecrã atual
+      }
+    }, 60);
+  }
+  window.addEventListener('orientationchange', onOrientationChange);
+  if(screen.orientation && screen.orientation.addEventListener){
+    screen.orientation.addEventListener('change', onOrientationChange);
+  }
+})();
+
+(function detectInAppBrowser(){
+  const ua = navigator.userAgent || '';
+  const isInApp = /Instagram|FBAN|FBAV|FB_IAB|Line\/|MicroMessenger/i.test(ua);
+  if(isInApp){
+    document.getElementById('iab-warning').classList.add('show');
+  }
+})();
+
+if(FIREBASE_READY){
+  auth.onAuthStateChanged(user=>{
+    if(user){
+      activeTab = 'inicio';
+      collapseAllSections();
+      if(!user.emailVerified){
+        document.getElementById('login-screen').classList.remove('hidden'); document.documentElement.classList.add('login-active');
+        renderVerifyEmail(user);
+        return;
+      }
+      user.getIdToken(true).finally(()=>{ findOrCreateFlow(user); });
+    } else {
+      firstSyncDone = false;
+      currentWeddingId = null;
+      activeTab = 'inicio';
+      // Pedido (Set 2026): a conversa do Assistente Weddy deve recomeçar
+      // sempre que a pessoa fecha a app ou perde a sessão — nunca continuar
+      // de onde tinha ficado. "Perder a sessão" é exatamente este ramo do
+      // onAuthStateChanged (user===null), por isso é aqui que limpamos.
+      assistChatHistory = [];
+      if(unsubscribeSnapshot){ unsubscribeSnapshot(); unsubscribeSnapshot = null; }
+      document.getElementById('login-screen').classList.remove('hidden'); document.documentElement.classList.add('login-active');
+      renderLoginForm();
+    }
+  });
+} else {
+  renderLoginSetupNeeded();
+}
+
+window.flushPendingSave = flushPendingSave;
+window.closeAllSheets = closeAllSheets;
+
+})();
+
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('./sw.js').then(reg=>{
+      // Verifica logo se há uma versão nova, e volta a verificar sempre
+      // que a pessoa reabre a app (ex: vem do fundo do telemóvel).
+      reg.update().catch(()=>{});
+      document.addEventListener('visibilitychange', ()=>{
+        if(document.visibilityState==='visible') reg.update().catch(()=>{});
+      });
+      setInterval(()=>reg.update().catch(()=>{}), 20*60*1000); // a cada 20 min, se a app ficar aberta
+
+      // O Safari, ao trazer a app de volta do fundo do telemóvel (em vez de a
+      // abrir de raiz), pode manter na página um estado antigo — por exemplo,
+      // um formulário que tinha ficado aberto antes de sair. Isto garante que
+      // ficamos sempre com um estado limpo assim que a pessoa volta a ver a app.
+      document.addEventListener('visibilitychange', ()=>{
+        if(document.visibilityState==='visible' && window.closeAllSheets) window.closeAllSheets();
+      });
+      window.addEventListener('pageshow', e=>{
+        if(e.persisted && window.closeAllSheets) window.closeAllSheets();
+      });
+
+      reg.addEventListener('updatefound', ()=>{
+        const installing = reg.installing;
+        if(!installing) return;
+        installing.addEventListener('statechange', ()=>{
+          // 'installed' + já havia um controlador ativo = é mesmo uma atualização, não a 1ª instalação
+          if(installing.state==='installed' && navigator.serviceWorker.controller){
+            showUpdateBanner();
+          }
+        });
+      });
+    }).catch(()=>{});
+    // Nota: já não recarregamos automaticamente aqui ao mudar de controlador
+    // — isso disparava um recarregar sozinho mal a atualização instalasse,
+    // cortando o aviso "A Weddy foi atualizada" a meio antes da pessoa
+    // conseguir tocar em "Atualizar agora". Agora só recarrega quando o
+    // próprio botão é mesmo tocado (ver showUpdateBanner mais abaixo).
+  });
+}
+function showUpdateBanner(){
+  if(document.getElementById('update-banner')) return;
+  const el = document.createElement('div');
+  el.id = 'update-banner';
+  el.innerHTML = `
+    <span>✨ A Weddy foi atualizada</span>
+    <button id="update-banner-btn">Atualizar agora</button>
+  `;
+  document.body.appendChild(el);
+  document.getElementById('update-banner-btn').addEventListener('click', ()=>{
+    el.textContent = 'A atualizar…';
+    const safety = setTimeout(()=>location.reload(), 2500); // rede lenta ou em baixo — recarrega mesmo assim
+    (window.flushPendingSave ? window.flushPendingSave() : Promise.resolve()).finally(()=>{
+      clearTimeout(safety);
+      location.reload();
+    });
+  });
+}
+</script>
+</body>
+</html>
