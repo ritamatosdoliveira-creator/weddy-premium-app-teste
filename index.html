@@ -1906,8 +1906,9 @@ const CAT_COLOR_PAIRS = [
 ];
 function chipStyle(i){ const p = CAT_COLOR_PAIRS[i%CAT_COLOR_PAIRS.length]; return `background:${p.bg}; color:${p.fg};`; }
 
-const CHECKLIST_PHASES = [
-  { id:'f1', title:'Fase 1', desc:'Para fazer logo após o noivado — prioridade máxima.', tasks:[
+function CHECKLIST_PHASES_LIST(){ return ta('checklistPhasesData'); }
+const CHECKLIST_PHASES_PT = [
+  { id:'f1', desc:'Para fazer logo após o noivado — prioridade máxima.', tasks:[
     {t:'Definir o orçamento', n:'com realismo'},
     {t:'Fazer uma lista de convidados preliminar', n:'íntimo ou grande — 50, 100, +150?'},
     {t:'Perceber que estilo/tema combina com os dois', n:'minimalista, boho, clássico...'},
@@ -1917,7 +1918,7 @@ const CHECKLIST_PHASES = [
     {t:'Visitar locais e comparar orçamento/disponibilidade'},
     {t:'Fechar o local ideal', n:'o mais rápido possível'}
   ]},
-  { id:'f2', title:'Fase 2', desc:'Começa a montar a estrutura — organiza as pastas do Pinterest.', tasks:[
+  { id:'f2', desc:'Começa a montar a estrutura — organiza as pastas do Pinterest.', tasks:[
     {t:'Contratar fotógrafo e videógrafo', n:'esgotam cedo'},
     {t:'Reservar o catering', n:'se não estiver incluído no local'},
     {t:'Pesquisar bandas, DJ ou saxofone'},
@@ -1925,66 +1926,66 @@ const CHECKLIST_PHASES = [
     {t:'Preparar um moodboard', n:'cores base, ambiente, prioridades'},
     {t:'Definir convites digitais ou físicos', n:'grafismo, designer de papelaria'}
   ]},
-  { id:'f3', title:'Fase 3', desc:'A parte mais divertida — o vestido e a lua de mel.', tasks:[
+  { id:'f3', desc:'A parte mais divertida — o vestido e a lua de mel.', tasks:[
     {t:'Começar a procurar o vestido de noiva', n:'na 1ª prova, foca-te só em perceber o teu estilo'},
     {t:'Pensar na lua de mel', n:'se for internacional, comprar com antecedência ajuda no preço'},
     {t:'Definir o fato do noivo', n:'depois do vestido escolhido, para combinarem'},
     {t:'Fechar a lista de damas, pajens, madrinhas e padrinhos'},
     {t:'Preparar o convite formal para damas e pajens'}
   ]},
-  { id:'f4', title:'Fase 4', desc:'O casamento está a ganhar forma.', tasks:[
+  { id:'f4', desc:'O casamento está a ganhar forma.', tasks:[
     {t:'Reservar decoradora/florista/aluguer de móveis'},
     {t:'Escolher o bolo e fazer provas de menu'},
     {t:'Enviar os save the dates'},
     {t:'Planear sessão de noivado', n:'se quiserem'},
     {t:'Mandar fazer o vestido', n:'com todos os ajustes'}
   ]},
-  { id:'f5', title:'Fase 5', desc:'Não te esqueças de nenhum destes — são imprescindíveis.', tasks:[
+  { id:'f5', desc:'Não te esqueças de nenhum destes — são imprescindíveis.', tasks:[
     {t:'Fechar maquilhadora e cabeleireira'},
     {t:'Fechar celebrante/igreja', n:'ir ao registo civil 2-6 meses antes'},
     {t:'Procurar animação extra', n:'fogos, photo booth, zona de crianças'},
     {t:'Assegurar hotéis e transporte', n:'para noivos e convidados'}
   ]},
-  { id:'f6', title:'Fase 6', desc:'Os pequenos detalhes fazem toda a diferença.', tasks:[
+  { id:'f6', desc:'Os pequenos detalhes fazem toda a diferença.', tasks:[
     {t:'Comprar as alianças'},
     {t:'Preparar o dress code para convidados de honra'},
     {t:'Fechar os detalhes de decoração', n:'mesas, cores, arranjos, bouquet, porta-alianças...'},
     {t:'Começar a pensar na primeira dança', n:'aulas, música'}
   ]},
-  { id:'f7', title:'Fase 7', desc:'Priorizem-se como casal — tenham um dia sem falar do casamento.', tasks:[
+  { id:'f7', desc:'Priorizem-se como casal — tenham um dia sem falar do casamento.', tasks:[
     {t:'Fazer a 2ª ou 3ª prova do vestido', n:'se necessário'},
     {t:'Comprar sapatos, acessórios e véu', n:'da noiva e do noivo'},
     {t:'Fazer as reservas finais da lua de mel'},
     {t:'Falar em conjunto sobre pontos importantes do dia', n:'álcool, horários, first look ou não...'}
   ]},
-  { id:'f8', title:'Fase 8', desc:'Está na hora de virarem anfitriões perfeitos.', tasks:[
+  { id:'f8', desc:'Está na hora de virarem anfitriões perfeitos.', tasks:[
     {t:'Escolher as lembranças para convidados'},
     {t:'Enviar os convites finais'},
     {t:'Definir a playlist da pista de dança'},
     {t:'Pensar em brincadeiras, jogos e entretenimento'}
   ]},
-  { id:'f9', title:'Fase 9', desc:'O local já está bonito — e vocês?', tasks:[
+  { id:'f9', desc:'O local já está bonito — e vocês?', tasks:[
     {t:'Fazer a prova de maquilhagem e cabelo'},
     {t:'Confirmar que o noivo já tem o look definido'},
     {t:'Plano de mesas inicial'},
     {t:'Marcar um jantar com pajens, damas e pais', n:'para se conhecerem melhor'},
     {t:'Fazer um ensaio com fotógrafo/videógrafo no local', n:'e partilhar os momentos-chave que queres captados'}
   ]},
-  { id:'f10', title:'Fase 10', desc:'Falta tão pouco!', tasks:[
+  { id:'f10', desc:'Falta tão pouco!', tasks:[
     {t:'Confirmar todos os fornecedores'},
     {t:'Criar o cronograma final do dia', n:'e enviar a todos os fornecedores'},
     {t:'Confirmar todos os convidados'},
     {t:'Fazer o plano de mesas final'},
     {t:'Ensaiar as entradas e votos'}
   ]},
-  { id:'f11', title:'Fase 11', desc:'Hora de respirar fundo e dar o check final.', tasks:[
+  { id:'f11', desc:'Hora de respirar fundo e dar o check final.', tasks:[
     {t:'Fazer a prova final do vestido, sapatos e fato'},
     {t:'Confirmar transportes e alojamentos'},
     {t:'Comprar kits de emergência', n:'para noiva, noivo e convidados'},
     {t:'Reunião final no local', n:'com a wedding planner ou coordenadora'},
     {t:'Ensaiar entradas e votos'}
   ]},
-  { id:'f12', title:'Fase 12', desc:'Estamos a uma semana!', tasks:[
+  { id:'f12', desc:'Estamos a uma semana!', tasks:[
     {t:'Confirmar o número final de convidados', n:'e reenviar os detalhes do dia'},
     {t:'Unhas, sobrancelhas, barbeiro, hidratação do cabelo'},
     {t:'Deixar as malas da lua de mel prontas'},
@@ -1992,7 +1993,93 @@ const CHECKLIST_PHASES = [
     {t:'Descansar e confiar no trabalho feito até aqui'}
   ]}
 ];
-const WEDDING_DAY_CHECKLIST = [
+const CHECKLIST_PHASES_EN = [
+  { id:'f1', desc:'To do right after the engagement — top priority.', tasks:[
+    {t:'Set the budget', n:'realistically'},
+    {t:'Make a preliminary guest list', n:'intimate or big — 50, 100, 150+?'},
+    {t:'Figure out what style/theme suits you both', n:'minimalist, boho, classic...'},
+    {t:'Define your "non-negotiables"', n:'e.g. venue close to home, food is a must'},
+    {t:'Decide roughly where you want to get married', n:'north, south, islands, abroad...'},
+    {t:'Set an approximate date'},
+    {t:'Visit venues and compare budget/availability'},
+    {t:'Book the ideal venue', n:'as fast as possible'}
+  ]},
+  { id:'f2', desc:'Start building the structure — organize your Pinterest boards.', tasks:[
+    {t:'Book photographer and videographer', n:'they get booked up early'},
+    {t:'Book the catering', n:'if not included with the venue'},
+    {t:'Research bands, DJs or a saxophonist'},
+    {t:'Look for a wedding planner', n:'full, partial, or just day-of coordination'},
+    {t:'Put together a moodboard', n:'base colors, mood, priorities'},
+    {t:'Decide on digital or paper invitations', n:'design, stationery designer'}
+  ]},
+  { id:'f3', desc:'The most fun part — the dress and the honeymoon.', tasks:[
+    {t:'Start looking for the wedding dress', n:'at the first fitting, just focus on figuring out your style'},
+    {t:'Start planning the honeymoon', n:'if it\'s international, booking early helps with price'},
+    {t:'Decide on the groom\'s suit', n:'after the dress is chosen, to match'},
+    {t:'Finalize the list of bridesmaids, groomsmen and pageboys'},
+    {t:'Prepare the formal invitation for bridesmaids and pageboys'}
+  ]},
+  { id:'f4', desc:'The wedding is taking shape.', tasks:[
+    {t:'Book decorator/florist/furniture rental'},
+    {t:'Choose the cake and do menu tastings'},
+    {t:'Send the save-the-dates'},
+    {t:'Plan an engagement shoot', n:'if you want one'},
+    {t:'Get the dress made', n:'with all the fittings'}
+  ]},
+  { id:'f5', desc:'Don\'t forget any of these — they\'re essential.', tasks:[
+    {t:'Book makeup artist and hairstylist'},
+    {t:'Book the officiant/church', n:'go to the civil registry 2-6 months before'},
+    {t:'Look for extra entertainment', n:'fireworks, photo booth, kids\' zone'},
+    {t:'Sort out hotels and transport', n:'for the couple and guests'}
+  ]},
+  { id:'f6', desc:'The small details make all the difference.', tasks:[
+    {t:'Buy the rings'},
+    {t:'Prepare the dress code for honor guests'},
+    {t:'Finalize the decoration details', n:'tables, colors, arrangements, bouquet, ring holder...'},
+    {t:'Start thinking about the first dance', n:'lessons, music'}
+  ]},
+  { id:'f7', desc:'Make time for each other as a couple — have a day without talking about the wedding.', tasks:[
+    {t:'Do the 2nd or 3rd dress fitting', n:'if needed'},
+    {t:'Buy shoes, accessories and veil', n:'for both of you'},
+    {t:'Make the final honeymoon bookings'},
+    {t:'Talk together about important points of the day', n:'alcohol, timings, first look or not...'}
+  ]},
+  { id:'f8', desc:'Time to become perfect hosts.', tasks:[
+    {t:'Choose the favors for guests'},
+    {t:'Send the final invitations'},
+    {t:'Put together the dance floor playlist'},
+    {t:'Think about games and entertainment'}
+  ]},
+  { id:'f9', desc:'The venue already looks great — what about you two?', tasks:[
+    {t:'Do the hair and makeup trial'},
+    {t:'Confirm the groom already has his look sorted'},
+    {t:'Initial seating plan'},
+    {t:'Set up a dinner with pageboys, bridesmaids and parents', n:'to get to know each other better'},
+    {t:'Do a walkthrough with photographer/videographer at the venue', n:'and share the key moments you want captured'}
+  ]},
+  { id:'f10', desc:'So close now!', tasks:[
+    {t:'Confirm all suppliers'},
+    {t:'Create the final day-of schedule', n:'and send it to all suppliers'},
+    {t:'Confirm all guests'},
+    {t:'Do the final seating plan'},
+    {t:'Rehearse the entrances and vows'}
+  ]},
+  { id:'f11', desc:'Time to take a deep breath and do the final check.', tasks:[
+    {t:'Do the final fitting for dress, shoes and suit'},
+    {t:'Confirm transport and accommodation'},
+    {t:'Buy emergency kits', n:'for the couple and guests'},
+    {t:'Final meeting at the venue', n:'with the wedding planner or coordinator'},
+    {t:'Rehearse entrances and vows'}
+  ]},
+  { id:'f12', desc:'One week to go!', tasks:[
+    {t:'Confirm the final guest count', n:'and resend the day\'s details'},
+    {t:'Nails, eyebrows, barber, hair treatment'},
+    {t:'Get the honeymoon bags ready'},
+    {t:'Prepare a change of clothes for after'},
+    {t:'Rest and trust the work you\'ve put in'}
+  ]}
+];
+const WEDDING_DAY_CHECKLIST_PT = [
   'Vestido e cabide + muda de roupa para o fim',
   'Lingerie, liga, robe, pantufas',
   'Véu e acessórios de cabelo e joias',
@@ -2003,13 +2090,25 @@ const WEDDING_DAY_CHECKLIST = [
   'Playlist para o GRWM, telemóvel e carregador',
   'Bouquet'
 ];
+const WEDDING_DAY_CHECKLIST_EN = [
+  'Dress and hanger + change of clothes for the end',
+  'Lingerie, garter, robe, slippers',
+  'Veil and hair accessories and jewelry',
+  'Heels and comfortable flats',
+  'Marriage license, vows and rings',
+  'Touch-up makeup kit + hair products',
+  'Deodorant, wipes, pads, sewing kit, painkiller, water and snacks',
+  'Playlist for the GRWM, phone and charger',
+  'Bouquet'
+];
+function WEDDING_DAY_CHECKLIST_LIST(){ return ta('weddingDayChecklistData'); }
 
 const THEMES = {
-  rust:     { label:'Terracota',       heading:'#96453A', rust:'#C1583E', rustDark:'#9A4530', gold:'#C9A02E' },
-  navy:     { label:'Azul-marinho',    heading:'#2C4460', rust:'#3B5B7A', rustDark:'#293F55', gold:'#B9A36A' },
-  olive:    { label:'Verde-oliva',     heading:'#4F5A3A', rust:'#6B7A4F', rustDark:'#4F5A3A', gold:'#B08D57' },
-  blush:    { label:'Rosa-antigo',     heading:'#8F535C', rust:'#B76E79', rustDark:'#8F535C', gold:'#C9A02E' },
-  gold:     { label:'Dourado-clássico',heading:'#7A5C1E', rust:'#B08D2F', rustDark:'#8A6D24', gold:'#D8B94A' }
+  get rust(){  return { label:ta('themeRust'),   heading:'#96453A', rust:'#C1583E', rustDark:'#9A4530', gold:'#C9A02E' }; },
+  get navy(){  return { label:ta('themeNavy'),   heading:'#2C4460', rust:'#3B5B7A', rustDark:'#293F55', gold:'#B9A36A' }; },
+  get olive(){ return { label:ta('themeOlive'),  heading:'#4F5A3A', rust:'#6B7A4F', rustDark:'#4F5A3A', gold:'#B08D57' }; },
+  get blush(){ return { label:ta('themeBlush'),  heading:'#8F535C', rust:'#B76E79', rustDark:'#8F535C', gold:'#C9A02E' }; },
+  get gold(){  return { label:ta('themeGold'),   heading:'#7A5C1E', rust:'#B08D2F', rustDark:'#8A6D24', gold:'#D8B94A' }; }
 };
 function applyTheme(key){
   const t = THEMES[key] || THEMES.rust;
@@ -2335,14 +2434,14 @@ let guestSeg = 'noiva';
 let openDesc = {};
 let openTable = {};
 let openGuestGroup = {};
-let openChecklistPhaseId = CHECKLIST_PHASES[0] ? CHECKLIST_PHASES[0].id : null;
+let openChecklistPhaseId = CHECKLIST_PHASES_PT[0] ? CHECKLIST_PHASES_PT[0].id : null;
 let openNoivaChecklist = false;
 let showAllPhaseProgress = false;
 function collapseAllSections(){
   openDesc = {};
   openTable = {};
   openGuestGroup = {};
-  openChecklistPhaseId = CHECKLIST_PHASES[0] ? CHECKLIST_PHASES[0].id : null;
+  openChecklistPhaseId = CHECKLIST_PHASES_PT[0] ? CHECKLIST_PHASES_PT[0].id : null;
   openNoivaChecklist = false;
   openDressVisit = {};
   openSupplierCat = {};
@@ -3521,6 +3620,13 @@ const APP_I18N = {
     childAgeYears:(age)=>`${age} anos`,
     alreadyAtLabel:(loc)=>`já em ${loc}`,
     seatLabelFormat:(t,s)=>`Mesa ${t} · lugar ${s}`,
+    recCatEntertainment:'Entretenimento',
+    recCatInvitations:'Convites e papelaria',
+    recCatPhotoVideo:'Fotografia e Vídeo',
+    recCatVenueCatering:'Espaço e Catering',
+    checklistPhasesData: CHECKLIST_PHASES_PT,
+    weddingDayChecklistData: WEDDING_DAY_CHECKLIST_PT,
+    themeRust:'Terracota', themeNavy:'Azul-marinho', themeOlive:'Verde-oliva', themeBlush:'Rosa-antigo', themeGold:'Dourado-clássico',
   },
   en: {
     tabHome:'Home', tabBudget:'Budget', tabGuests:'Guests', tabExpenses:'Expenses', tabTables:'Tables', tabSeating:'Seating',
@@ -4296,6 +4402,13 @@ const APP_I18N = {
     childAgeYears:(age)=>`${age} years old`,
     alreadyAtLabel:(loc)=>`already at ${loc}`,
     seatLabelFormat:(t,s)=>`Table ${t} · seat ${s}`,
+    recCatEntertainment:'Entertainment',
+    recCatInvitations:'Invitations & stationery',
+    recCatPhotoVideo:'Photography & Video',
+    recCatVenueCatering:'Venue & Catering',
+    checklistPhasesData: CHECKLIST_PHASES_EN,
+    weddingDayChecklistData: WEDDING_DAY_CHECKLIST_EN,
+    themeRust:'Terracotta', themeNavy:'Navy blue', themeOlive:'Olive green', themeBlush:'Antique pink', themeGold:'Classic gold',
   }
 };
 function ta(key){
@@ -5794,23 +5907,23 @@ function normalizeTaskStatus(item){
 function guessTaskTag(text){
   const t = text.toLowerCase();
   const rules = [
-    [/orçamento|verba|preço|custo/, 'tagFinancas'],
-    [/convidado|lista de/, 'tagConvidados'],
-    [/estilo|tema|moodboard|pinterest|pasta de inspira/, 'tagInspiracao'],
-    [/local|quinta|espaço|geografica/, 'tagLocal'],
-    [/data/, 'tagDatas'],
-    [/fornecedor|contratar|reservar|pesquisar band|dj|saxofone|catering|fotógraf|videógraf/, 'tagFornecedores'],
-    [/vestido|fato|noiv[ao]/, 'tagVestido'],
-    [/convite|papelaria|design/, 'tagPapelaria'],
-    [/lua de mel|viagem|honeymoon/, 'tagLuaDeMel'],
-    [/documento|processo|certidão|junta/, 'tagDocumentos'],
-    [/cabel|maquilh|beleza/, 'tagBeleza'],
-    [/transporte|carro/, 'tagTransporte'],
-    [/decora|flor/, 'tagDecoracao'],
-    [/música|playlist|cântico/, 'tagMusica'],
-    [/cerimónia|igreja|celebrante/, 'tagCerimonia'],
-    [/mesa|lugares|plano de sala/, 'tagMesas'],
-    [/planeamento|coordenador|wedding planner|não negoci/, 'tagPlaneamento']
+    [/orçamento|verba|preço|custo|budget|price|cost/, 'tagFinancas'],
+    [/convidado|lista de|guest list|guests\b/, 'tagConvidados'],
+    [/estilo|tema|moodboard|pinterest|pasta de inspira|style|theme|inspiration/, 'tagInspiracao'],
+    [/local|quinta|espaço|geografica|venue|geographically/, 'tagLocal'],
+    [/\bdata\b|\bdate\b/, 'tagDatas'],
+    [/fornecedor|contratar|reservar|pesquisar band|dj|saxofone|catering|fotógraf|videógraf|supplier|book\b|photographer|videographer/, 'tagFornecedores'],
+    [/vestido|fato|noiv[ao]|dress|suit|bride|groom/, 'tagVestido'],
+    [/convite|papelaria|design|invitation|stationery/, 'tagPapelaria'],
+    [/lua de mel|viagem|honeymoon|travel|trip/, 'tagLuaDeMel'],
+    [/documento|processo|certidão|junta|document|license/, 'tagDocumentos'],
+    [/cabel|maquilh|beleza|hair|makeup|beauty/, 'tagBeleza'],
+    [/transporte|carro|transport|car\b/, 'tagTransporte'],
+    [/decora|flor|decor|flower/, 'tagDecoracao'],
+    [/música|playlist|cântico|music|song/, 'tagMusica'],
+    [/cerimónia|igreja|celebrante|ceremony|church|officiant/, 'tagCerimonia'],
+    [/mesa|lugares|plano de sala|table|seating/, 'tagMesas'],
+    [/planeamento|coordenador|wedding planner|não negoci|planning|coordinator|non-negotiable/, 'tagPlaneamento']
   ];
   for(const [re,tag] of rules){ if(re.test(t)) return ta(tag); }
   return ta('tagGeral');
@@ -5830,6 +5943,8 @@ function checklistPhaseDeadline(phaseIndex){
   return deadline.toISOString().slice(0,10);
 }
 function viewChecklist(){
+  const CHECKLIST_PHASES = CHECKLIST_PHASES_LIST();
+  const WEDDING_DAY_CHECKLIST = WEDDING_DAY_CHECKLIST_LIST();
   const totalTasks = CHECKLIST_PHASES.reduce((s,p)=>s+p.tasks.length,0) + WEDDING_DAY_CHECKLIST.length;
   const doneTasks = Object.values(state.checklistDone).filter(Boolean).length + Object.values(state.dressChecklistDone).filter(Boolean).length;
   const phasesDone = CHECKLIST_PHASES.filter(p=>p.tasks.every((task,i)=>state.checklistDone[p.id+'-'+i])).length;
@@ -6006,12 +6121,12 @@ ${pageHeader('vestido-back', 'Say Yes to the Dress')}
 ============================================================ */
 const SUPPLIER_STATUS = { get considerar(){return {label:ta('statusConsider'), color:'var(--gold)'};}, get contactado(){return {label:ta('statusContacted'), color:'var(--dusty-dark)'};}, get contratado(){return {label:ta('statusHired'), color:'var(--sage-dark)'};} };
 const EXPENSE_METHOD_LABELS = { get transferencia(){return ta('methodTransfer');}, get dinheiro(){return ta('methodCash');}, get cartao(){return ta('methodCard');}, mbway:'MB WAY' };
-const RECOMMENDED_SUPPLIERS = [
-  { id:'rec1', name:'HappyBox - Photobooth para eventos', category:'entretenimento', catLabel:'Entretenimento', phone:'+351 918 588 120', local:'Porto & Lisboa', site:'www.happybox.pt', email:'info@happybox.pt', logo:'logo-happybox.png' },
-  { id:'rec2', name:'DGPUBLICIDADE', category:'convites', catLabel:'Convites e papelaria', phone:'+351 910 661 210', local:'Porto', site:'www.dgpublicidade.com', email:'geral@dgpublicidade.com', logo:'logo-dgpublicidade.png' },
-  { id:'rec3', name:'JT Estudios', category:'foto', catLabel:'Fotografia e Vídeo', phone:'+351 935 211 420', local:'Porto', site:'www.jtestudios.com', email:'geral@jtestudios.com', logo:'logo-jtestudios.png' },
-  { id:'rec4', name:'Quinta Santo André', category:'quinta', catLabel:'Espaço e Catering', phone:'+351 965 488 896', local:'Barcelos', site:'www.quintasantoandre.com', email:'geral@quintasantoandre.com', logo:'logo-quintasantoandre.png' }
-];
+function RECOMMENDED_SUPPLIERS_LIST(){ return [
+  { id:'rec1', name:'HappyBox - Photobooth para eventos', category:'entretenimento', catLabel:ta('recCatEntertainment'), phone:'+351 918 588 120', local:'Porto & Lisboa', site:'www.happybox.pt', email:'info@happybox.pt', logo:'logo-happybox.png' },
+  { id:'rec2', name:'DGPUBLICIDADE', category:'convites', catLabel:ta('recCatInvitations'), phone:'+351 910 661 210', local:'Porto', site:'www.dgpublicidade.com', email:'geral@dgpublicidade.com', logo:'logo-dgpublicidade.png' },
+  { id:'rec3', name:'JT Estudios', category:'foto', catLabel:ta('recCatPhotoVideo'), phone:'+351 935 211 420', local:'Porto', site:'www.jtestudios.com', email:'geral@jtestudios.com', logo:'logo-jtestudios.png' },
+  { id:'rec4', name:'Quinta Santo André', category:'quinta', catLabel:ta('recCatVenueCatering'), phone:'+351 965 488 896', local:'Barcelos', site:'www.quintasantoandre.com', email:'geral@quintasantoandre.com', logo:'logo-quintasantoandre.png' }
+]; }
 function supplierCardHTML(opts){
   const { title, catLabel, phone, local, site, email, logo, price, badge, attrs, isAdd, clickable } = opts;
   const notClickable = clickable === false;
@@ -6183,7 +6298,7 @@ function viewLuademel(){
   const options = state.honeymoon.options;
   const optionsHTML = options.map(hmOptionCardHTML).join('');
   return `
-  ${pageHeader('luademel-back', 'Lua de mel', ta('honeymoonSubtitle'), `<button class="nav-action" id="add-idea-btn">${ICONS.plus}</button>`)}
+  ${pageHeader('luademel-back', ta('homeQuickHoneymoon'), ta('honeymoonSubtitle'), `<button class="nav-action" id="add-idea-btn">${ICONS.plus}</button>`)}
 
   <div class="hm-banner">
     <div class="hm-banner-icon">${ICONS.heart}</div>
@@ -6254,7 +6369,7 @@ function viewFornecedores(){
     <button class="sup-chip ${supplierFilter===c.id?'active':''}" data-supfilter="${c.id}">${c.label}</button>`).join('');
 
   return `
-  ${pageHeader('fornecedores-back', 'Fornecedores', ta('suppliersSubtitle'), `<button class="sup-add-btn" id="add-supplier-btn">${ICONS.plus}</button>`)}
+  ${pageHeader('fornecedores-back', ta('homeQuickSuppliers'), ta('suppliersSubtitle'), `<button class="sup-add-btn" id="add-supplier-btn">${ICONS.plus}</button>`)}
 
   <div class="search-bar" style="margin-bottom:12px; gap:8px;">
     ${ICONS.search}<input type="text" id="sup-search" placeholder="${ta('placeholderSearchSuppliers')}" value="${supplierQuery}">
@@ -6294,7 +6409,7 @@ function supplierDetailNoticeHTML(){
 }
 function viewFornecedoresRecomendados(){
   const groups = state.categories.map(cat=>{
-    const items = RECOMMENDED_SUPPLIERS.filter(r=>r.category===cat.id);
+    const items = RECOMMENDED_SUPPLIERS_LIST().filter(r=>r.category===cat.id);
     return { cat, items };
   }).filter(g=>g.items.length);
 
@@ -9136,10 +9251,10 @@ function viewDefConvidar(){
 function formatLastLogin(ts){
   if(!ts) return ta('neverLoggedIn');
   const d = ts.toDate ? ts.toDate() : new Date(ts);
-  const meses = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+  const meses = ta('monthNamesShort');
   const hh = String(d.getHours()).padStart(2,'0');
   const mm = String(d.getMinutes()).padStart(2,'0');
-  return `${d.getDate()} ${meses[d.getMonth()]} às ${hh}:${mm}`;
+  return `${d.getDate()} ${meses[d.getMonth()]} ${ta('dateAtTimeSeparator')} ${hh}:${mm}`;
 }
 function viewDefSeguranca(){
   const myEmail = (auth && auth.currentUser) ? auth.currentUser.email.toLowerCase() : '';
