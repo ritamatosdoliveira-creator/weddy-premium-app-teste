@@ -14337,23 +14337,38 @@ function restoreSnapshot(snapshotId){
   const snap = historicoSnapshots.find(s=>s.id===snapshotId);
   if(!snap) return;
   if(!confirm(ta('confirmRestoreSnapshotText'))) return;
+  // Faz o parse ANTES de mexer em seja o que for — se o JSON guardado
+  // estiver corrompido, falha aqui, sem sequer chegar a criar o backup de
+  // segurança nem a tocar em nada.
+  let restoredState, restoredSettings;
+  try{
+    restoredState = JSON.parse(snap.json);
+    restoredSettings = snap.settings;
+  }catch(e){
+    alert(ta('alertRestoreError'));
+    return;
+  }
   historicoRestoringId = snapshotId; _origRender();
   createSnapshot('auto', ta('snapshotBeforeRestoreLabel')).then(()=>{
-    let restoredState, restoredSettings;
-    try{
-      restoredState = JSON.parse(snap.json);
-      restoredSettings = snap.settings;
-    }catch(e){
-      throw new Error('parse-error');
-    }
-    state = restoredState;
-    weddingSettings = restoredSettings;
+    // Auditoria pós-fixes (Set 2026): a primeira versão desta função
+    // trocava "state"/"weddingSettings" locais ANTES de escrever no
+    // Firestore — se o write falhasse (rede em baixo, a meio), a pessoa
+    // ficava a olhar para dados restaurados que nunca chegaram a ser
+    // gravados, exatamente ao mesmo tempo que via um alerta a dizer "os teus
+    // dados atuais não foram alterados" (falso). Agora o Firestore é escrito
+    // primeiro, a partir dos dados do snapshot (não de "state"/
+    // "weddingSettings"); só depois de confirmado o sucesso é que a app
+    // troca a cópia local — a escrita em si é uma única operação sobre um
+    // único documento, que o Firestore trata sempre como tudo-ou-nada,
+    // nunca fica "meio gravada".
     return CURRENT_DOC().set({
-      settings: weddingSettings,
-      json: JSON.stringify(state),
+      settings: restoredSettings,
+      json: JSON.stringify(restoredState),
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     }, { merge:true });
   }).then(()=>{
+    state = restoredState;
+    weddingSettings = restoredSettings;
     historicoRestoringId = null;
     closeAllSheets();
     definicoesSection = null;
@@ -14361,6 +14376,9 @@ function restoreSnapshot(snapshotId){
     _origRender();
     showSaveToast(false);
   }).catch(err=>{
+    // Nada local foi alterado (ver nota acima) — a mensagem de erro
+    // continua verdadeira mesmo se o passo que falhou foi o próprio
+    // restauro (não só o backup de segurança).
     console.error('Weddy restore snapshot error:', err && err.message);
     historicoRestoringId = null;
     _origRender();
