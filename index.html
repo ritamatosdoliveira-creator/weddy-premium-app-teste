@@ -1382,6 +1382,18 @@ const EMAILJS_TEMPLATE_ID = 'template_736xmlw';
 if(typeof emailjs !== 'undefined'){
   emailjs.init({ publicKey: EMAILJS_PUBLIC_KEY });
 }
+/* ============================================================
+   CONSENTIMENTO — versões dos Termos e Condições e da Política de
+   Privacidade (Set 2026, pedido da Rita: versionamento em vez de um
+   simples booleano "termsAccepted:true"). Sobe uma destas datas sempre
+   que o TEXTO (ver termsXxx/privacyXxx em APP_I18N) mudar de forma
+   relevante — isso é o que faz aparecer o ecrã "Antes de continuares" a
+   quem já tinha aceitado uma versão anterior (ver findOrCreateFlow).
+   Formato livre (aqui: AAAA-MM-DD), só precisa de mudar para já não
+   bater certo com o que ficou gravado em weddings/{weddingId}.consent.
+============================================================ */
+const CURRENT_TERMS_VERSION = '2026-09-24';
+const CURRENT_PRIVACY_VERSION = '2026-09-24';
 </script>
 <script>
 (function(){
@@ -3458,6 +3470,78 @@ const APP_I18N = {
     privacyConciergeTitle:'Nota sobre o assistente de conversa (Weddy Concierge)',
     privacyConciergeText:'Cada link de convidado inclui um pequeno assistente de conversa que responde a perguntas sobre o casamento (local, horário, dress code, estacionamento, transporte, alojamento, presentes, e outras perguntas e respostas que tu próprio(a) escreveres em Definições → Convites RSVP → Weddy Concierge). Se o convidado disser, por exemplo, que afinal não vai poder vir ou que tem uma restrição alimentar, o assistente pede sempre confirmação antes de alterar a resposta guardada — nunca altera nada sem essa confirmação explícita. As respostas vêm sempre da informação que tu preencheste, nunca inventadas: quando a mensagem do convidado não é reconhecida por regras simples, pode ser enviada (só o texto da pergunta, nunca dados do casamento) a um modelo de inteligência artificial só para tentar perceber a que tipo de pedido corresponde — nunca para gerar a resposta final nem para decidir sozinho uma alteração. A conversa em si fica só no dispositivo do convidado — não é guardada nem fica visível para ti, apenas o resultado de uma alteração que o convidado confirme (tal como se tivesse usado o formulário normal).',
 
+    // Fase Consentimento — 2ª ronda (Set 2026): pontos novos, pedidos pela
+    // Rita depois de rever a Política de Privacidade de uma app concorrente
+    // como referência ("não mudes absolutamente nada do que já temos, só
+    // acrescenta o que faltar"). Nada acima desta linha foi tocado.
+    privacySubprocessorsTitle:'Com quem partilhamos os teus dados (subcontratantes)',
+    privacySubprocessorsText:'Não vendemos os teus dados nem os cedemos a terceiros para fins de marketing. Para o funcionamento da Weddy, recorremos aos seguintes prestadores, que tratam dados em nosso nome, sob contrato: Firebase / Google Cloud — base de dados, autenticação, armazenamento de ficheiros e as Cloud Functions que processam pedidos como a eliminação de conta; GitHub Pages — alojamento dos ficheiros da aplicação; EmailJS — envio do email que nos chega quando usas "Reporta um problema"; e, apenas se ligares essa funcionalidade, a API do Google Calendar (ver ponto seguinte). Usamos ainda redes de entrega de conteúdo (como a cdnjs e a jsDelivr) só para carregar bibliotecas técnicas do browser (como o gerador de Excel/PDF) — não lhes é enviado nenhum dado teu.',
+    privacyGCalTitle:'Google Calendar e APIs Google',
+    privacyGCalText:'Se ligares a tua conta Google em Definições, acedemos ao teu Google Calendar apenas para criar, atualizar e eliminar os eventos que escolheres sincronizar a partir da Agenda — nunca aos restantes eventos do teu calendário. A utilização desta informação respeita a Política de Dados de Utilizador dos Serviços de API Google, incluindo os requisitos de Utilização Limitada (Limited Use). Podes revogar este acesso a qualquer momento em myaccount.google.com/permissions ou desligando a conta em Definições → Google Calendar.',
+    privacyIntlTransferTitle:'Transferências internacionais',
+    privacyIntlTransferText:'Alguns dos prestadores acima (nomeadamente o Firebase/Google Cloud) podem processar dados em servidores fora do Espaço Económico Europeu. Quando isso acontece, é sempre ao abrigo de garantias adequadas, como as Cláusulas Contratuais-Tipo aprovadas pela Comissão Europeia.',
+    privacyComplaintTitle:'Direito de reclamação',
+    privacyComplaintText:'Além dos direitos já indicados acima, tens sempre o direito de apresentar reclamação junto de uma autoridade de controlo — em Portugal, a Comissão Nacional de Proteção de Dados (CNPD), em www.cnpd.pt.',
+    privacyCookiesTitle:'Cookies e armazenamento local',
+    privacyCookiesText:'A Weddy não usa cookies nem armazenamento local para publicidade ou para te seguir noutros sites. Usamos apenas armazenamento local do teu próprio dispositivo (localStorage) para guardar preferências e conveniências — como o idioma escolhido, fotos de inspiração ainda não sincronizadas, ou teres já fechado um aviso — nunca para fins de marketing ou de perfilamento.',
+    privacyMinorsTitle:'Menores',
+    privacyMinorsText:'A Weddy não se destina a menores de 16 anos enquanto titulares de conta. Não recolhemos intencionalmente dados de menores para efeitos de conta própria. Dados de crianças eventualmente incluídos como convidados (por exemplo, na categoria "Crianças") são introduzidos pelo próprio casal, sob a sua responsabilidade — ver "Nota sobre os teus convidados" acima.',
+    privacyConsentRecordTitle:'Registo da tua aceitação',
+    privacyConsentRecordText:'Guardamos, junto dos dados do teu casamento, um registo de qual a versão dos Termos e Condições e desta Política de Privacidade que aceitaste e quando — isto permite-nos pedir-te uma nova aceitação sempre que uma alteração relevante o justifique (ver "Alterações a esta política" abaixo), e serve de prova de que aceitaste. Este registo é apagado junto com os restantes dados do teu casamento se eliminares a conta.',
+    privacyChangesTitle:'Alterações a esta política',
+    privacyChangesText:'Podemos atualizar esta Política de Privacidade de tempos a tempos. Quando a alteração for significativa, vais ver um ecrã ("Antes de continuares") a pedir para a releres e aceitares antes de continuares a usar a app.',
+
+    termsTitle:'Termos e Condições',
+    termsDesc:'Consulta os nossos Termos e Condições',
+    termsDraftNotice:'Rascunho de trabalho — ainda por rever antes de entrar em produção com pagamentos reais.',
+    termsUpdatedLabel:(dateStr,version)=>`Última atualização: ${dateStr} (versão ${version}).`,
+    termsIntro:'Estes Termos e Condições regulam a utilização da Weddy. Ao criares uma conta, ou ao continuares a usá-la depois de os termos serem atualizados, confirmas que os leste e que aceitas.',
+    termsScopeTitle:'1. Âmbito e destinatários',
+    termsScopeText:'A Weddy é uma aplicação de planeamento de casamentos, destinada a casais que planeiam o seu próprio casamento. Alguns ecrãs mostram também uma lista de fornecedores recomendados, de carácter meramente informativo (ver ponto 8) — a Weddy não é um marketplace nem intermedeia contratos entre o casal e esses fornecedores.',
+    termsAcceptanceTitle:'2. Aceitação dos termos',
+    termsAcceptanceText:'Ao criares uma conta na Weddy confirmas que leste, compreendeste e aceitas estes Termos e Condições e a nossa Política de Privacidade. Se não concordares com alguma parte, não deves usar a app. Sempre que fizermos uma alteração relevante a estes termos, vais ver um ecrã ("Antes de continuares") a pedir para releres e aceitares a nova versão antes de continuares.',
+    termsAccountTitle:'3. A tua conta',
+    termsAccountText:'És responsável por manteres a password da tua conta em segurança e por tudo o que acontece através dela. O registo exige a confirmação do teu email através de um link de verificação. Podes convidar outras pessoas (por exemplo, o teu par) a aceder ao mesmo casamento, em "Segurança" — cada uma passa a ter acesso total aos dados desse casamento.',
+    termsSubscriptionTitle:'4. Weddy Premium e pagamentos',
+    termsSubscriptionText:'Algumas funcionalidades fazem parte do plano Weddy Premium, com um período de acesso de 24 meses a partir da data de ativação. Os detalhes exatos — funcionalidades incluídas, duração e preço — são sempre mostrados dentro da app antes de subscreveres, e podem ser revistos ao longo do tempo, sem efeito retroativo sobre períodos já pagos. Podes cancelar a subscrição a qualquer momento em Definições — o acesso Premium mantém-se até ao fim do período já pago. Nota: à data destes termos, a Weddy ainda não tem nenhum meio de pagamento real ligado — esta secção descreve como o plano vai funcionar quando isso acontecer.',
+    termsWithdrawalTitle:'5. Direito de livre resolução',
+    termsWithdrawalText:'Quando existirem pagamentos reais, e enquanto consumidor, terás um prazo de 14 dias para resolver a compra sem indicar motivo (Decreto-Lei n.º 24/2014). Como o acesso Premium é ativado de imediato, ao concluíres a compra vais poder pedir esse acesso imediato — sendo um conteúdo digital fornecido de imediato com o teu consentimento expresso, isso faz cessar o direito de livre resolução assim que o acesso for ativado, tal como a lei prevê.',
+    termsContentTitle:'6. O teu conteúdo',
+    termsContentText:'Os dados que introduzes (convidados, orçamento, mesas, fotografias, documentos) são teus. A Weddy só os usa para te prestar o serviço — para isso, alojamo-los e processamo-los nos nossos servidores (ver Política de Privacidade), mas nunca os vendemos nem os usamos para publicidade. Podes exportar ou apagar os teus dados a qualquer momento, em "Exportar dados" e "Eliminar conta".',
+    termsIPTitle:'7. Propriedade intelectual',
+    termsIPText:'A aplicação Weddy — o seu código, design, estrutura e o nome "Weddy" — são propriedade da Weddy e não podem ser copiados, descompilados ou reutilizados sem autorização escrita. Isto não afeta em nada os teus próprios dados (ponto 6), que continuam a ser sempre teus.',
+    termsSuppliersTitle:'8. Fornecedores recomendados',
+    termsSuppliersText:'Alguns ecrãs da Weddy mostram uma lista de fornecedores recomendados, com carácter meramente informativo. A Weddy não é parte em nenhum contrato, orçamento ou reserva que faças com esses fornecedores, não garante os seus serviços, preços ou disponibilidade, e qualquer questão sobre um serviço contratado deve ser resolvida diretamente com o próprio fornecedor.',
+    termsGuestsTitle:'9. Convidados e RSVP',
+    termsGuestsText:'Quando convidas alguém através de um link de RSVP, és tu quem decide que informação pedir e como a usar — a Weddy trata esses dados só a teu pedido, nunca por conta própria (ver "Nota sobre os teus convidados" na Política de Privacidade). É tua responsabilidade informar os teus convidados sobre o que partilham contigo através da app.',
+    termsAcceptableUseTitle:'10. Utilização aceitável',
+    termsAcceptableUseText:'Compromete-te a usar a Weddy apenas para organizar o teu próprio casamento, de forma lícita, sem tentar aceder a dados de outras contas nem perturbar o funcionamento do serviço.',
+    termsAvailabilityTitle:'11. Disponibilidade e continuidade do serviço',
+    termsAvailabilityText:'A Weddy é um projeto pessoal gerido por uma só pessoa (ver Política de Privacidade) — fazemos o possível para manter o serviço sempre disponível, mas não podemos garantir um funcionamento ininterrupto. Dependemos de serviços de terceiros essenciais ao funcionamento da app (como o Firebase, o Google Calendar ou o envio de emails) — falhas ou indisponibilidades desses serviços estão fora do nosso controlo. Os teus dados são o mais importante que tens aqui: recomendamos que uses "Exportar dados" com regularidade para guardares também uma cópia própria.',
+    termsFutureFeaturesTitle:'12. Funcionalidades futuras e versões beta',
+    termsFutureFeaturesText:'Qualquer funcionalidade anunciada como "em breve", em fase experimental ou "beta" é disponibilizada sem garantias — pode ter erros, mudar significativamente ou ser descontinuada, incluindo com eliminação dos dados nela introduzidos.',
+    termsLiabilityTitle:'13. Limitação de responsabilidade',
+    termsLiabilityText:'A Weddy é fornecida "tal como está". Na medida permitida por lei, não nos responsabilizamos por perdas indiretas decorrentes da utilização da app — recomendamos sempre que guardes também uma cópia externa das decisões e datas mais importantes do teu casamento (ver "Exportar dados"). Nada nestes termos afasta a responsabilidade que a lei não permite afastar, nem reduz os direitos que a lei garante aos consumidores.',
+    termsIndemnityTitle:'14. Indemnização',
+    termsIndemnityText:'Obrigas-te a manter a Weddy indemne por qualquer reclamação, dano ou despesa que resulte do conteúdo que introduzas na app, da violação destes termos ou da lei, ou da violação de direitos de terceiros — por exemplo, ao carregares uma fotografia de alguém sem autorização.',
+    termsTerminationTitle:'15. Cessação',
+    termsTerminationText:'Podes deixar de usar a Weddy e eliminar a tua conta a qualquer momento, em Definições → Eliminar conta. Reservamo-nos o direito de suspender contas que violem estes termos. Se um dia a Weddy deixar de funcionar, avisamos com a maior antecedência possível e mantemos disponível a exportação dos teus dados enquanto isso for possível.',
+    termsChangesTitle:'16. Alterações a estes termos',
+    termsChangesText:'Podemos atualizar estes Termos e Condições de tempos a tempos. Quando a alteração for significativa, vais ver um aviso ("Antes de continuares") a pedir para releres e aceitares a nova versão antes de continuares a usar a app.',
+    termsCommunicationsTitle:'17. Comunicações',
+    termsCommunicationsText:'Enviamos-te as comunicações de serviço necessárias à gestão da tua conta — confirmação de email, recuperação de password e avisos sobre o teu casamento. Não enviamos newsletter nem comunicações de marketing.',
+    termsLawTitle:'18. Lei aplicável',
+    termsLawText:'Estes termos regem-se pela lei portuguesa.',
+    termsContactTitle:'19. Contacto',
+    termsContactText:'Para qualquer questão sobre estes termos, escreve para geral@weddy.pt.',
+    consentCheckboxHtml:()=>'Li e aceito a <a href="#" data-openprivacy style="color:var(--rust); font-weight:600;">Política de Privacidade</a> e os <a href="#" data-openterms style="color:var(--rust); font-weight:600;">Termos e Condições</a>.',
+    consentRequiredError:'Tens de aceitar a Política de Privacidade e os Termos e Condições para continuar.',
+    reconsentTitle:'Antes de continuares',
+    reconsentIntro:'Atualizámos os nossos Termos e Condições e/ou a nossa Política de Privacidade. Para continuares a usar a Weddy, por favor lê e aceita a versão mais recente.',
+    btnAcceptContinue:'Li e aceito — continuar',
+    btnReadTerms:'Ler Termos e Condições',
+    btnReadPrivacy:'Ler Política de Privacidade',
+
     defExportTitle:'Exportar dados',
     exportIncludesLabel:'O que vai incluído',
     exportIncludesText:'Orçamento por categoria, todos os gastos, a lista de convidados com confirmações, o plano de mesas e os teus fornecedores — tudo tal como está agora na app.',
@@ -4320,6 +4404,78 @@ const APP_I18N = {
     privacyAssistantText:"The Weddy Assistant answers questions about your own wedding (guests, budget, payments, tasks) and only carries out simple, low-risk actions when you explicitly ask for them (like creating a task) — it never changes guest data or payments through the chat. Answers always come from this wedding's real data, never invented: when your question isn't recognized by simple rules, it may be sent (just the question's text, never wedding data) to an AI model only to work out what kind of request it is — never to generate the final answer. The conversation is saved in your wedding's document (like the rest of your data), only so you can see the history across sessions.",
     privacyConciergeTitle:'Note about the chat assistant (Weddy Concierge)',
     privacyConciergeText:"Each guest link includes a small chat assistant that answers questions about the wedding (venue, schedule, dress code, parking, transport, accommodation, gifts, and any other questions and answers you write yourself in Settings → RSVP invitations → Weddy Concierge). If the guest says, for example, that they can no longer attend or that they have a dietary restriction, the assistant always asks for confirmation before changing the saved response — it never changes anything without that explicit confirmation. Answers always come from the information you filled in, never invented: when a guest's message isn't recognized by simple rules, it may be sent (just the question's text, never wedding data) to an AI model only to work out what kind of request it is — never to generate the final answer or to decide on a change by itself. The conversation itself stays on the guest's own device — it is not saved or visible to you, only the result of a change the guest confirms (just as if they had used the regular form).",
+
+    // Consent phase — round 2 (Sep 2026): points added at Rita's request
+    // after reviewing a competitor app's Privacy Policy as a reference
+    // ("don't change anything we already have, just add what's missing").
+    // Nothing above this line was touched.
+    privacySubprocessorsTitle:'Who we share your data with (sub-processors)',
+    privacySubprocessorsText:'We don\'t sell your data or share it with third parties for marketing purposes. To run Weddy, we rely on the following providers, who process data on our behalf, under contract: Firebase / Google Cloud — database, authentication, file storage, and the Cloud Functions that process requests like account deletion; GitHub Pages — hosting of the app\'s files; EmailJS — sending the email we receive when you use "Report a problem"; and, only if you connect that feature, the Google Calendar API (see next point). We also use content delivery networks (such as cdnjs and jsDelivr) only to load technical browser libraries (like the Excel/PDF generator) — no data of yours is sent to them.',
+    privacyGCalTitle:'Google Calendar and Google APIs',
+    privacyGCalText:'If you connect your Google account in Settings, we access your Google Calendar only to create, update and delete the events you choose to sync from the Agenda — never your other calendar events. Use of this information complies with the Google API Services User Data Policy, including the Limited Use requirements. You can revoke this access at any time at myaccount.google.com/permissions or by disconnecting the account under Settings → Google Calendar.',
+    privacyIntlTransferTitle:'International transfers',
+    privacyIntlTransferText:'Some of the providers above (namely Firebase/Google Cloud) may process data on servers outside the European Economic Area. When that happens, it is always under adequate safeguards, such as the Standard Contractual Clauses approved by the European Commission.',
+    privacyComplaintTitle:'Right to complain',
+    privacyComplaintText:'In addition to the rights already listed above, you always have the right to lodge a complaint with a supervisory authority — in Portugal, the Comissão Nacional de Proteção de Dados (CNPD), at www.cnpd.pt.',
+    privacyCookiesTitle:'Cookies and local storage',
+    privacyCookiesText:'Weddy does not use cookies or local storage for advertising or to track you across other sites. We only use your own device\'s local storage (localStorage) for preferences and conveniences — such as your chosen language, inspiration photos not yet synced, or having already dismissed a notice — never for marketing or profiling purposes.',
+    privacyMinorsTitle:'Minors',
+    privacyMinorsText:'Weddy is not intended for account holders under 16. We do not intentionally collect data from minors for account purposes. Any children\'s data included as guests (for example, in the "Children" category) is entered by the couple themselves, under their own responsibility — see "Note about your guests" above.',
+    privacyConsentRecordTitle:'Record of your acceptance',
+    privacyConsentRecordText:'Alongside your wedding\'s data, we keep a record of which version of the Terms and Conditions and of this Privacy Policy you accepted, and when — this lets us ask you to accept again whenever a significant change justifies it (see "Changes to this policy" below), and serves as proof that you accepted. This record is deleted along with the rest of your wedding\'s data if you delete your account.',
+    privacyChangesTitle:'Changes to this policy',
+    privacyChangesText:'We may update this Privacy Policy from time to time. When the change is significant, you will see a screen ("Before you continue") asking you to re-read and accept it before continuing to use the app.',
+
+    termsTitle:'Terms and Conditions',
+    termsDesc:'Read our Terms and Conditions',
+    termsDraftNotice:'Working draft — still to be reviewed before going live with real payments.',
+    termsUpdatedLabel:(dateStr,version)=>`Last updated: ${dateStr} (version ${version}).`,
+    termsIntro:'These Terms and Conditions govern the use of Weddy. By creating an account, or by continuing to use it after the terms are updated, you confirm that you have read them and that you accept them.',
+    termsScopeTitle:'1. Scope and who this is for',
+    termsScopeText:'Weddy is a wedding-planning app, meant for couples planning their own wedding. Some screens also show a list of recommended suppliers, for information only (see point 8) — Weddy is not a marketplace and does not act as an intermediary in any contract between the couple and those suppliers.',
+    termsAcceptanceTitle:'2. Acceptance of the terms',
+    termsAcceptanceText:'By creating a Weddy account you confirm that you have read, understood and accept these Terms and Conditions and our Privacy Policy. If you disagree with any part of them, you should not use the app. Whenever we make a significant change to these terms, you will see a screen ("Before you continue") asking you to re-read and accept the new version before continuing.',
+    termsAccountTitle:'3. Your account',
+    termsAccountText:'You are responsible for keeping your account password secure and for everything that happens through it. Signing up requires confirming your email through a verification link. You can invite other people (for example, your partner) to access the same wedding, under "Security" — each one gets full access to that wedding\'s data.',
+    termsSubscriptionTitle:'4. Weddy Premium and payments',
+    termsSubscriptionText:'Some features are part of the Weddy Premium plan, with a 24-month access period from the activation date. The exact details — features included, duration and price — are always shown inside the app before you subscribe, and may be revised over time, with no retroactive effect on periods already paid for. You can cancel your subscription at any time in Settings — Premium access stays active until the end of the period already paid for. Note: as of these terms, Weddy does not yet have any real payment method connected — this section describes how the plan will work once that happens.',
+    termsWithdrawalTitle:'5. Right of withdrawal',
+    termsWithdrawalText:'Once real payments exist, and as a consumer, you will have a 14-day period to withdraw from the purchase without giving a reason (Decree-Law no. 24/2014, Portugal). Since Premium access is activated immediately, completing the purchase will let you request that immediate access — being digital content supplied immediately with your express consent, this ends the right of withdrawal as soon as access is activated, as the law provides.',
+    termsContentTitle:'6. Your content',
+    termsContentText:'The data you enter (guests, budget, tables, photos, documents) is yours. Weddy only uses it to provide you the service — to do that, we host and process it on our servers (see Privacy Policy), but we never sell it or use it for advertising. You can export or delete your data at any time, under "Export data" and "Delete account".',
+    termsIPTitle:'7. Intellectual property',
+    termsIPText:'The Weddy app — its code, design, structure, and the name "Weddy" — belong to Weddy and may not be copied, decompiled or reused without written permission. This does not affect your own data (point 6) in any way, which always remains yours.',
+    termsSuppliersTitle:'8. Recommended suppliers',
+    termsSuppliersText:'Some Weddy screens show a list of recommended suppliers, for information only. Weddy is not a party to any contract, quote or booking you make with those suppliers, does not guarantee their services, prices or availability, and any question about a contracted service should be resolved directly with the supplier.',
+    termsGuestsTitle:'9. Guests and RSVP',
+    termsGuestsText:'When you invite someone through an RSVP link, you decide what information to ask for and how to use it — Weddy only processes that data at your request, never on its own (see "Note about your guests" in the Privacy Policy). It is your responsibility to inform your guests about what they share with you through the app.',
+    termsAcceptableUseTitle:'10. Acceptable use',
+    termsAcceptableUseText:'You agree to use Weddy only to organize your own wedding, lawfully, without trying to access other accounts\' data or disrupt the service.',
+    termsAvailabilityTitle:'11. Service availability and continuity',
+    termsAvailabilityText:'Weddy is a personal project run by a single person (see Privacy Policy) — we do our best to keep the service available at all times, but we cannot guarantee uninterrupted operation. We depend on third-party services essential to the app\'s operation (such as Firebase, Google Calendar or email delivery) — failures or unavailability of those services are outside our control. Your data is the most important thing you have here: we recommend using "Export data" regularly to also keep a copy of your own.',
+    termsFutureFeaturesTitle:'12. Future features and beta versions',
+    termsFutureFeaturesText:'Any feature announced as "coming soon", experimental or "beta" is provided without guarantees — it may have bugs, change significantly, or be discontinued, including with deletion of the data entered into it.',
+    termsLiabilityTitle:'13. Limitation of liability',
+    termsLiabilityText:'Weddy is provided "as is". To the extent permitted by law, we are not liable for indirect losses arising from your use of the app — we always recommend keeping an external copy of your wedding\'s most important decisions and dates too (see "Export data"). Nothing in these terms removes liability that the law does not allow to be removed, nor reduces the rights the law guarantees to consumers.',
+    termsIndemnityTitle:'14. Indemnity',
+    termsIndemnityText:'You agree to hold Weddy harmless from any claim, damage or expense arising from content you enter into the app, from violating these terms or the law, or from violating third parties\' rights — for example, by uploading a photo of someone without their permission.',
+    termsTerminationTitle:'15. Termination',
+    termsTerminationText:'You can stop using Weddy and delete your account at any time, under Settings → Delete account. We reserve the right to suspend accounts that violate these terms. If Weddy ever stops operating, we will give as much advance notice as possible and keep data export available for as long as that remains possible.',
+    termsChangesTitle:'16. Changes to these terms',
+    termsChangesText:'We may update these Terms and Conditions from time to time. When the change is significant, you will see a notice ("Before you continue") asking you to re-read and accept the new version before continuing to use the app.',
+    termsCommunicationsTitle:'17. Communications',
+    termsCommunicationsText:'We send you the service communications needed to manage your account — email confirmation, password recovery and notices about your wedding. We do not send newsletters or marketing communications.',
+    termsLawTitle:'18. Governing law',
+    termsLawText:'These terms are governed by Portuguese law.',
+    termsContactTitle:'19. Contact',
+    termsContactText:'For any question about these terms, write to geral@weddy.pt.',
+    consentCheckboxHtml:()=>'I have read and accept the <a href="#" data-openprivacy style="color:var(--rust); font-weight:600;">Privacy Policy</a> and the <a href="#" data-openterms style="color:var(--rust); font-weight:600;">Terms and Conditions</a>.',
+    consentRequiredError:'You need to accept the Privacy Policy and the Terms and Conditions to continue.',
+    reconsentTitle:'Before you continue',
+    reconsentIntro:'We\'ve updated our Terms and Conditions and/or our Privacy Policy. To keep using Weddy, please read and accept the latest version.',
+    btnAcceptContinue:'I accept — continue',
+    btnReadTerms:'Read Terms and Conditions',
+    btnReadPrivacy:'Read Privacy Policy',
 
     defExportTitle:'Export data',
     exportIncludesLabel:'What\'s included',
@@ -9204,6 +9360,7 @@ function viewDefinicoes(){
   if(definicoesSection==='convidar') return viewDefConvidar();
   if(definicoesSection==='seguranca') return viewDefSeguranca();
   if(definicoesSection==='privacidade') return viewDefPrivacidade();
+  if(definicoesSection==='termos') return viewDefTermos();
   if(definicoesSection==='sobre') return viewDefSobre();
   if(definicoesSection==='exportar') return viewDefExportar();
   if(definicoesSection==='reportar') return viewDefReportar();
@@ -9310,6 +9467,7 @@ function viewDefMenu(){
   <div class="section-label-caps">${ta('sectionInfo')}</div>
   <div class="list-group">
     ${defMenuRow('privacidade', ICONS.docnote||ICONS.checklist, 7, ta('privacyTitle'), ta('privacyDesc'))}
+    ${defMenuRow('termos', ICONS.docnote||ICONS.checklist, 8, ta('termsTitle'), ta('termsDesc'))}
     ${defMenuRow('sobre', ICONS.heart, 6, ta('aboutTitle'), ta('aboutDesc'))}
   </div>
 
@@ -9546,10 +9704,13 @@ function viewDefDocumentos(){
   `;
 }
 
-function viewDefPrivacidade(){
+// Fase Consentimento (Set 2026): o conteúdo em si (privacyBodyHtml) foi
+// separado do ecrã de Definições (viewDefPrivacidade) para poder ser
+// reaproveitado também no overlay de leitura rápida mostrado durante o
+// registo e no ecrã "Antes de continuares" (ver openLegalOverlay) — sem
+// isto, a pessoa só conseguiria ler a política depois de já ter conta.
+function privacyBodyHtml(){
   return `
-  ${defSubHeader(ta('privacyTitle'))}
-  <div class="privacy-text">
     <p class="privacy-note" style="margin-bottom:16px;">${ta('privacyIntro')}</p>
 
     <p><b>${ta('privacyWhoWeAreTitle')}</b><br>
@@ -9591,7 +9752,126 @@ function viewDefPrivacidade(){
     <p><b>${ta('privacyAssistantTitle')}</b><br>
     ${ta('privacyAssistantText')}</p>
 
-  </div>
+    <!-- Fase Consentimento — 2ª ronda (Set 2026): a Rita pediu para NÃO
+    mexer em nada do texto acima (já foi revisto por um advogado), só
+    acrescentar pontos em falta, depois de rever o documento de Privacidade
+    de uma app concorrente como referência. As 8 secções abaixo são
+    inteiramente novas e escritas de raiz com a arquitetura real da Weddy
+    (nunca copiadas) — nada do que já existia foi alterado. -->
+    <p><b>${ta('privacySubprocessorsTitle')}</b><br>
+    ${ta('privacySubprocessorsText')}</p>
+
+    <p><b>${ta('privacyGCalTitle')}</b><br>
+    ${ta('privacyGCalText')}</p>
+
+    <p><b>${ta('privacyIntlTransferTitle')}</b><br>
+    ${ta('privacyIntlTransferText')}</p>
+
+    <p><b>${ta('privacyComplaintTitle')}</b><br>
+    ${ta('privacyComplaintText').replace('www.cnpd.pt', '<span style="color:var(--rust);">www.cnpd.pt</span>')}</p>
+
+    <p><b>${ta('privacyCookiesTitle')}</b><br>
+    ${ta('privacyCookiesText')}</p>
+
+    <p><b>${ta('privacyMinorsTitle')}</b><br>
+    ${ta('privacyMinorsText')}</p>
+
+    <p><b>${ta('privacyConsentRecordTitle')}</b><br>
+    ${ta('privacyConsentRecordText')}</p>
+
+    <p><b>${ta('privacyChangesTitle')}</b><br>
+    ${ta('privacyChangesText')}</p>
+  `;
+}
+function viewDefPrivacidade(){
+  return `
+  ${defSubHeader(ta('privacyTitle'))}
+  <div class="privacy-text">${privacyBodyHtml()}</div>
+  `;
+}
+// Fase Consentimento (Set 2026, pedido da Rita): Termos e Condições com o
+// mesmo tratamento da Política de Privacidade acima. IMPORTANTE — o texto
+// abaixo é um rascunho de trabalho (ver termsDraftNotice), escrito para dar
+// à funcionalidade de consentimento versionado algo real para mostrar e
+// gravar; não é aconselhamento jurídico nem foi revisto por um advogado.
+// Tem de ser revisto antes de a Weddy aceitar pagamentos reais de outras
+// pessoas além da Rita.
+// Fase Consentimento — 2ª ronda (Set 2026): estrutura ampliada, inspirada na
+// numeração/secções de um documento de Termos de uma app concorrente que a
+// Rita partilhou como referência ("há menus que nós não temos") — mas
+// TODO O TEXTO abaixo foi escrito de raiz para a Weddy, com os nossos
+// próprios dados, funcionalidades e modelo (projeto pessoal, sem
+// marketplace de fornecedores nem área de wedding planners, sem SMS/Twilio
+// ligado). Continua a ser um rascunho de trabalho (ver termsDraftNotice),
+// não texto copiado nem aconselhamento jurídico.
+function termsBodyHtml(){
+  return `
+    <p class="privacy-note" style="margin-bottom:4px; color:var(--rust-dark); font-weight:600;">${ta('termsDraftNotice')}</p>
+    <p class="privacy-note" style="margin-bottom:16px; font-size:12px;">${ta('termsUpdatedLabel')(formatDatePT(CURRENT_TERMS_VERSION), CURRENT_TERMS_VERSION)}</p>
+    <p class="privacy-note" style="margin-bottom:16px;">${ta('termsIntro')}</p>
+
+    <p><b>${ta('termsScopeTitle')}</b><br>
+    ${ta('termsScopeText')}</p>
+
+    <p><b>${ta('termsAcceptanceTitle')}</b><br>
+    ${ta('termsAcceptanceText')}</p>
+
+    <p><b>${ta('termsAccountTitle')}</b><br>
+    ${ta('termsAccountText')}</p>
+
+    <p><b>${ta('termsSubscriptionTitle')}</b><br>
+    ${ta('termsSubscriptionText')}</p>
+
+    <p><b>${ta('termsWithdrawalTitle')}</b><br>
+    ${ta('termsWithdrawalText')}</p>
+
+    <p><b>${ta('termsContentTitle')}</b><br>
+    ${ta('termsContentText')}</p>
+
+    <p><b>${ta('termsIPTitle')}</b><br>
+    ${ta('termsIPText')}</p>
+
+    <p><b>${ta('termsSuppliersTitle')}</b><br>
+    ${ta('termsSuppliersText')}</p>
+
+    <p><b>${ta('termsGuestsTitle')}</b><br>
+    ${ta('termsGuestsText')}</p>
+
+    <p><b>${ta('termsAcceptableUseTitle')}</b><br>
+    ${ta('termsAcceptableUseText')}</p>
+
+    <p><b>${ta('termsAvailabilityTitle')}</b><br>
+    ${ta('termsAvailabilityText')}</p>
+
+    <p><b>${ta('termsFutureFeaturesTitle')}</b><br>
+    ${ta('termsFutureFeaturesText')}</p>
+
+    <p><b>${ta('termsLiabilityTitle')}</b><br>
+    ${ta('termsLiabilityText')}</p>
+
+    <p><b>${ta('termsIndemnityTitle')}</b><br>
+    ${ta('termsIndemnityText')}</p>
+
+    <p><b>${ta('termsTerminationTitle')}</b><br>
+    ${ta('termsTerminationText')}</p>
+
+    <p><b>${ta('termsChangesTitle')}</b><br>
+    ${ta('termsChangesText')}</p>
+
+    <p><b>${ta('termsCommunicationsTitle')}</b><br>
+    ${ta('termsCommunicationsText')}</p>
+
+    <p><b>${ta('termsLawTitle')}</b><br>
+    ${ta('termsLawText')}</p>
+
+    <p><b>${ta('termsContactTitle')}</b><br>
+    ${ta('termsContactText').replace('geral@weddy.pt', '<span style="color:var(--rust);">geral@weddy.pt</span>')}</p>
+  `;
+}
+function viewDefTermos(){
+  return `
+  ${defSubHeader(ta('termsTitle'))}
+  <div class="privacy-text">${termsBodyHtml()}</div>
   `;
 }
 
@@ -12900,6 +13180,44 @@ document.getElementById('img-lightbox').addEventListener('click', e=>{
 let authMode = 'login'; // 'login' | 'signup'
 let lastLoginRender = null; // permite redesenhar o ecrã de login atual ao trocar de idioma
 
+// Fase Consentimento (Set 2026): pequeno overlay para ler os Termos e
+// Condições ou a Política de Privacidade a partir do ecrã de registo (antes
+// de a pessoa ter sequer um casamento criado, por isso não pode ainda
+// entrar em Definições) — e também do ecrã "Antes de continuares"
+// (reconsentimento). Criado uma única vez (top-level, fora de
+// bindHandlers()) porque tanto o ecrã de login como o de reconsentimento
+// vivem fora do ciclo normal de render()/bindHandlers() da app.
+function openLegalOverlay(titleKey, bodyHtml){
+  let el = document.getElementById('legal-overlay');
+  if(!el){
+    el = document.createElement('div');
+    el.id = 'legal-overlay';
+    el.style.cssText = 'position:fixed; inset:0; background:rgba(30,26,23,0.55); z-index:9999; display:none; align-items:flex-end; justify-content:center;';
+    document.body.appendChild(el);
+    el.addEventListener('click', e=>{ if(e.target===el) el.style.display='none'; });
+  }
+  el.innerHTML = `
+    <div style="background:var(--card,#fff); width:100%; max-width:480px; max-height:86vh; overflow-y:auto; -webkit-overflow-scrolling:touch; border-radius:20px 20px 0 0; padding:20px 18px 28px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+        <div style="font-weight:700; font-size:16px; color:var(--ink);">${ta(titleKey)}</div>
+        <button type="button" id="legal-overlay-close" style="border:none; background:transparent; cursor:pointer; color:var(--ink-soft); padding:4px;">${ICONS.x}</button>
+      </div>
+      <div class="privacy-text">${bodyHtml}</div>
+    </div>
+  `;
+  el.style.display = 'flex';
+  document.getElementById('legal-overlay-close').addEventListener('click', ()=>{ el.style.display='none'; });
+}
+// Delegação global (em vez de religar a cada render) — apanha os links
+// "Política de Privacidade"/"Termos e Condições" tanto no formulário de
+// registo como no ecrã de reconsentimento.
+document.addEventListener('click', e=>{
+  const privacyLink = e.target.closest && e.target.closest('[data-openprivacy]');
+  if(privacyLink){ e.preventDefault(); openLegalOverlay('privacyTitle', privacyBodyHtml()); return; }
+  const termsLink = e.target.closest && e.target.closest('[data-openterms]');
+  if(termsLink){ e.preventDefault(); openLegalOverlay('termsTitle', termsBodyHtml()); }
+});
+
 function renderLoginForm(msg, isError, isSuccess){
   lastLoginRender = ()=>renderLoginForm(msg, isError, isSuccess);
   const isSignup = authMode === 'signup';
@@ -12909,6 +13227,10 @@ function renderLoginForm(msg, isError, isSuccess){
     <div class="login-field"><input type="email" id="login-email" placeholder="${ta('emailPlaceholder')}" autocomplete="email" autocapitalize="none" autocorrect="off"></div>
     <div class="login-field" style="margin-top:10px;"><input type="password" id="login-pass" placeholder="${ta('passPlaceholder')}" autocomplete="${isSignup?'new-password':'current-password'}"></div>
     ${isSignup? `<div class="login-field" style="margin-top:10px;"><input type="password" id="login-pass-confirm" placeholder="${ta('passConfirmPlaceholder')}" autocomplete="new-password"></div>` : ''}
+    ${isSignup? `<label style="display:flex; align-items:flex-start; gap:8px; margin-top:12px; text-align:left; font-size:12.5px; color:var(--ink-soft); line-height:1.45; cursor:pointer;">
+      <input type="checkbox" id="login-consent" style="margin-top:2px; flex-shrink:0;">
+      <span>${ta('consentCheckboxHtml')()}</span>
+    </label>` : ''}
     <button class="login-btn" id="login-send">${isSignup? ta('btnCreateAccount') : ta('btnEnter')}</button>
     <div class="login-msg ${isError?'error':isSuccess?'success':''}">${msg||''}</div>
     ${!isSignup? `<div class="login-note" style="cursor:pointer;" id="login-forgot">${ta('forgotPassword')}</div>` : ''}
@@ -12990,12 +13312,31 @@ function handleAuthSubmit(){
   if(authMode==='signup'){
     const passConfirm = document.getElementById('login-pass-confirm').value;
     if(pass !== passConfirm){ renderLoginForm(ta('passwordMismatch'), true); return; }
+    // Fase Consentimento (Set 2026): sem a caixa marcada, nem sequer
+    // tentamos criar a conta — a Rita quer o versionamento explícito
+    // (termsVersion/privacyVersion/acceptedAt), por isso uma conta nunca
+    // deve chegar a existir sem um consentimento registado.
+    const consentEl = document.getElementById('login-consent');
+    if(!consentEl || !consentEl.checked){ renderLoginForm(ta('consentRequiredError'), true); return; }
   }
   if(!FIREBASE_READY || !auth){ renderLoginForm(ta('firebaseNotReadyFile'), true); return; }
   const btn = document.getElementById('login-send');
   if(btn){ btn.textContent = ta('btnWait'); btn.disabled = true; }
   const action = authMode==='signup'
     ? auth.createUserWithEmailAndPassword(email, pass).then(cred=>{
+        // Guarda já o momento real da aceitação (não o momento, possivelmente
+        // muito mais tarde, em que o assistente de configuração do casamento
+        // é concluído) — handleOnboardingSubmit lê isto do localStorage para
+        // gravar em weddings/{weddingId}.consent. Fica em localStorage (não
+        // só em memória) para sobreviver a um refresh durante a confirmação
+        // do email, que acontece entre estes dois passos.
+        try{
+          localStorage.setItem('weddy-signup-consent', JSON.stringify({
+            termsVersion: CURRENT_TERMS_VERSION,
+            privacyVersion: CURRENT_PRIVACY_VERSION,
+            acceptedAt: new Date().toISOString()
+          }));
+        }catch(e){}
         return cred.user.sendEmailVerification().catch(()=>{});
       })
     : auth.signInWithEmailAndPassword(email, pass);
@@ -13057,12 +13398,28 @@ function handleOnboardingSubmit(){
   const email = auth.currentUser.email.toLowerCase();
   weddingSettings = defaultSettings(name1, name2, date, venue);
   state = seedData();
+  // Fase Consentimento (Set 2026): lê o consentimento dado na caixa
+  // obrigatória do registo (guardado em handleAuthSubmit). O fallback abaixo
+  // só deve disparar num caso muito raro (ex.: alguém com esta página aberta
+  // desde antes desta funcionalidade existir) — mesmo assim, prefere sempre
+  // gravar um consentimento com a versão atual e a hora de agora a criar uma
+  // conta sem nenhum registo de consentimento.
+  let pendingConsent = null;
+  try{ pendingConsent = JSON.parse(localStorage.getItem('weddy-signup-consent')||'null'); }catch(e){ pendingConsent = null; }
+  const acceptedAtDate = (pendingConsent && pendingConsent.acceptedAt) ? new Date(pendingConsent.acceptedAt) : new Date();
+  const consent = {
+    termsVersion: (pendingConsent && pendingConsent.termsVersion) || CURRENT_TERMS_VERSION,
+    privacyVersion: (pendingConsent && pendingConsent.privacyVersion) || CURRENT_PRIVACY_VERSION,
+    acceptedAt: firebase.firestore.Timestamp.fromDate(isNaN(acceptedAtDate.getTime()) ? new Date() : acceptedAtDate)
+  };
+  try{ localStorage.removeItem('weddy-signup-consent'); }catch(e){}
   WEDDINGS().add({
     ownerEmails: [email],
     ownerUids: [auth.currentUser.uid],
     creatorEmail: email,
     settings: weddingSettings,
     json: JSON.stringify(state),
+    consent,
     createdAt: firebase.firestore.FieldValue.serverTimestamp()
   }).then(docRef=>{
     currentWeddingId = docRef.id;
@@ -13595,37 +13952,99 @@ function attachFirestoreSync(){
 }
 
 function sanitizeEmailKey(email){ return email.replace(/\./g,'_dot_').replace(/@/g,'_at_'); }
+// Fase Consentimento (Set 2026): tudo o que antes acontecia logo a seguir a
+// encontrar o casamento (findOrCreateFlow) foi movido para aqui, para poder
+// ser chamado tanto de imediato (consentimento já em dia) como só depois de
+// a pessoa aceitar a versão atual no ecrã "Antes de continuares"
+// (renderReconsentGate) — nunca antes disso.
+function proceedIntoExistingWedding(user){
+  // Fix 6 da auditoria pós-fixes (Set 2026): as inspirações de
+  // fotos/vestido só podem ser lidas do localStorage DEPOIS de
+  // currentWeddingId estar definido (as chaves agora são por
+  // casamento) — chamado aqui, e não uma única vez ao carregar a
+  // página, também garante que trocar de conta na mesma sessão do
+  // browser recarrega as inspirações certas para a nova conta.
+  loadInspirations();
+  loadDressInspirations();
+  attachFirestoreSync();
+  CURRENT_DOC().update({
+    ['lastLoginByEmail.'+sanitizeEmailKey(user.email.toLowerCase())]: firebase.firestore.FieldValue.serverTimestamp(),
+    ownerUids: firebase.firestore.FieldValue.arrayUnion(user.uid),
+    ['uidByEmail.'+sanitizeEmailKey(user.email.toLowerCase())]: user.uid
+  }).catch(()=>{});
+  // Fase 9.1 — se acabámos de voltar do OAuth do Google Calendar,
+  // leva a pessoa direto de volta ao ecrã onde estava, com a
+  // mensagem certa (nunca a deixa perdida no Início sem explicação).
+  if(pendingGoogleCalendarReturn){
+    activeTab = 'definicoes';
+    definicoesSection = 'googlecalendar';
+    if(pendingGoogleCalendarReturn==='success') googleCalendarActionMsg = { type:'success', text: ta('googleCalendarOAuthSuccess') };
+    else if(pendingGoogleCalendarReturn==='cancelled') googleCalendarActionMsg = { type:'error', text: ta('googleCalendarOAuthCancelled') };
+    else googleCalendarActionMsg = { type:'error', text: ta('googleCalendarOAuthError') };
+    pendingGoogleCalendarReturn = null;
+    googleCalendarIntegration = null; // força recarregar do zero
+  }
+}
+// Fase Consentimento (Set 2026): ecrã "Antes de continuares" — mostrado a
+// contas já existentes cujo weddings/{weddingId}.consent está em falta ou
+// tem uma versão mais antiga do que CURRENT_TERMS_VERSION/
+// CURRENT_PRIVACY_VERSION. Só depois de aceitarem é que onAccept() é
+// chamado (proceedIntoExistingWedding), nunca antes — este ecrã fica no
+// lugar do resto da app, não por cima dela.
+function renderReconsentGate(user, onAccept){
+  lastLoginRender = ()=>renderReconsentGate(user, onAccept);
+  document.getElementById('login-inner').innerHTML = `
+    <div class="login-tag">${ta('reconsentTitle')}</div>
+    <div class="login-msg" style="margin:0 0 14px;">${ta('reconsentIntro')}</div>
+    <div style="display:flex; flex-direction:column; gap:6px; align-items:flex-start; margin-bottom:14px;">
+      <span class="login-note" style="cursor:pointer;" id="reconsent-read-privacy">${ta('btnReadPrivacy')}</span>
+      <span class="login-note" style="cursor:pointer;" id="reconsent-read-terms">${ta('btnReadTerms')}</span>
+    </div>
+    <label style="display:flex; align-items:flex-start; gap:8px; text-align:left; font-size:12.5px; color:var(--ink-soft); line-height:1.45; cursor:pointer;">
+      <input type="checkbox" id="reconsent-check" style="margin-top:2px; flex-shrink:0;">
+      <span>${ta('consentCheckboxHtml')()}</span>
+    </label>
+    <button class="login-btn" id="reconsent-accept" style="margin-top:14px;">${ta('btnAcceptContinue')}</button>
+    <div class="login-msg" id="reconsent-msg"></div>
+    <div class="login-note" style="cursor:pointer; margin-top:14px;" id="reconsent-signout">${ta('signOut')}</div>
+  `;
+  document.getElementById('reconsent-read-privacy').addEventListener('click', ()=>openLegalOverlay('privacyTitle', privacyBodyHtml()));
+  document.getElementById('reconsent-read-terms').addEventListener('click', ()=>openLegalOverlay('termsTitle', termsBodyHtml()));
+  document.getElementById('reconsent-signout').addEventListener('click', ()=>{ if(typeof auth!=='undefined' && auth) auth.signOut(); });
+  document.getElementById('reconsent-accept').addEventListener('click', ()=>{
+    const check = document.getElementById('reconsent-check');
+    const msg = document.getElementById('reconsent-msg');
+    if(!check || !check.checked){ msg.textContent = ta('consentRequiredError'); msg.className = 'login-msg error'; return; }
+    const btn = document.getElementById('reconsent-accept');
+    btn.disabled = true; btn.textContent = ta('btnWait');
+    CURRENT_DOC().update({
+      consent: {
+        termsVersion: CURRENT_TERMS_VERSION,
+        privacyVersion: CURRENT_PRIVACY_VERSION,
+        acceptedAt: firebase.firestore.FieldValue.serverTimestamp()
+      }
+    }).then(()=>{
+      onAccept();
+    }).catch(err=>{
+      console.error('Weddy reconsent error:', err && err.code, err && err.message);
+      btn.disabled = false; btn.textContent = ta('btnAcceptContinue');
+      msg.textContent = ta('msgSendError'); msg.className = 'login-msg error';
+    });
+  });
+}
 function findOrCreateFlow(user, isRetry){
   renderLoading(ta('verifyingAccount'));
   WEDDINGS().where('ownerEmails','array-contains', user.email.toLowerCase()).limit(1).get().then(qs=>{
     if(!qs.empty){
-      currentWeddingId = qs.docs[0].id;
-      // Fix 6 da auditoria pós-fixes (Set 2026): as inspirações de
-      // fotos/vestido só podem ser lidas do localStorage DEPOIS de
-      // currentWeddingId estar definido (as chaves agora são por
-      // casamento) — chamado aqui, e não uma única vez ao carregar a
-      // página, também garante que trocar de conta na mesma sessão do
-      // browser recarrega as inspirações certas para a nova conta.
-      loadInspirations();
-      loadDressInspirations();
-      attachFirestoreSync();
-      CURRENT_DOC().update({
-        ['lastLoginByEmail.'+sanitizeEmailKey(user.email.toLowerCase())]: firebase.firestore.FieldValue.serverTimestamp(),
-        ownerUids: firebase.firestore.FieldValue.arrayUnion(user.uid),
-        ['uidByEmail.'+sanitizeEmailKey(user.email.toLowerCase())]: user.uid
-      }).catch(()=>{});
-      // Fase 9.1 — se acabámos de voltar do OAuth do Google Calendar,
-      // leva a pessoa direto de volta ao ecrã onde estava, com a
-      // mensagem certa (nunca a deixa perdida no Início sem explicação).
-      if(pendingGoogleCalendarReturn){
-        activeTab = 'definicoes';
-        definicoesSection = 'googlecalendar';
-        if(pendingGoogleCalendarReturn==='success') googleCalendarActionMsg = { type:'success', text: ta('googleCalendarOAuthSuccess') };
-        else if(pendingGoogleCalendarReturn==='cancelled') googleCalendarActionMsg = { type:'error', text: ta('googleCalendarOAuthCancelled') };
-        else googleCalendarActionMsg = { type:'error', text: ta('googleCalendarOAuthError') };
-        pendingGoogleCalendarReturn = null;
-        googleCalendarIntegration = null; // força recarregar do zero
+      const weddingDoc = qs.docs[0];
+      currentWeddingId = weddingDoc.id;
+      const consent = weddingDoc.data().consent;
+      const needsReconsent = !consent || consent.termsVersion !== CURRENT_TERMS_VERSION || consent.privacyVersion !== CURRENT_PRIVACY_VERSION;
+      if(needsReconsent){
+        renderReconsentGate(user, ()=>proceedIntoExistingWedding(user));
+        return;
       }
+      proceedIntoExistingWedding(user);
     } else {
       currentWeddingId = null;
       inspirations = [];
