@@ -1757,6 +1757,11 @@ let currentWeddingCreator = null;
 let currentLastLogins = {};
 let currentUidByEmail = {};
 let currentSubscription = null;
+// Fase Histórico (Set 2026): momento do último backup AUTOMÁTICO (nunca dos
+// manuais), vindo de data.lastAutoSnapshotAt — usado só por
+// maybeCreateAutoSnapshot() para decidir se já passou tempo suficiente
+// desde o último para criar mais um (ver "Histórico do casamento").
+let currentLastAutoSnapshotAt = null;
 // Weddy Premium (chatbot + RSVP) só fica disponível a quem tiver
 // subscrição ativa — este campo vem do documento do casamento
 // (data.subscription), capturado em attachFirestoreSync().
@@ -1812,11 +1817,26 @@ const MEMORIES = () => db.collection('memories');
 // não aproximar o limite de ~1MiB do Firestore). Não há ainda nenhum ecrã
 // para os REVER dentro da app — por agora ficam só na consola do Firebase.
 const FEEDBACK = () => db.collection('feedback');
+// Fase Histórico (Set 2026, pedido da Rita): "Histórico do casamento" —
+// cópias de segurança do estado completo do casamento (settings + json,
+// exatamente os mesmos dois campos já gravados no documento principal),
+// automáticas (no máximo uma por dia) ou manuais (criadas pela própria
+// pessoa, com um rótulo à escolha, ex.: "Antes de reorganizar mesas").
+// Subcoleção do próprio casamento — nunca uma coleção à parte — porque só
+// faz sentido existir enquanto o casamento existir, e assim as regras de
+// posse já existentes em "weddings/{weddingId}" cobrem-na automaticamente
+// (ver firestore.rules.completas.txt).
+const SNAPSHOTS = () => CURRENT_DOC().collection('snapshots');
+const SNAPSHOT_AUTO_KEEP = 15;
 
 
 /* ============================================================
    ICONS (estilo SF Symbols, outline)
 ============================================================ */
+// Logótipo oficial "G" multicolor da Google — fora do objeto ICONS porque
+// usa fill próprio por caminho (não currentColor), ao contrário de todos os
+// outros ícones aqui, que são monocromáticos e herdam a cor do texto.
+const GOOGLE_G_ICON = '<svg viewBox="0 0 18 18" width="18" height="18"><path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.9c1.7-1.57 2.7-3.88 2.7-6.62z"/><path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.9-2.26c-.8.54-1.84.86-3.06.86-2.35 0-4.34-1.59-5.05-3.72H.96v2.33A9 9 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.95 10.7A5.4 5.4 0 0 1 3.67 9c0-.59.1-1.17.28-1.7V4.97H.96A9 9 0 0 0 0 9c0 1.45.35 2.83.96 4.03l2.99-2.33z"/><path fill="#EA4335" d="M9 3.58c1.32 0 2.51.45 3.44 1.35l2.58-2.58C13.46.89 11.43 0 9 0A9 9 0 0 0 .96 4.97l2.99 2.33C4.66 5.17 6.65 3.58 9 3.58z"/></svg>';
 const ICONS = {
   todo:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3.5" width="16" height="17" rx="2.3"/><path d="M8 8.3l1.3 1.3L11.5 7.4M8 13.6l1.3 1.3 2.2-2.2"/><path d="M14 8.3h5.5M14 13.6h5.5M8 18.2h11.5"/></svg>',
   honeymoon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 16.5 12 5.5l9.5 11"/><path d="M6.3 12.1 12 5.5l5.7 6.6"/><path d="M4.4 14.4h15.2M8 20.5c1.2-1.3 2.7-1.3 4-.2 1.3 1.1 2.8 1.1 4-.2"/></svg>',
@@ -2955,6 +2975,7 @@ const APP_I18N = {
     designTitle:'Design e foto de capa', designDesc:'Personaliza a imagem do teu casamento',
     categoriesTitle:'Categorias de gastos', categoriesDesc:'Edita as categorias do teu orçamento',
     exportTitle:'Exportar dados', exportDesc:'Descarrega tudo em Excel ou PDF',
+    historicoTitle:'Histórico do casamento', historicoDesc:'Cópias de segurança e restauro',
     inviteTitle:'Convidar participante no planeamento', inviteDesc:'Partilha o planeamento do casamento',
     accessTitle:'Quem tem acesso', accessDesc:'Controla quem pode ver e editar os dados',
     privacyTitle:'Privacidade e RGPD', privacyDesc:'Consulta a nossa política de privacidade',
@@ -2986,6 +3007,10 @@ const APP_I18N = {
     authErrBadCredentials:'Email ou password incorretos. Tenta novamente.',
     authErrWeakPassword:'A password precisa de pelo menos 6 caracteres.',
     authErrInvalidEmail:'Esse email não parece válido.',
+    authErrAccountExistsDifferentCred:'Já existe uma conta com este email, criada de outra forma (ex.: com password). Entra com essa opção.',
+    authErrPopupBlocked:'O teu navegador bloqueou a janela de login da Google. Permite pop-ups para este site e tenta novamente.',
+    btnContinueGoogle:'Continuar com a Google',
+    orSeparatorLabel:'ou',
     authErrGeneric: code => `Não foi possível continuar (${code}).`,
     obTitle:'Vamos configurar o vosso casamento', obName1:'Nome noiva (ex: Rita)', obName2:'Nome noivo (ex: Tiago)',
     obDateLabel:'Data do casamento', obVenue:'Local (ex: Quinta do Jardim, Barcelos)', obStart:'Começar',
@@ -3555,6 +3580,33 @@ const APP_I18N = {
     defExportTitle:'Exportar dados',
     exportIncludesLabel:'O que vai incluído',
     exportIncludesText:'Orçamento por categoria, todos os gastos, a lista de convidados com confirmações, o plano de mesas e os teus fornecedores — tudo tal como está agora na app.',
+
+    historicoIntroText:'A Weddy guarda automaticamente cópias de segurança do teu casamento, e podes criar também as tuas próprias a qualquer momento (por exemplo, antes de reorganizares as mesas). Restaurar uma cópia cria sempre, primeiro, uma cópia de segurança do estado atual — nunca perdes dados sem rede de segurança.',
+    snapshotLabelInputLabel:'Dar um nome a esta cópia (opcional)',
+    phSnapshotLabel:'Ex.: Antes de reorganizar mesas',
+    btnCreateManualSnapshot:'Criar cópia de segurança agora',
+    creatingBackupLabel:'A criar cópia…',
+    historicoListLabel:'Cópias guardadas',
+    historicoLoadError:'Não foi possível carregar o histórico. Tenta novamente.',
+    historicoEmptyText:'Ainda não há nenhuma cópia de segurança. A Weddy cria uma automaticamente à medida que vais usando a app.',
+    snapshotManualBadge:'Manual',
+    snapshotAutoBadge:'Automática',
+    btnViewSnapshot:'Ver',
+    btnRestoreSnapshot:'Restaurar',
+    restoringLabel:'A restaurar…',
+    snapshotAutoLabel:'Cópia automática',
+    snapshotBeforeRestoreLabel:'Antes de restaurar',
+    confirmRestoreSnapshotText:'Tens a certeza que queres restaurar esta cópia? Vamos guardar primeiro uma cópia de segurança do estado atual, e depois substituir os dados do casamento pelos desta cópia.',
+    alertSnapshotCreateError:'Não foi possível criar a cópia de segurança. Verifica a tua ligação e tenta novamente.',
+    alertRestoreError:'Não foi possível restaurar esta cópia. Os teus dados atuais não foram alterados — tenta novamente.',
+    historicoPreviewTitle:'Resumo desta cópia',
+    historicoPreviewParseError:'Não foi possível ler o conteúdo desta cópia.',
+    historicoPreviewCoupleLabel:'Noivos',
+    historicoPreviewDateLabel:'Data',
+    historicoPreviewVenueLabel:'Local',
+    historicoPreviewGuestsLabel:'Convidados',
+    historicoPreviewBudgetLabel:'Orçamento total',
+
     excelFileTitle:'Ficheiro Excel',
     excelFileText:'Uma folha para cada área — fácil de abrir, filtrar e editar no telemóvel ou computador.',
     btnDownloadExcel:'Descarregar Excel (.xlsx)',
@@ -3895,6 +3947,7 @@ const APP_I18N = {
     designTitle:'Design and cover photo', designDesc:'Customize your wedding\'s look',
     categoriesTitle:'Expense categories', categoriesDesc:'Edit your budget categories',
     exportTitle:'Export data', exportDesc:'Download everything as Excel or PDF',
+    historicoTitle:'Wedding history', historicoDesc:'Backups and restore',
     inviteTitle:'Invite a planning partner', inviteDesc:'Share the wedding planning',
     accessTitle:'Who has access', accessDesc:'Control who can see and edit the data',
     privacyTitle:'Privacy & GDPR', privacyDesc:'Read our privacy policy',
@@ -4174,6 +4227,10 @@ const APP_I18N = {
     authErrBadCredentials:'Incorrect email or password. Please try again.',
     authErrWeakPassword:'The password needs at least 6 characters.',
     authErrInvalidEmail:'That email does not look valid.',
+    authErrAccountExistsDifferentCred:'An account already exists with this email, created a different way (e.g. with a password). Sign in with that option instead.',
+    authErrPopupBlocked:'Your browser blocked the Google sign-in window. Allow pop-ups for this site and try again.',
+    btnContinueGoogle:'Continue with Google',
+    orSeparatorLabel:'or',
     authErrGeneric: code => `We could not continue (${code}).`,
     obTitle:"Let's set up your wedding", obName1:"Bride's name (e.g. Rita)", obName2:"Groom's name (e.g. Tiago)",
     obDateLabel:'Wedding date', obVenue:'Venue (e.g. Quinta do Jardim, Barcelos)', obStart:'Get started',
@@ -4491,6 +4548,33 @@ const APP_I18N = {
     defExportTitle:'Export data',
     exportIncludesLabel:'What\'s included',
     exportIncludesText:'Budget by category, all expenses, the guest list with confirmations, the seating plan and your suppliers — exactly as they currently stand in the app.',
+
+    historicoIntroText:'Weddy automatically keeps backups of your wedding, and you can also create your own at any time (for example, before reorganizing your tables). Restoring a backup always creates a backup of the current state first — you never lose data without a safety net.',
+    snapshotLabelInputLabel:'Give this backup a name (optional)',
+    phSnapshotLabel:'E.g.: Before reorganizing tables',
+    btnCreateManualSnapshot:'Create backup now',
+    creatingBackupLabel:'Creating backup…',
+    historicoListLabel:'Saved backups',
+    historicoLoadError:'Could not load the history. Please try again.',
+    historicoEmptyText:'No backups yet. Weddy creates one automatically as you use the app.',
+    snapshotManualBadge:'Manual',
+    snapshotAutoBadge:'Automatic',
+    btnViewSnapshot:'View',
+    btnRestoreSnapshot:'Restore',
+    restoringLabel:'Restoring…',
+    snapshotAutoLabel:'Automatic backup',
+    snapshotBeforeRestoreLabel:'Before restoring',
+    confirmRestoreSnapshotText:'Are you sure you want to restore this backup? We\'ll first save a backup of the current state, then replace the wedding data with this one.',
+    alertSnapshotCreateError:'Could not create the backup. Check your connection and try again.',
+    alertRestoreError:'Could not restore this backup. Your current data was not changed — please try again.',
+    historicoPreviewTitle:'Backup summary',
+    historicoPreviewParseError:'Could not read the contents of this backup.',
+    historicoPreviewCoupleLabel:'Couple',
+    historicoPreviewDateLabel:'Date',
+    historicoPreviewVenueLabel:'Venue',
+    historicoPreviewGuestsLabel:'Guests',
+    historicoPreviewBudgetLabel:'Total budget',
+
     excelFileTitle:'Excel file',
     excelFileText:'One sheet per area — easy to open, filter and edit on your phone or computer.',
     btnDownloadExcel:'Download Excel (.xlsx)',
@@ -7412,6 +7496,16 @@ let rsvpFaqEditingIndex = null;
 // Vive só em memória (nunca é gravado no state/Firestore antes do envio) e
 // é limpo a seguir a um envio com sucesso ou ao sair do ecrã.
 let reportarScreenshots = [];
+// Fase Histórico (Set 2026): estado do ecrã "Histórico do casamento" — a
+// lista em si vive só em memória (carregada por loadHistoricoSnapshots ao
+// entrar no ecrã, nunca pelo listener em tempo real que trata do resto do
+// documento, para não pesar a sincronização normal com algo que a pessoa
+// só vê raramente).
+let historicoSnapshots = [];
+let historicoLoading = false;
+let historicoError = false;
+let historicoRestoringId = null; // id do snapshot a ser restaurado agora, ou null
+let historicoCreatingBackup = false;
 function fmtRelativeTime(date){
   if(!date) return '';
   const diffMin = Math.round((Date.now() - date.getTime())/60000);
@@ -9375,6 +9469,7 @@ function viewDefinicoes(){
   if(definicoesSection==='termos') return viewDefTermos();
   if(definicoesSection==='sobre') return viewDefSobre();
   if(definicoesSection==='exportar') return viewDefExportar();
+  if(definicoesSection==='historico') return viewDefHistorico();
   if(definicoesSection==='reportar') return viewDefReportar();
   if(definicoesSection==='rsvp') return viewDefRSVP();
   if(definicoesSection==='health') return viewDefWeddingHealth();
@@ -9468,6 +9563,7 @@ function viewDefMenu(){
   <div class="section-label-caps">${ta('sectionData')}</div>
   <div class="list-group">
     ${defMenuRow('exportar', ICONS.docnote||ICONS.checklist, 3, ta('exportTitle'), ta('exportDesc'))}
+    ${defMenuRow('historico', ICONS.docnote||ICONS.checklist, 9, ta('historicoTitle'), ta('historicoDesc'))}
   </div>
 
   <div class="section-label-caps">${ta('sectionAccess')}</div>
@@ -9910,6 +10006,57 @@ function viewDefExportar(){
     <button class="login-btn" id="export-pdf-btn" style="margin-top:12px;">${ta('btnDownloadPDF')}</button>
     <div id="export-pdf-msg" class="login-msg" style="margin-top:6px;"></div>
   </div>
+  <div style="height:10px;"></div>
+  `;
+}
+
+// Histórico do casamento — cópias de segurança automáticas e manuais, com
+// restauro sempre protegido por um backup automático do estado atual (ver
+// restoreSnapshot em cima). Pedido direto da Rita, rejeitando o modelo mais
+// simples da app concorrente (carregar um ficheiro JSON e substituir tudo).
+function viewDefHistorico(){
+  if(historicoSnapshots.length===0 && !historicoLoading && !historicoError) loadHistoricoSnapshots();
+  const kindBadge = (kind)=> kind==='manual'
+    ? `<span class="def-row-badge" style="background:var(--sage-dark); color:#fff;">${ta('snapshotManualBadge')}</span>`
+    : `<span class="def-row-badge">${ta('snapshotAutoBadge')}</span>`;
+  let listHtml = '';
+  if(historicoLoading){
+    listHtml = `<div class="empty-note" style="margin:0 16px 12px;">${ta('loadingLabel')}</div>`;
+  }else if(historicoError){
+    listHtml = `<div class="empty-note" style="margin:0 16px 12px;">${ta('historicoLoadError')}</div>`;
+  }else if(historicoSnapshots.length===0){
+    listHtml = `<div class="empty-note" style="margin:0 16px 12px;">${ta('historicoEmptyText')}</div>`;
+  }else{
+    listHtml = `<div class="list-group">` + historicoSnapshots.map(s=>{
+      const busy = historicoRestoringId===s.id;
+      return `
+      <div class="list-row" style="align-items:flex-start; flex-direction:column; gap:8px; padding:12px 16px;">
+        <div style="display:flex; align-items:center; gap:8px; width:100%;">
+          <div class="def-row-mid" style="flex:1;">
+            <div class="def-row-title">${formatSnapshotDate(s.createdAt)}</div>
+            ${s.label? `<div class="def-row-desc">${escapeHTML(s.label)}</div>` : ''}
+          </div>
+          ${kindBadge(s.kind)}
+        </div>
+        <div style="display:flex; gap:8px; width:100%;">
+          <button type="button" class="login-btn" data-histverid="${s.id}" style="margin-top:0; flex:1; background:var(--card); color:var(--ink); border:1px solid var(--line); padding:10px;">${ta('btnViewSnapshot')}</button>
+          <button type="button" class="login-btn" data-histrestoreid="${s.id}" ${busy?'disabled':''} style="margin-top:0; flex:1; padding:10px;">${busy? ta('restoringLabel') : ta('btnRestoreSnapshot')}</button>
+        </div>
+      </div>`;
+    }).join('') + `</div>`;
+  }
+  return `
+  ${defSubHeader(ta('historicoTitle'))}
+  <div class="empty-note" style="margin:0 16px 14px;">${ta('historicoIntroText')}</div>
+
+  <div class="stat-card" style="margin:0 16px 16px;">
+    <div class="l" style="margin:0 0 4px;">${ta('snapshotLabelInputLabel')}</div>
+    <input type="text" id="hist-manual-label" placeholder="${ta('phSnapshotLabel')}" maxlength="80" style="all:unset; box-sizing:border-box; width:100%; background:var(--card); border:1px solid var(--line); border-radius:10px; padding:10px 12px; margin-top:6px; font-family:inherit; font-size:14px; color:var(--ink);">
+    <button class="login-btn" id="hist-manual-backup-btn" ${historicoCreatingBackup?'disabled':''} style="margin-top:12px;">${historicoCreatingBackup? ta('creatingBackupLabel') : ta('btnCreateManualSnapshot')}</button>
+  </div>
+
+  <div class="section-label">${ta('historicoListLabel')}</div>
+  ${listHtml}
   <div style="height:10px;"></div>
   `;
 }
@@ -10487,6 +10634,12 @@ function bindHandlers(){
       // ecrã de uma visita anterior a este ecrã que nunca chegaram a ser
       // enviadas.
       if(key==='reportar') reportarScreenshots = [];
+      // Recarregar sempre do zero ao entrar no Histórico — evita mostrar uma
+      // lista desatualizada (ex.: depois de um restauro, que cria logo um
+      // novo snapshot automático) e força loadHistoricoSnapshots() a correr
+      // de novo (ver o guard "length===0 && !loading && !error" no topo de
+      // viewDefHistorico).
+      if(key==='historico'){ historicoSnapshots = []; historicoError = false; }
       if(key==='rsvp') setRSVPSeenCount(countRSVPResponded());
       _origRender();
     });
@@ -10611,6 +10764,20 @@ function bindHandlers(){
   });
   document.querySelectorAll('[data-applang]').forEach(el=>{
     el.addEventListener('click', ()=>{ setAppLang(el.getAttribute('data-applang')); });
+  });
+  // Histórico do casamento — religado a cada render() porque o ecrã inteiro
+  // é dinâmico (mesmo padrão dos botões do "Reporta um problema" acima).
+  const histManualBackupBtn = document.getElementById('hist-manual-backup-btn');
+  if(histManualBackupBtn) histManualBackupBtn.addEventListener('click', ()=>{
+    const labelInput = document.getElementById('hist-manual-label');
+    const label = (labelInput && labelInput.value.trim()) || '';
+    createManualSnapshot(label);
+  });
+  document.querySelectorAll('[data-histverid]').forEach(btn=>{
+    btn.addEventListener('click', e=> showSnapshotPreview(e.currentTarget.dataset.histverid));
+  });
+  document.querySelectorAll('[data-histrestoreid]').forEach(btn=>{
+    btn.addEventListener('click', e=> restoreSnapshot(e.currentTarget.dataset.histrestoreid));
   });
   // Fase Feedback (Set 2026): botão "+" que abre o seletor de imagens, e o
   // "x" em cada miniatura já escolhida — ambos vivem dentro do ecrã
@@ -13247,6 +13414,13 @@ function renderLoginForm(msg, isError, isSuccess){
     <div class="login-msg ${isError?'error':isSuccess?'success':''}">${msg||''}</div>
     ${!isSignup? `<div class="login-note" style="cursor:pointer;" id="login-forgot">${ta('forgotPassword')}</div>` : ''}
     <div class="login-note" style="cursor:pointer;" id="login-toggle">${isSignup? ta('toggleToLogin') : ta('toggleToSignup')}</div>
+
+    <div style="display:flex; align-items:center; gap:10px; margin:16px 0;">
+      <div style="flex:1; height:1px; background:var(--line);"></div>
+      <span style="font-size:11.5px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.04em;">${ta('orSeparatorLabel')}</span>
+      <div style="flex:1; height:1px; background:var(--line);"></div>
+    </div>
+    <button type="button" class="login-btn" id="login-google" style="margin-top:0; background:#fff; color:#3c4043; border:1px solid var(--line); display:flex; align-items:center; justify-content:center; gap:10px;">${GOOGLE_G_ICON}<span>${ta('btnContinueGoogle')}</span></button>
   `;
   document.getElementById('login-send').addEventListener('click', handleAuthSubmit);
   document.getElementById('login-pass').addEventListener('keydown', e=>{ if(e.key==='Enter') handleAuthSubmit(); });
@@ -13255,6 +13429,7 @@ function renderLoginForm(msg, isError, isSuccess){
   document.getElementById('login-toggle').addEventListener('click', ()=>{ authMode = isSignup?'login':'signup'; renderLoginForm(); });
   const forgotLink = document.getElementById('login-forgot');
   if(forgotLink) forgotLink.addEventListener('click', handleForgotPassword);
+  document.getElementById('login-google').addEventListener('click', handleGoogleSignIn);
 }
 function handleForgotPassword(){
   const email = document.getElementById('login-email').value.trim();
@@ -13368,9 +13543,87 @@ function handleAuthSubmit(){
   });
 }
 
+// Fase Login Google (Set 2026), pedido direto da Rita ("claramente a
+// funcionalidade que falta"). Ao contrário do email/password, a Google não
+// distingue "criar conta" de "entrar" — é o mesmo popup/ecrã dos dois
+// lados. Por isso o consentimento (Termos/Privacidade) não é pedido aqui: é
+// pedido mais tarde, dentro do próprio Assistente de Configuração
+// (renderOnboarding), que só aparece mesmo para contas novas sem nenhum
+// casamento ainda associado — ver o bloco "sem pendingConsent" lá, que
+// mostra a mesma caixa de consentimento como rede de segurança para
+// qualquer método de registo que não passe pelo formulário de
+// email/password (hoje só a Google, mas serve para futuros métodos
+// também). Uma conta Google já vem com o email verificado pela própria
+// Google, por isso nunca passa pelo ecrã "confirma o teu email".
+//
+// Em contexto de PWA instalada (ecrã inicial do iPhone/Android, sem barra
+// de navegador), signInWithPopup costuma falhar ou comportar-se mal — por
+// isso aqui usamos sempre signInWithRedirect nesse caso, e só usamos popup
+// no browser normal (ecrã mais amigável, sem sair da página).
+function isStandaloneApp(){
+  try{
+    return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
+  }catch(e){ return false; }
+}
+function handleGoogleSignIn(){
+  if(!FIREBASE_READY || !auth){ renderLoginForm(ta('firebaseNotReadyFile'), true); return; }
+  const btn = document.getElementById('login-google');
+  if(btn) btn.disabled = true;
+  const provider = new firebase.auth.GoogleAuthProvider();
+  provider.setCustomParameters({ prompt: 'select_account' });
+  const showError = (err)=>{
+    console.error('Weddy Google sign-in error:', err && err.code, err && err.message);
+    // "popup-closed-by-user"/"cancelled-popup-request": a pessoa desistiu a
+    // meio, não é um erro real — não vale a pena assustar com uma
+    // mensagem vermelha.
+    if(err && (err.code==='auth/popup-closed-by-user' || err.code==='auth/cancelled-popup-request')){
+      if(btn) btn.disabled = false;
+      return;
+    }
+    let msg;
+    if(err && err.code==='auth/account-exists-with-different-credential') msg = ta('authErrAccountExistsDifferentCred');
+    else if(err && err.code==='auth/unauthorized-domain') msg = ta('authErrUnauthorizedDomain');
+    else if(err && err.code==='auth/popup-blocked') msg = ta('authErrPopupBlocked');
+    else msg = ta('authErrGeneric')((err && (err.code||err.message))||'unknown error');
+    renderLoginForm(msg, true);
+  };
+  if(isStandaloneApp()){
+    auth.signInWithRedirect(provider).catch(showError);
+  } else {
+    auth.signInWithPopup(provider).catch(showError);
+  }
+}
+// Recolhe o resultado de signInWithRedirect (PWA instalada) ao recarregar a
+// página depois do login na Google. Em caso de sucesso não há nada a fazer
+// aqui — onAuthStateChanged (mais abaixo) já trata da navegação; isto serve
+// só para apanhar erros que de outra forma passariam em silêncio.
+if(FIREBASE_READY && auth){
+  auth.getRedirectResult().catch(err=>{
+    if(!err || err.code==='auth/popup-closed-by-user' || err.code==='auth/cancelled-popup-request') return;
+    console.error('Weddy Google redirect error:', err.code, err.message);
+    let msg;
+    if(err.code==='auth/account-exists-with-different-credential') msg = ta('authErrAccountExistsDifferentCred');
+    else if(err.code==='auth/unauthorized-domain') msg = ta('authErrUnauthorizedDomain');
+    else msg = ta('authErrGeneric')(err.code||err.message||'unknown error');
+    renderLoginForm(msg, true);
+  });
+}
+
 /* ---- Assistente de configuração (primeira vez) ---- */
 function renderOnboarding(){
   lastLoginRender = renderOnboarding;
+  // Fase Login Google (Set 2026): o formulário de email/password já capta o
+  // consentimento (Termos/Privacidade) na própria caixa de registo, antes de
+  // sequer chegar aqui — guardado em localStorage (ver handleAuthSubmit) e
+  // lido abaixo em handleOnboardingSubmit. Um método de registo que não
+  // passe por esse formulário (hoje só a Google) nunca teve oportunidade de
+  // mostrar essa caixa, por isso este ecrã mostra-a aqui como rede de
+  // segurança sempre que não há nenhum consentimento pendente — garante que
+  // NENHUMA conta cria um casamento sem consentimento registado,
+  // independentemente do método de login.
+  let pendingConsentCheck = null;
+  try{ pendingConsentCheck = JSON.parse(localStorage.getItem('weddy-signup-consent')||'null'); }catch(e){ pendingConsentCheck = null; }
+  const needsConsentHere = !pendingConsentCheck;
   document.getElementById('login-inner').innerHTML = `
 
     <div class="login-tag">${ta('obTitle')}</div>
@@ -13381,6 +13634,10 @@ function renderOnboarding(){
       <input type="date" id="ob-date">
     </div>
     <div class="login-field" style="margin-top:10px;"><input type="text" id="ob-venue" placeholder="${ta('obVenue')}"></div>
+    ${needsConsentHere? `<label style="display:flex; align-items:flex-start; gap:8px; margin-top:12px; text-align:left; font-size:12.5px; color:var(--ink-soft); line-height:1.45; cursor:pointer;">
+      <input type="checkbox" id="ob-consent" style="margin-top:2px; flex-shrink:0;">
+      <span>${ta('consentCheckboxHtml')()}</span>
+    </label>` : ''}
     <button class="login-btn" id="ob-save">${ta('obStart')}</button>
     <div class="login-msg" id="ob-msg"></div>
   `;
@@ -13406,18 +13663,26 @@ function handleOnboardingSubmit(){
     flagRequiredField(dateEl);
     return;
   }
+  // Fase Login Google (Set 2026): quando não há consentimento pendente do
+  // formulário de email/password (ver renderOnboarding), a caixa aparece
+  // aqui — e é obrigatória, exatamente como no registo por email/password.
+  let pendingConsent = null;
+  try{ pendingConsent = JSON.parse(localStorage.getItem('weddy-signup-consent')||'null'); }catch(e){ pendingConsent = null; }
+  const obConsentEl = document.getElementById('ob-consent');
+  if(!pendingConsent && obConsentEl && !obConsentEl.checked){
+    document.getElementById('ob-msg').textContent = ta('consentRequiredError');
+    document.getElementById('ob-msg').classList.add('error');
+    return;
+  }
   renderLoading(ta('obCreating'));
   const email = auth.currentUser.email.toLowerCase();
   weddingSettings = defaultSettings(name1, name2, date, venue);
   state = seedData();
   // Fase Consentimento (Set 2026): lê o consentimento dado na caixa
-  // obrigatória do registo (guardado em handleAuthSubmit). O fallback abaixo
-  // só deve disparar num caso muito raro (ex.: alguém com esta página aberta
-  // desde antes desta funcionalidade existir) — mesmo assim, prefere sempre
-  // gravar um consentimento com a versão atual e a hora de agora a criar uma
-  // conta sem nenhum registo de consentimento.
-  let pendingConsent = null;
-  try{ pendingConsent = JSON.parse(localStorage.getItem('weddy-signup-consent')||'null'); }catch(e){ pendingConsent = null; }
+  // obrigatória do registo (guardado em handleAuthSubmit) ou, para métodos
+  // sem esse formulário (Google), a caixa mostrada mesmo aqui em cima —
+  // ambas as origens produzem exatamente o mesmo formato em localStorage,
+  // por isso este bloco não precisa de saber qual das duas foi usada.
   const acceptedAtDate = (pendingConsent && pendingConsent.acceptedAt) ? new Date(pendingConsent.acceptedAt) : new Date();
   const consent = {
     termsVersion: (pendingConsent && pendingConsent.termsVersion) || CURRENT_TERMS_VERSION,
@@ -13841,6 +14106,158 @@ function pushRemote(confirmToast){
 }
 render = function(){ _origRender(); pushRemote(); };
 
+/* ============================================================
+   HISTÓRICO DO CASAMENTO — cópias de segurança e restauro
+   (Fase Histórico, Set 2026, pedido direto da Rita). Ver SNAPSHOTS() para o
+   porquê de viver como subcoleção do próprio casamento.
+============================================================ */
+// createSnapshot grava exatamente o mesmo par de campos (settings + json)
+// que já vive no documento principal — um snapshot é, por desenho, "o
+// documento inteiro tal como estava neste momento", nunca um resumo.
+function createSnapshot(kind, label){
+  if(!FIREBASE_READY || !auth || !auth.currentUser || !currentWeddingId) return Promise.reject(new Error('not-ready'));
+  return SNAPSHOTS().add({
+    settings: weddingSettings,
+    json: JSON.stringify(state),
+    label: label || '',
+    kind, // 'auto' | 'manual'
+    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    createdByEmail: auth.currentUser.email || ''
+  }).then(docRef=>{
+    if(kind==='auto') pruneOldAutoSnapshots();
+    return docRef;
+  });
+}
+// Evita crescimento sem fim dos backups automáticos (os manuais, criados
+// deliberadamente pela pessoa, nunca são apagados sozinhos). Busca só pela
+// data (índice simples, sem precisar de nenhum índice composto no
+// Firestore) e filtra "kind" do lado do cliente.
+function pruneOldAutoSnapshots(){
+  SNAPSHOTS().orderBy('createdAt','desc').limit(60).get().then(qs=>{
+    const autoDocs = qs.docs.filter(d=> d.data().kind==='auto');
+    if(autoDocs.length <= SNAPSHOT_AUTO_KEEP) return;
+    autoDocs.slice(SNAPSHOT_AUTO_KEEP).forEach(d=> d.ref.delete().catch(()=>{}));
+  }).catch(()=>{});
+}
+// No máximo um backup automático a cada ~20h (nunca a cada gravação) —
+// chamado uma vez por sessão, logo a seguir à primeira sincronização
+// completa (ver attachFirestoreSync). currentLastAutoSnapshotAt vem do
+// próprio documento do casamento (data.lastAutoSnapshotAt), por isso o
+// intervalo é respeitado mesmo entre dispositivos diferentes.
+function maybeCreateAutoSnapshot(){
+  if(!FIREBASE_READY || !auth || !auth.currentUser || !currentWeddingId) return;
+  const last = currentLastAutoSnapshotAt && currentLastAutoSnapshotAt.toDate ? currentLastAutoSnapshotAt.toDate() : null;
+  const MIN_INTERVAL_MS = 20 * 60 * 60 * 1000;
+  if(last && (Date.now() - last.getTime()) < MIN_INTERVAL_MS) return;
+  createSnapshot('auto', ta('snapshotAutoLabel')).then(()=>{
+    CURRENT_DOC().update({ lastAutoSnapshotAt: firebase.firestore.FieldValue.serverTimestamp() }).catch(()=>{});
+  }).catch(err=>{ console.error('Weddy auto snapshot error:', err && err.code, err && err.message); });
+}
+function loadHistoricoSnapshots(){
+  if(!FIREBASE_READY || !currentWeddingId) return;
+  historicoLoading = true; historicoError = false; _origRender();
+  SNAPSHOTS().orderBy('createdAt','desc').limit(30).get().then(qs=>{
+    historicoSnapshots = qs.docs.map(d=>({ id:d.id, ...d.data() }));
+    historicoLoading = false;
+    _origRender();
+  }).catch(err=>{
+    console.error('Weddy load snapshots error:', err && err.code, err && err.message);
+    historicoLoading = false; historicoError = true;
+    _origRender();
+  });
+}
+function formatSnapshotDate(ts){
+  if(!ts) return '';
+  const d = ts.toDate ? ts.toDate() : new Date(ts);
+  if(isNaN(d.getTime())) return '';
+  const meses = ta('monthNamesShort');
+  const hh = String(d.getHours()).padStart(2,'0');
+  const mm = String(d.getMinutes()).padStart(2,'0');
+  return `${d.getDate()} ${meses[d.getMonth()]} ${ta('dateAtTimeSeparator')} ${hh}:${mm}`;
+}
+// Cria já a cópia de segurança manual pedida no ecrã "Histórico do
+// casamento" — mesma função createSnapshot() dos backups automáticos, só
+// muda o "kind" e o rótulo (escrito pela própria pessoa, ex.: "Antes de
+// reorganizar mesas").
+function createManualSnapshot(label){
+  historicoCreatingBackup = true; _origRender();
+  createSnapshot('manual', label).then(()=>{
+    historicoCreatingBackup = false;
+    loadHistoricoSnapshots();
+  }).catch(err=>{
+    console.error('Weddy manual snapshot error:', err && err.code, err && err.message);
+    historicoCreatingBackup = false;
+    _origRender();
+    alert(ta('alertSnapshotCreateError'));
+  });
+}
+// Restaurar: pedido explícito da Rita para NUNCA ser um simples "carrega o
+// JSON e substitui tudo" (o que a app concorrente faz) — cria sempre,
+// primeiro, uma cópia de segurança automática do estado ATUAL, e só depois
+// aplica os dados do snapshot escolhido. Se essa cópia de segurança falhar,
+// o restauro é cancelado por completo (nunca troca dados sem essa rede de
+// segurança).
+function restoreSnapshot(snapshotId){
+  const snap = historicoSnapshots.find(s=>s.id===snapshotId);
+  if(!snap) return;
+  if(!confirm(ta('confirmRestoreSnapshotText'))) return;
+  historicoRestoringId = snapshotId; _origRender();
+  createSnapshot('auto', ta('snapshotBeforeRestoreLabel')).then(()=>{
+    let restoredState, restoredSettings;
+    try{
+      restoredState = JSON.parse(snap.json);
+      restoredSettings = snap.settings;
+    }catch(e){
+      throw new Error('parse-error');
+    }
+    state = restoredState;
+    weddingSettings = restoredSettings;
+    return CURRENT_DOC().set({
+      settings: weddingSettings,
+      json: JSON.stringify(state),
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    }, { merge:true });
+  }).then(()=>{
+    historicoRestoringId = null;
+    closeAllSheets();
+    definicoesSection = null;
+    activeTab = 'inicio';
+    _origRender();
+    showSaveToast(false);
+  }).catch(err=>{
+    console.error('Weddy restore snapshot error:', err && err.message);
+    historicoRestoringId = null;
+    _origRender();
+    alert(ta('alertRestoreError'));
+  });
+}
+// "Ver" — mostra um resumo rápido do snapshot (nomes, data, local, nº de
+// convidados, total do orçamento) sem restaurar nada, para a pessoa decidir
+// com confiança antes de tocar em "Restaurar". Reaproveita a bottom-sheet
+// já usada para Termos/Privacidade (openLegalOverlay).
+function showSnapshotPreview(snapshotId){
+  const snap = historicoSnapshots.find(s=>s.id===snapshotId);
+  if(!snap) return;
+  let summaryHtml = `<p>${ta('historicoPreviewParseError')}</p>`;
+  try{
+    const st = JSON.parse(snap.json);
+    const set = snap.settings || {};
+    const coupleNames = (set.coupleName1 && set.coupleName2) ? `${set.coupleName1} & ${set.coupleName2}` : ta('notIdentifiedLabel');
+    const dateStr = set.weddingDate ? formatDatePT(set.weddingDate) : ta('notIdentifiedLabel');
+    const venue = set.venue || ta('notIdentifiedLabel');
+    const guestCount = countMeaningfulData(st).guests;
+    const budgetTotal = (st.budget && st.budget.total) ? Number(st.budget.total)||0 : 0;
+    summaryHtml = `
+      <p><b>${ta('historicoPreviewCoupleLabel')}:</b> ${escapeHTML(coupleNames)}</p>
+      <p><b>${ta('historicoPreviewDateLabel')}:</b> ${escapeHTML(dateStr)}</p>
+      <p><b>${ta('historicoPreviewVenueLabel')}:</b> ${escapeHTML(venue)}</p>
+      <p><b>${ta('historicoPreviewGuestsLabel')}:</b> ${guestCount}</p>
+      <p><b>${ta('historicoPreviewBudgetLabel')}:</b> ${fmtEUR(budgetTotal)}</p>
+    `;
+  }catch(e){ /* summaryHtml já tem a mensagem de erro */ }
+  openLegalOverlay('historicoPreviewTitle', summaryHtml);
+}
+
 /* Rede de segurança: nunca aceitar um snapshot do Firestore que pareça uma
    perda de dados. Se o que está guardado localmente tem uma quantidade
    substancial de convidados/tarefas e o que chega agora do Firestore está
@@ -13935,6 +14352,7 @@ function attachFirestoreSync(){
       if(data.lastLoginByEmail) currentLastLogins = data.lastLoginByEmail;
       if(data.uidByEmail) currentUidByEmail = data.uidByEmail;
       if(data.subscription !== undefined) currentSubscription = data.subscription;
+      if(data.lastAutoSnapshotAt !== undefined) currentLastAutoSnapshotAt = data.lastAutoSnapshotAt;
       if(Array.isArray(data.assistantChatHistory)) assistChatHistory = data.assistantChatHistory;
     }
     let renderNeeded = changed || !firstSyncDone;
@@ -13953,6 +14371,9 @@ function attachFirestoreSync(){
       // a pessoa abra essa página), só para o indicador de "novas respostas"
       // no menu de Definições poder aparecer correto desde o início.
       if(hasActiveSubscription() && !rsvpResponsesLoaded && !rsvpLoadingResponses) loadRSVPResponses();
+      // Fase Histórico (Set 2026): backup automático — no máximo um por
+      // sessão/dia (ver maybeCreateAutoSnapshot), nunca a cada gravação.
+      maybeCreateAutoSnapshot();
     }
   }, err=>{
     if(err.code === 'permission-denied'){
