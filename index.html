@@ -1316,6 +1316,7 @@ html.rotate-blocked .rotate-lock-overlay{ display:flex; }
 
   <input type="file" id="insp-file-input" accept="image/*" multiple style="display:none;">
   <input type="file" id="dress-insp-file-input" accept="image/*" multiple style="display:none;">
+  <input type="file" id="def-reportar-photo-input" accept="image/*" multiple style="display:none;">
 
   <div class="save-toast" id="save-toast"></div>
   <div class="img-lightbox" id="img-lightbox">
@@ -1781,6 +1782,15 @@ const CURRENT_DOC = () => db.collection('weddings').doc(currentWeddingId);
 // seu próprio convite (ver comentário completo nas regras do Firestore).
 const GUESTS = () => db.collection('guests');
 const MEMORIES = () => db.collection('memories');
+// Fase Feedback (Set 2026, pedido da Rita): coleção separada dos relatórios
+// de bug/feedback enviados de dentro da app ("Reporta um problema"). Cada
+// relatório é escrito uma única vez pelo cliente (create-only — ver
+// firestore.rules.completas.txt) com o contexto capturado automaticamente
+// (página, weddingId, utilizador, dispositivo, hora) e, opcionalmente, até
+// 5 capturas de ecrã guardadas no Storage (nunca no próprio documento, para
+// não aproximar o limite de ~1MiB do Firestore). Não há ainda nenhum ecrã
+// para os REVER dentro da app — por agora ficam só na consola do Firebase.
+const FEEDBACK = () => db.collection('feedback');
 
 
 /* ============================================================
@@ -2517,6 +2527,13 @@ function escapeHTML(str){
     .replace(/>/g,'&gt;')
     .replace(/"/g,'&quot;')
     .replace(/'/g,'&#39;');
+}
+// Fase Feedback (Set 2026): usado só para mostrar "X,X MB" no total das
+// capturas de ecrã escolhidas em "Reporta um problema" — não precisa de
+// precisão a mais, só de dar uma ideia rápida de quanto falta para o limite.
+function fmtFileSize(bytes){
+  if(!bytes) return '0 MB';
+  return (bytes/(1024*1024)).toFixed(1)+' MB';
 }
 // Fase 4D da auditoria (BUG-01, P2): n=Number(n) ANTES do isNaN. Antes,
 // fmtEUR(null) rebentava com TypeError — isNaN(null) é `false` (porque
@@ -3464,6 +3481,13 @@ const APP_I18N = {
     reportIntroText:'Encontraste um bug, um erro ou algo que não funciona bem? Descreve aqui o que aconteceu — a mensagem é enviada diretamente para nós, sem sair da app.',
     reportWhatHappenedLabel:'O que aconteceu?',
     phReportDescribe:'Descreve o problema, o que esperavas que acontecesse e em que ecrã da app estavas…',
+    reportEmailLabel:'Email para resposta',
+    phReportEmail:'oteuemail@exemplo.com',
+    reportScreenshotsLabel:'Imagens (opcional)',
+    reportScreenshotsHint:'Anexa prints do erro — até 5 imagens, 5 MB no total.',
+    reportRemoveImageAlt:'Remover imagem',
+    reportTooManyImages:'Só podes anexar até 5 imagens.',
+    reportImagesTooLarge:'As imagens em conjunto não podem passar de 5 MB. Remove alguma ou tenta imagens mais pequenas.',
     btnSend:'Enviar',
 
     // Sheets e avisos estáticos (fora do #app-body, nunca reconstruídos por
@@ -4320,6 +4344,13 @@ const APP_I18N = {
     reportIntroText:'Found a bug, an error or something that isn\'t working well? Describe what happened here — the message is sent directly to us, without leaving the app.',
     reportWhatHappenedLabel:'What happened?',
     phReportDescribe:'Describe the problem, what you expected to happen and which screen of the app you were on…',
+    reportEmailLabel:'Reply email',
+    phReportEmail:'youremail@example.com',
+    reportScreenshotsLabel:'Images (optional)',
+    reportScreenshotsHint:'Attach screenshots of the issue — up to 5 images, 5 MB total.',
+    reportRemoveImageAlt:'Remove image',
+    reportTooManyImages:'You can attach up to 5 images.',
+    reportImagesTooLarge:'Combined images can\'t exceed 5 MB. Remove one or try smaller images.',
     btnSend:'Send',
 
     // Static sheets and warnings (outside #app-body, never rebuilt by
@@ -7208,6 +7239,11 @@ let rsvpSubScreen = null; // null | 'deadline' | 'info' | 'faq' | 'respostas'
 // Edição de perguntas frequentes (Concierge): null = nenhuma a editar,
 // 'new' = a criar uma nova, ou o índice (número) da pergunta existente.
 let rsvpFaqEditingIndex = null;
+// Fase Feedback (Set 2026): capturas de ecrã escolhidas no ecrã "Reporta um
+// problema", ainda não enviadas — array de { file, dataUrl, name, size }.
+// Vive só em memória (nunca é gravado no state/Firestore antes do envio) e
+// é limpo a seguir a um envio com sucesso ou ao sair do ecrã.
+let reportarScreenshots = [];
 function fmtRelativeTime(date){
   if(!date) return '';
   const diffMin = Math.round((Date.now() - date.getTime())/60000);
@@ -9620,12 +9656,37 @@ function viewDefSobre(){
 }
 
 function viewDefReportar(){
+  // Fase Feedback (Set 2026): o campo de email vem pré-preenchido com o da
+  // conta autenticada (quando existe), mas fica editável — quem reporta pode
+  // querer uma resposta noutro endereço. reportarScreenshots vive só em
+  // memória (ver declaração), por isso sobrevive a re-renders deste ecrã
+  // mas é limpo ao sair ou depois de um envio com sucesso.
+  const accountEmail = (typeof auth!=='undefined' && auth && auth.currentUser && auth.currentUser.email) ? auth.currentUser.email : '';
+  const totalBytes = reportarScreenshots.reduce((s,sc)=>s+(sc.size||0),0);
+  const thumbs = reportarScreenshots.map((sc,i)=>`
+    <div style="position:relative; width:64px; height:64px; border-radius:10px; overflow:hidden; border:1px solid var(--line); flex-shrink:0;">
+      <img src="${sc.dataUrl}" style="width:100%; height:100%; object-fit:cover; display:block;">
+      <button type="button" data-reportarrm="${i}" aria-label="${ta('reportRemoveImageAlt')}" style="position:absolute; top:2px; right:2px; width:20px; height:20px; border-radius:50%; border:none; background:rgba(30,26,23,0.72); color:#fff; display:flex; align-items:center; justify-content:center; cursor:pointer; padding:0;">${ICONS.x}</button>
+    </div>`).join('');
   return `
   ${defSubHeader(ta('reportTitle'))}
   <div class="empty-note" style="margin:0 16px 14px;">${ta('reportIntroText')}</div>
   <div class="stat-card" style="margin:0 16px 12px;">
     <div class="l" style="margin:0 0 4px;">${ta('reportWhatHappenedLabel')}</div>
     <textarea id="def-reportar-text" rows="8" placeholder="${ta('phReportDescribe')}" style="all:unset; box-sizing:border-box; width:100%; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px; margin-top:6px; font-family:inherit; font-size:14px; color:var(--ink); resize:vertical;"></textarea>
+  </div>
+  <div class="stat-card" style="margin:0 16px 12px;">
+    <div class="l" style="margin:0 0 4px;">${ta('reportEmailLabel')}</div>
+    <input type="email" id="def-reportar-email" value="${escapeHTML(accountEmail)}" placeholder="${ta('phReportEmail')}" style="all:unset; box-sizing:border-box; width:100%; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px; margin-top:6px; font-family:inherit; font-size:14px; color:var(--ink);">
+  </div>
+  <div class="stat-card" style="margin:0 16px 12px;">
+    <div class="l" style="margin:0 0 4px;">${ta('reportScreenshotsLabel')}</div>
+    <div class="empty-note" style="margin:0 0 10px; padding:0;">${ta('reportScreenshotsHint')}</div>
+    <div style="display:flex; flex-wrap:wrap; gap:8px;">
+      ${thumbs}
+      ${reportarScreenshots.length<5 ? `<button type="button" id="def-reportar-photo-btn" style="width:64px; height:64px; border-radius:10px; border:1.5px dashed var(--line); background:transparent; color:var(--ink-soft); display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0;">${ICONS.camera}</button>` : ''}
+    </div>
+    ${totalBytes>0 ? `<div class="empty-note" style="margin:10px 0 0; padding:0;">${fmtFileSize(totalBytes)} / 5 MB</div>` : ''}
   </div>
   <div style="padding:4px 16px 30px;">
     <button class="login-btn" id="def-reportar-send" style="margin-top:0; display:flex; align-items:center; justify-content:center; gap:8px;">${ICONS.mail} ${ta('btnSend')}</button>
@@ -10129,6 +10190,11 @@ function bindHandlers(){
       const key = e.currentTarget.dataset.defgoto;
       definicoesSection = key;
       rsvpSubScreen = null;
+      // Fase Feedback (Set 2026): começar sempre com o ecrã "Reporta um
+      // problema" limpo — evita mostrar (e reenviar sem querer) capturas de
+      // ecrã de uma visita anterior a este ecrã que nunca chegaram a ser
+      // enviadas.
+      if(key==='reportar') reportarScreenshots = [];
       if(key==='rsvp') setRSVPSeenCount(countRSVPResponded());
       _origRender();
     });
@@ -10254,33 +10320,91 @@ function bindHandlers(){
   document.querySelectorAll('[data-applang]').forEach(el=>{
     el.addEventListener('click', ()=>{ setAppLang(el.getAttribute('data-applang')); });
   });
+  // Fase Feedback (Set 2026): botão "+" que abre o seletor de imagens, e o
+  // "x" em cada miniatura já escolhida — ambos vivem dentro do ecrã
+  // dinâmico "Reporta um problema", por isso têm de ser religados a cada
+  // render() (ao contrário do <input type="file"> em si, que é estático).
+  const defReportarPhotoBtn = document.getElementById('def-reportar-photo-btn');
+  if(defReportarPhotoBtn) defReportarPhotoBtn.addEventListener('click', ()=>{
+    document.getElementById('def-reportar-photo-input').click();
+  });
+  document.querySelectorAll('[data-reportarrm]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      const i = Number(e.currentTarget.dataset.reportarrm);
+      reportarScreenshots.splice(i, 1);
+      render();
+    });
+  });
   const defReportarSend = document.getElementById('def-reportar-send');
-  if(defReportarSend) defReportarSend.addEventListener('click', ()=>{
+  if(defReportarSend) defReportarSend.addEventListener('click', async ()=>{
     const msg = document.getElementById('def-msg-reportar');
     const txt = (document.getElementById('def-reportar-text').value || '').trim();
     if(!txt){
       if(msg){ msg.style.color = 'var(--rust-dark)'; msg.textContent = ta('msgWriteDescriptionFirst'); }
       return;
     }
-    if(typeof emailjs === 'undefined'){
-      if(msg){ msg.style.color = 'var(--rust-dark)'; msg.textContent = ta('msgEmailServiceError'); }
+    // Fase Feedback (Set 2026): o relatório estruturado (mensagem + contexto
+    // + capturas de ecrã) passa a viver no Firestore/Storage, não só num
+    // email — por isso precisa mesmo de sessão e ligação, ao contrário do
+    // fluxo antigo que só dependia do EmailJS.
+    if(!FIREBASE_READY || !auth || !auth.currentUser || !currentWeddingId){
+      if(msg){ msg.style.color = 'var(--rust-dark)'; msg.textContent = ta('alertNoConnectionRetry'); }
       return;
     }
+    const emailInput = document.getElementById('def-reportar-email');
+    const emailVal = (emailInput && emailInput.value.trim()) || auth.currentUser.email || ta('notIdentifiedLabel');
     defReportarSend.disabled = true;
     if(msg){ msg.style.color = 'var(--ink-soft)'; msg.textContent = ta('msgSendingEllipsis'); }
-    const contaEmail = (typeof auth !== 'undefined' && auth && auth.currentUser && auth.currentUser.email) ? auth.currentUser.email : ta('notIdentifiedLabel');
-    emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
-      message: txt,
-      from_email: contaEmail,
-      to_email: 'geral@weddy.pt'
-    }).then(()=>{
-      if(msg){ msg.style.color = 'var(--sage-dark)'; msg.textContent = ta('msgReportThanks'); }
-      document.getElementById('def-reportar-text').value = '';
-      defReportarSend.disabled = false;
-    }).catch(()=>{
+    const screenshotsToUpload = reportarScreenshots.slice();
+    try{
+      const feedbackRef = FEEDBACK().doc();
+      const uploaded = [];
+      for(let i=0; i<screenshotsToUpload.length; i++){
+        const sc = screenshotsToUpload[i];
+        try{
+          const blob = await (await fetch(sc.dataUrl)).blob();
+          const storagePath = `feedback/${currentWeddingId}/${feedbackRef.id}/${i}_${sc.name||'screenshot.jpg'}`;
+          await storage.ref(storagePath).put(blob);
+          uploaded.push({ storagePath, name: sc.name||'', size: sc.size||0 });
+        }catch(err){
+          // Uma imagem a falhar o upload não deve travar o resto do
+          // relatório — a mensagem e o contexto continuam a ser o essencial.
+          console.error('Weddy feedback screenshot upload error:', err && err.code, err && err.message);
+        }
+      }
+      const page = activeTab + (definicoesSection ? (':'+definicoesSection) : '');
+      await feedbackRef.set({
+        userId: auth.currentUser.uid,
+        weddingId: currentWeddingId,
+        message: txt,
+        email: emailVal,
+        screenshots: uploaded,
+        page,
+        userAgent: (typeof navigator!=='undefined' && navigator.userAgent) || '',
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        status: 'new'
+      });
+      // Continua a mandar também o aviso imediato por email que já existia,
+      // para a Rita continuar a ser notificada na hora — mas agora é só
+      // "best-effort": uma falha aqui já não invalida o envio, porque o
+      // relatório estruturado (com as imagens) já ficou gravado no
+      // Firestore/Storage de qualquer forma.
+      if(typeof emailjs !== 'undefined'){
+        emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
+          message: txt + (uploaded.length ? `\n\n(${uploaded.length} captura(s) de ecrã em anexo — ver no Firestore/Storage, coleção "feedback")` : ''),
+          from_email: emailVal,
+          to_email: 'geral@weddy.pt'
+        }).catch(()=>{});
+      }
+      reportarScreenshots = [];
+      render();
+      const newMsg = document.getElementById('def-msg-reportar');
+      if(newMsg){ newMsg.style.color = 'var(--sage-dark)'; newMsg.textContent = ta('msgReportThanks'); }
+    }catch(err){
+      console.error('Weddy feedback error:', err && err.code, err && err.message);
       if(msg){ msg.style.color = 'var(--rust-dark)'; msg.textContent = ta('msgSendError'); }
       defReportarSend.disabled = false;
-    });
+    }
   });
 
   // Casamento
@@ -12382,6 +12506,35 @@ document.getElementById('dress-insp-file-input').addEventListener('change', asyn
     }catch(err){}
   }
   saveDressInspirations();
+  render();
+  e.target.value = '';
+});
+// Fase Feedback (Set 2026): imagens escolhidas em "Reporta um problema".
+// Reaproveita resizeImageFile (já usada nas inspirações) para comprimir
+// cada imagem antes de a guardar em memória — isso mantém o total bem
+// dentro do limite de 5MB mesmo com screenshots de ecrã inteiro, que em
+// bruto podem facilmente passar de vários MB cada.
+const REPORTAR_MAX_IMAGES = 5;
+const REPORTAR_MAX_BYTES = 5 * 1024 * 1024;
+document.getElementById('def-reportar-photo-input').addEventListener('change', async (e)=>{
+  const files = Array.from(e.target.files || []);
+  const msg = document.getElementById('def-msg-reportar');
+  for(const file of files){
+    if(reportarScreenshots.length >= REPORTAR_MAX_IMAGES){
+      if(msg){ msg.style.color = 'var(--rust-dark)'; msg.textContent = ta('reportTooManyImages'); }
+      break;
+    }
+    try{
+      const dataUrl = await resizeImageFile(file, 1600, 0.8);
+      const size = Math.round((dataUrl.length - dataUrl.indexOf(',') - 1) * 0.75);
+      const totalSoFar = reportarScreenshots.reduce((s,sc)=>s+(sc.size||0),0);
+      if(totalSoFar + size > REPORTAR_MAX_BYTES){
+        if(msg){ msg.style.color = 'var(--rust-dark)'; msg.textContent = ta('reportImagesTooLarge'); }
+        continue;
+      }
+      reportarScreenshots.push({ dataUrl, size, name:file.name });
+    }catch(err){}
+  }
   render();
   e.target.value = '';
 });
