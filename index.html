@@ -1123,8 +1123,12 @@ html{
 .login-lang-switch button.active{ background:var(--rust-dark); color:#fff; }
 .login-screen.hidden{ display:none; }
 .login-tag{ color:var(--ink-soft); font-size:12.5px; margin-bottom:26px; letter-spacing:.01em; }
-.login-field{ width:100%; max-width:280px; margin-left:auto; margin-right:auto; }
+.login-field{ width:100%; max-width:280px; margin-left:auto; margin-right:auto; position:relative; }
 .login-field input{ width:100%; border:1px solid var(--line); background:var(--card); border-radius:12px; padding:13px 14px; font-size:15px; color:var(--ink); font-family:inherit; outline:none; text-align:center; }
+.login-field input.has-icon{ padding-left:38px; text-align:left; }
+.login-field input.has-toggle{ padding-right:38px; }
+.login-field-icon{ position:absolute; left:12px; top:50%; transform:translateY(-50%); width:18px; height:18px; color:var(--rust-dark); display:flex; pointer-events:none; }
+.login-field-toggle{ all:unset; box-sizing:border-box; position:absolute; right:12px; top:50%; transform:translateY(-50%); width:18px; height:18px; display:flex; color:var(--ink-soft); cursor:pointer; }
 .login-field input:focus{ border-color:var(--gold); }
 .login-btn{ all:unset; box-sizing:border-box; cursor:pointer; width:100%; max-width:280px; text-align:center; margin:10px auto 0; display:block; padding:10px 0; border-radius:11px; background:var(--rust); color:#fff; font-size:13.5px; font-weight:600; }
 .login-btn svg{ width:14px; height:14px; flex-shrink:0; vertical-align:-2px; }
@@ -1979,6 +1983,8 @@ const ICONS = {
   tablelong:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="5" y="8.5" width="14" height="7" rx="1.4"/><rect x="2.2" y="6.3" width="2.4" height="2.4" rx=".7" fill="currentColor" stroke="none"/><rect x="2.2" y="15.3" width="2.4" height="2.4" rx=".7" fill="currentColor" stroke="none"/><rect x="19.4" y="6.3" width="2.4" height="2.4" rx=".7" fill="currentColor" stroke="none"/><rect x="19.4" y="15.3" width="2.4" height="2.4" rx=".7" fill="currentColor" stroke="none"/></svg>',
   tableserpentine:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M2.5 7c2.2 0 2.2 4 4.4 4s2.2-4 4.4-4 2.2 4 4.4 4 2.2-4 4.4-4"/><circle cx="2.5" cy="17" r="1.15" fill="currentColor" stroke="none"/><circle cx="8.2" cy="17" r="1.15" fill="currentColor" stroke="none"/><circle cx="13.9" cy="17" r="1.15" fill="currentColor" stroke="none"/><circle cx="19.6" cy="17" r="1.15" fill="currentColor" stroke="none"/></svg>',
   lock:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="10.5" width="15" height="10" rx="2"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/></svg>',
+  eye:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="3"/></svg>',
+  eyeOff:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 3.5l17 17"/><path d="M10.6 5.7A10.6 10.6 0 0 1 12 5.5c6 0 9.5 6.5 9.5 6.5a15.8 15.8 0 0 1-3.2 4.1M6.8 7.2C4.2 8.9 2.5 12 2.5 12s3.5 6.5 9.5 6.5c1.2 0 2.3-.25 3.3-.68"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>',
   trash:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 7h15M9.5 7V5a1.5 1.5 0 0 1 1.5-1.5h2A1.5 1.5 0 0 1 14.5 5v2M18 7l-.8 12a2 2 0 0 1-2 1.9H8.8a2 2 0 0 1-2-1.9L6 7"/><path d="M10 11v6M14 11v6"/></svg>',
   question:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9.3 9.2a2.7 2.7 0 1 1 3.9 2.4c-1 .5-1.7 1.2-1.7 2.4v.3"/><circle cx="11.5" cy="17.7" r=".15" fill="currentColor" stroke-width="2.0"/></svg>',
   briefcase:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3.2" y="7.3" width="17.6" height="12" rx="1.8"/><path d="M8.6 7.3V5.7a1.8 1.8 0 0 1 1.8-1.8h3.2a1.8 1.8 0 0 1 1.8 1.8v1.6"/><path d="M3.2 12.6h17.6"/></svg>',
@@ -3026,6 +3032,7 @@ const APP_I18N = {
     premiumTileRSVP:'Confirma a presença e as respostas dos convidados.',
     premiumTileChatbot:'Chatbot', premiumTileChatbotDesc:'Tira as tuas dúvidas em tempo real.',
     premiumTileHealthDesc:'Um raio-x rápido ao estado do casamento.',
+    premiumTileAISeatingDesc:'A Weddy AI organiza os convidados nas mesas por ti.',
     premiumTileMemoriesDesc:'Revive os melhores momentos do grande dia.',
     premiumTileDocumentosDesc:'Consulta os teus contratos e documentos.',
     premiumTileGoogleCalDesc:'Sincroniza o teu calendário do casamento.',
@@ -3095,6 +3102,7 @@ const APP_I18N = {
     shapeRound:'Redonda', shapeLong:'Longa', shapeSerpentine:'Serpente',
     loginLoading:'A carregar…',
     loginTagSignup:'Cria a tua conta de casal', loginTagLogin:'Entra na tua conta',
+    btnHidePassword:'Ocultar password', btnShowPassword:'Mostrar password',
     emailPlaceholder:'o-teu-email@exemplo.com', passPlaceholder:'Password (mín. 6 caracteres)', passConfirmPlaceholder:'Confirma a password',
     btnCreateAccount:'Criar conta', btnEnter:'Entrar', btnWait:'Aguarda…',
     forgotPassword:'Esqueceste a password?', toggleToLogin:'Já tens conta? Entrar', toggleToSignup:'Ainda não tens conta? Criar conta',
@@ -3708,6 +3716,7 @@ const APP_I18N = {
     consentCheckboxHtml:()=>'Li e aceito a <a href="#" data-openprivacy style="color:var(--rust); font-weight:600;">Política de Privacidade</a> e os <a href="#" data-openterms style="color:var(--rust); font-weight:600;">Termos e Condições</a>.',
     consentRequiredError:'Tens de aceitar a Política de Privacidade e os Termos e Condições para continuar.',
     reconsentTitle:'Antes de continuares',
+    reconsentPrivacyRowTitle:'Política de Privacidade',
     reconsentIntro:'Atualizámos os nossos Termos e Condições e/ou a nossa Política de Privacidade. Para continuares a usar a Weddy, por favor lê e aceita a versão mais recente.',
     btnAcceptContinue:'Li e aceito — continuar',
     btnReadTerms:'Ler Termos e Condições',
@@ -4033,6 +4042,7 @@ const APP_I18N = {
     premiumTileRSVP:"Confirm attendance and your guests' responses.",
     premiumTileChatbot:'Chatbot', premiumTileChatbotDesc:'Get your questions answered in real time.',
     premiumTileHealthDesc:'A quick check-up on your wedding.',
+    premiumTileAISeatingDesc:'Weddy AI arranges your guests across the tables for you.',
     premiumTileMemoriesDesc:'Relive the best moments of the big day.',
     premiumTileDocumentosDesc:'Check your contracts and documents.',
     premiumTileGoogleCalDesc:'Sync your wedding calendar.',
@@ -4350,6 +4360,7 @@ const APP_I18N = {
     assistThinking:'Thinking…',
     loginLoading:'Loading…',
     loginTagSignup:'Create your couple account', loginTagLogin:'Sign in to your account',
+    btnHidePassword:'Hide password', btnShowPassword:'Show password',
     emailPlaceholder:'your-email@example.com', passPlaceholder:'Password (min. 6 characters)', passConfirmPlaceholder:'Confirm password',
     btnCreateAccount:'Create account', btnEnter:'Sign in', btnWait:'Please wait…',
     forgotPassword:'Forgot your password?', toggleToLogin:'Already have an account? Sign in', toggleToSignup:"Don't have an account? Create one",
@@ -4711,6 +4722,7 @@ const APP_I18N = {
     consentCheckboxHtml:()=>'I have read and accept the <a href="#" data-openprivacy style="color:var(--rust); font-weight:600;">Privacy Policy</a> and the <a href="#" data-openterms style="color:var(--rust); font-weight:600;">Terms and Conditions</a>.',
     consentRequiredError:'You need to accept the Privacy Policy and the Terms and Conditions to continue.',
     reconsentTitle:'Before you continue',
+    reconsentPrivacyRowTitle:'Privacy Policy',
     reconsentIntro:'We\'ve updated our Terms and Conditions and/or our Privacy Policy. To keep using Weddy, please read and accept the latest version.',
     btnAcceptContinue:'I accept — continue',
     btnReadTerms:'Read Terms and Conditions',
@@ -9165,16 +9177,33 @@ async function handleDocumentUpload(fileList){
 }
 
 function viewDefPremiumLocked(title){
+  // Pedido da Rita (Set 2026): esta lista só mostrava 2 funcionalidades
+  // (RSVP e Assistente) — passou a mostrar todas as que ficam desbloqueadas
+  // com a subscrição, tal como já estão descritas noutros sítios da app
+  // (premiumFeatureGrid da Home, subscriptionFeature* da página "Gerir
+  // subscrição"), sem inventar nada de novo.
+  const features = [
+    [ICONS.mail, ta('premiumFeatureRSVP')],
+    [ICONS.chat, ta('premiumFeatureAssistant')],
+    [ICONS.guests, ta('subscriptionFeatureGuests')],
+    [ICONS.sparkle, ta('premiumTileAISeatingDesc')],
+    [ICONS.warn||ICONS.checklist, ta('premiumTileHealthDesc')],
+    [ICONS.camera, ta('premiumTileMemoriesDesc')],
+    [ICONS.docnote||ICONS.checklist, ta('premiumTileDocumentosDesc')],
+    [ICONS.calendar, ta('premiumTileGoogleCalDesc')],
+  ];
+  const listHtml = features.map(([icon,label])=>`
+    <li>
+      <div style="width:34px; height:34px; border-radius:50%; background:rgba(193,88,62,0.12); display:flex; align-items:center; justify-content:center; flex-shrink:0;">${icon}</div>
+      <div style="flex:1;">${label}</div>
+    </li>`).join('');
   return `
   ${defSubHeader(title)}
   <div class="premium-upsell">
     <div class="premium-upsell-icon">${ICONS.sparkle}</div>
     <div class="premium-upsell-title">Weddy Premium</div>
     <div class="premium-upsell-text">${ta('premiumLockedText')(title)}</div>
-    <ul class="premium-upsell-list">
-      <li>${ICONS.mail} ${ta('premiumFeatureRSVP')}</li>
-      <li>${ICONS.chat} ${ta('premiumFeatureAssistant')}</li>
-    </ul>
+    <ul class="premium-upsell-list">${listHtml}</ul>
     <button class="login-btn" id="premium-subscribe-btn" style="max-width:none;">${ta('btnSubscribePremium')}</button>
     <div class="empty-note" style="margin:10px 0 0;">${ta('testAccountNote')}</div>
   </div>
@@ -13984,9 +14013,20 @@ function renderLoginForm(msg, isError, isSuccess){
   document.getElementById('login-inner').innerHTML = `
 
     <div class="login-tag">${isSignup? ta('loginTagSignup') : ta('loginTagLogin')}</div>
-    <div class="login-field"><input type="email" id="login-email" placeholder="${ta('emailPlaceholder')}" autocomplete="email" autocapitalize="none" autocorrect="off"></div>
-    <div class="login-field" style="margin-top:10px;"><input type="password" id="login-pass" placeholder="${ta('passPlaceholder')}" autocomplete="${isSignup?'new-password':'current-password'}"></div>
-    ${isSignup? `<div class="login-field" style="margin-top:10px;"><input type="password" id="login-pass-confirm" placeholder="${ta('passConfirmPlaceholder')}" autocomplete="new-password"></div>` : ''}
+    <div class="login-field">
+      <span class="login-field-icon">${ICONS.mail}</span>
+      <input type="email" class="has-icon" id="login-email" placeholder="${ta('emailPlaceholder')}" autocomplete="email" autocapitalize="none" autocorrect="off">
+    </div>
+    <div class="login-field" style="margin-top:10px;">
+      <span class="login-field-icon">${ICONS.lock}</span>
+      <input type="password" class="has-icon has-toggle" id="login-pass" placeholder="${ta('passPlaceholder')}" autocomplete="${isSignup?'new-password':'current-password'}">
+      <button type="button" class="login-field-toggle" id="login-pass-toggle" data-shown="0" aria-label="${ta('btnShowPassword')}">${ICONS.eye}</button>
+    </div>
+    ${isSignup? `<div class="login-field" style="margin-top:10px;">
+      <span class="login-field-icon">${ICONS.lock}</span>
+      <input type="password" class="has-icon has-toggle" id="login-pass-confirm" placeholder="${ta('passConfirmPlaceholder')}" autocomplete="new-password">
+      <button type="button" class="login-field-toggle" id="login-pass-confirm-toggle" data-shown="0" aria-label="${ta('btnShowPassword')}">${ICONS.eye}</button>
+    </div>` : ''}
     ${isSignup? `<label style="display:flex; align-items:flex-start; gap:8px; margin:12px auto 0; text-align:left; font-size:12.5px; color:var(--ink-soft); line-height:1.45; cursor:pointer; max-width:280px;">
       <input type="checkbox" id="login-consent" style="margin-top:2px; flex-shrink:0;">
       <span>${ta('consentCheckboxHtml')()}</span>
@@ -14007,6 +14047,20 @@ function renderLoginForm(msg, isError, isSuccess){
   document.getElementById('login-pass').addEventListener('keydown', e=>{ if(e.key==='Enter') handleAuthSubmit(); });
   const passConfirmEl = document.getElementById('login-pass-confirm');
   if(passConfirmEl) passConfirmEl.addEventListener('keydown', e=>{ if(e.key==='Enter') handleAuthSubmit(); });
+  // Mostrar/ocultar password: só troca o type do input entre "password" e
+  // "text" no próprio browser da pessoa — nunca lê, guarda nem envia a
+  // password para lado nenhum, é puramente visual.
+  document.querySelectorAll('.login-field-toggle').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const input = btn.previousElementSibling;
+      if(!input) return;
+      const shown = btn.dataset.shown === '1';
+      input.type = shown ? 'password' : 'text';
+      btn.dataset.shown = shown ? '0' : '1';
+      btn.innerHTML = shown ? ICONS.eye : ICONS.eyeOff;
+      btn.setAttribute('aria-label', shown ? ta('btnShowPassword') : ta('btnHidePassword'));
+    });
+  });
   document.getElementById('login-toggle').addEventListener('click', ()=>{ authMode = isSignup?'login':'signup'; renderLoginForm(); });
   const forgotLink = document.getElementById('login-forgot');
   if(forgotLink) forgotLink.addEventListener('click', handleForgotPassword);
@@ -15031,11 +15085,25 @@ function proceedIntoExistingWedding(user){
 function renderReconsentGate(user, onAccept){
   lastLoginRender = ()=>renderReconsentGate(user, onAccept);
   document.getElementById('login-inner').innerHTML = `
-    <div class="login-tag">${ta('reconsentTitle')}</div>
-    <div class="login-msg" style="margin:0 0 14px;">${ta('reconsentIntro')}</div>
-    <div style="display:flex; flex-direction:column; gap:6px; align-items:center; max-width:280px; margin:0 auto 14px;">
-      <span class="login-note" style="cursor:pointer; margin:0;" id="reconsent-read-privacy">${ta('btnReadPrivacy')}</span>
-      <span class="login-note" style="cursor:pointer; margin:0;" id="reconsent-read-terms">${ta('btnReadTerms')}</span>
+    <h1 style="font-family:'Cormorant Garamond',serif; font-weight:500; font-size:30px; line-height:1.2; color:var(--heading); text-align:center; margin:0 0 14px;">${ta('reconsentTitle')}</h1>
+    <div class="login-msg" style="margin:0 0 20px;">${ta('reconsentIntro')}</div>
+    <div style="display:flex; flex-direction:column; gap:10px; max-width:320px; margin:0 auto 18px; text-align:left;">
+      <div class="list-row tappable" id="reconsent-read-privacy" style="cursor:pointer; background:var(--card); border:1px solid var(--line); border-radius:14px;">
+        <div class="def-row-icon" style="background:rgba(193,88,62,0.12); color:var(--rust-dark);">${ICONS.docnote}</div>
+        <div class="def-row-mid">
+          <div class="def-row-title">${ta('reconsentPrivacyRowTitle')}</div>
+          <div class="def-row-desc">${ta('privacyDesc')}</div>
+        </div>
+        ${ICONS.chev}
+      </div>
+      <div class="list-row tappable" id="reconsent-read-terms" style="cursor:pointer; background:var(--card); border:1px solid var(--line); border-radius:14px;">
+        <div class="def-row-icon" style="background:rgba(193,88,62,0.12); color:var(--rust-dark);">${ICONS.checklist}</div>
+        <div class="def-row-mid">
+          <div class="def-row-title">${ta('termsTitle')}</div>
+          <div class="def-row-desc">${ta('termsDesc')}</div>
+        </div>
+        ${ICONS.chev}
+      </div>
     </div>
     <label style="display:flex; align-items:flex-start; gap:8px; text-align:left; font-size:12.5px; color:var(--ink-soft); line-height:1.45; cursor:pointer; max-width:280px; margin:0 auto;">
       <input type="checkbox" id="reconsent-check" style="margin-top:2px; flex-shrink:0;">
