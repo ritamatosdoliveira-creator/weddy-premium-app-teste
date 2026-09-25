@@ -8854,9 +8854,21 @@ function classifyCopilotIntent(pergunta){
   if(/mesa/.test(p)){
     return { intent: WEDDY_COPILOT_INTENTS.GET_TABLE_COUNT };
   }
-  if(state.weddingDocuments && state.weddingDocuments.length){
-    return { intent: WEDDY_COPILOT_INTENTS.SEARCH_DOCUMENTS };
-  }
+  // Correção estrutural (Set 2026, achado nos testes reais da Weddy AI):
+  // havia aqui um "apanha-tudo" — "se o casal tem documentos carregados,
+  // manda sempre para pesquisa de documentos" — que disparava para
+  // QUALQUER pergunta que não batesse em nenhum padrão acima (ex.:
+  // "qual a previsão do tempo?", tentativas de prompt injection), só por
+  // existir pelo menos um documento carregado. Isso tinha dois problemas:
+  // 1) respondia com excertos de documentos irrelevantes para perguntas
+  // completamente fora do âmbito; 2) como SEARCH_DOCUMENTS nunca é
+  // UNKNOWN, a pergunta nunca chegava a ser vista pela IA real (Fase
+  // 3B.1) — o classificador OpenAI ficava, na prática, sem ser chamado
+  // em nenhum casamento com documentos carregados. A pesquisa documental
+  // "com intenção explícita" já existe acima (bloco "document|contrato|
+  // pdf|carreguei|anexei|ficheiro"); sem esse sinal explícito, a pergunta
+  // deve seguir para a classificação por IA (e só cair em UNKNOWN se a
+  // IA também não conseguir).
   return { intent: WEDDY_COPILOT_INTENTS.UNKNOWN };
 }
 
