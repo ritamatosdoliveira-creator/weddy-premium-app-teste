@@ -1603,6 +1603,23 @@ const CURRENT_PRIVACY_VERSION = '2026-09-24';
   // isso — para o balão encolher o suficiente e o topo "descer" para
   // dentro da zona visível. Sem teclado, continua exatamente como antes
   // (max-height nunca é tocado).
+  // Bug encontrado ao vivo OUTRA VEZ (Rita, Set 2026, app instalada no
+  // ecrã principal/PWA): mesmo com o max-height limitado acima, continuava
+  // cortado em cima E com um espaço grande a mais entre o balão e o
+  // teclado. Causa: o "bottom" era calculado como
+  // "window.innerHeight - vv.height - vv.offsetTop" — ou seja, a
+  // confiar que "window.innerHeight" fica constante (o tamanho do ecrã
+  // ANTES do teclado abrir) enquanto só o VisualViewport encolhe. Isso é
+  // verdade numa aba normal do Safari, mas numa PWA instalada (modo
+  // standalone), o próprio "window.innerHeight" também pode encolher
+  // quando o teclado abre — e nessa altura a subtração conta o teclado
+  // "a dobrar" (ou a menos), daí o espaço estranho. Correção: deixa de se
+  // usar "window.innerHeight" para calcular a posição — passa a
+  // ancorar-se pelo TOPO, usando só "visualViewport.offsetTop +
+  // visualViewport.height" (o fundo da zona realmente visível, em
+  // coordenadas do "position:fixed", que não depende de o
+  // window.innerHeight mudar ou não) menos a altura REAL do balão
+  // (já limitada pelo novo max-height, lida depois de a aplicar).
   let kbRaf = null;
   function adjustChatPanelForKeyboard(){
     if(kbRaf) cancelAnimationFrame(kbRaf);
@@ -1612,14 +1629,17 @@ const CURRENT_PRIVACY_VERSION = '2026-09-24';
       if(!panel || panel.hidden || !window.visualViewport) return;
       const vv = window.visualViewport;
       const keyboardInset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
-      panel.style.top = '';
+      panel.style.bottom = 'auto';
       if(keyboardInset > 60){
-        const bottomPx = keyboardInset + 8;
         const topMargin = 12; // nunca colar ao notch/barra de estado
-        const availableHeight = window.innerHeight - bottomPx - topMargin;
-        panel.style.bottom = bottomPx + 'px';
-        panel.style.maxHeight = Math.max(200, availableHeight) + 'px';
+        const bottomGap = 8;  // pequeno respiro acima do teclado
+        const visibleBottom = vv.offsetTop + vv.height; // fundo real visível, em coords. do position:fixed
+        panel.style.maxHeight = Math.max(200, visibleBottom - topMargin - bottomGap) + 'px';
+        // Lê a altura já depois de aplicar o max-height acima, para
+        // ancorar pela altura REAL (capada), não pela altura "normal".
+        panel.style.top = Math.max(topMargin, visibleBottom - bottomGap - panel.offsetHeight) + 'px';
       } else {
+        panel.style.top = '';
         panel.style.bottom = '';
         panel.style.maxHeight = '';
       }
