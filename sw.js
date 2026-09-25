@@ -1,9 +1,16 @@
-const CACHE_NAME = 'weddy-v67';
+const CACHE_NAME = 'weddy-v71';
 const FILES_TO_CACHE = ['./','./index.html','./manifest.json','./icon-180.png','./icon-192.png','./icon-512.png','./login-bg.jpg','./logo-happybox.png','./logo-dgpublicidade.png','./logo-jtestudios.png','./logo-quintasantoandre.png'];
 const EXTERNAL_FILES_TO_CACHE = [
   'https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js',
   'https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js',
-  'https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js'
+  'https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js',
+  // Usada para pré-visualizar anexos em PDF (ver função openDocLightbox em
+  // index.html). Não estava aqui — se a rede tivesse uma falha momentânea
+  // exatamente ao carregar esta lib pela primeira vez, a pré-visualização
+  // falhava sempre com "Não foi possível abrir este anexo", mesmo o PDF
+  // em si estando perfeitamente bem.
+  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
 ];
 self.addEventListener('install', (event) => {
   event.waitUntil(

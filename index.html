@@ -578,6 +578,14 @@ html{
 .hm-cat-chip.active .hm-cat-chip-heart{ color:var(--rust); }
 .hm-cat-chip-label{ font-size:11px; color:var(--ink); line-height:1.25; text-align:left; }
 .section-add-link{ all:unset; box-sizing:border-box; display:flex; align-items:center; gap:4px; font-size:12px; font-weight:600; color:var(--rust-dark); cursor:pointer; }
+/* Pedido da Rita (Set 2026): "a caixa do Organizar com Weddy AI está muito
+   justa, tira a caixa e usa antes outra cor no texto para se perceber que
+   é um botão". Em vez do estilo de botão-caixa (borda + fundo, como
+   .rsvp-copy-btn), fica sublinhado e a bold na cor de destaque — óbvio que
+   é tocável, sem precisar de moldura. */
+.ai-seating-open-link{ all:unset; box-sizing:border-box; display:flex; align-items:center; justify-content:center; gap:7px; width:calc(100% - 32px); margin:2px 16px 14px; padding:8px 0; color:var(--rust-dark); font-size:13.5px; font-weight:700; text-decoration:underline; text-underline-offset:2px; cursor:pointer; }
+.ai-seating-open-link svg{ width:15px; height:15px; }
+.ai-seating-open-link:active{ opacity:.7; }
 .section-add-link svg{ width:13px; height:13px; }
 .hm-idea-list{ margin:0 16px 18px; display:flex; flex-direction:column; gap:9px; }
 .hm-idea-card{ display:flex; align-items:center; gap:11px; background:var(--card); border:1px solid var(--line); border-radius:14px; padding:10px; cursor:pointer; }
@@ -854,6 +862,14 @@ html{
 .picker-row .side-tag{ font-size:10px; color:#fff; padding:2px 7px; border-radius:20px; font-weight:600; flex-shrink:0; }
 .picker-row .pname{ flex:1; min-width:0; overflow-wrap:anywhere; font-size:14.5px; color:var(--ink); }
 .picker-row.is-selected .pname{ color:var(--heading); font-weight:600; }
+/* Bug visto ao vivo (Set 2026): o ✓ de selecionado era inserido "nu", sem
+   nenhuma classe a limitar o tamanho do SVG (ao contrário de todos os
+   outros usos de ICONS.check na app). Um <svg> sem width/height próprios
+   cresce para ocupar o espaço disponível — aqui espremia o nome do
+   convidado (.pname, que tem flex:1) para quase 0px de largura, fazendo o
+   texto quebrar letra a letra numa coluna vertical. */
+.picker-row .pick-check{ flex-shrink:0; width:16px; height:16px; color:var(--rust-dark); }
+.picker-row .pick-check svg{ width:100%; height:100%; }
 .pname-hint{ display:block; font-size:11px; font-weight:500; color:var(--ink-soft); margin-top:1px; }
 .privacy-text{ padding:0 16px 30px; font-size:13px; color:var(--ink); line-height:1.6; }
 /* Pedido direto da Rita (Set 2026): os ecrãs de Termos e Privacidade em
@@ -1574,6 +1590,19 @@ const CURRENT_PRIVACY_VERSION = '2026-09-24';
   // atrás do teclado, exatamente como fazia a primeira versão desta
   // correção, mas ainda ancorado ao VisualViewport (não à janela inteira)
   // para não saltar com pequenas oscilações do teclado.
+  // Bug encontrado ao vivo mais uma vez (Rita, Set 2026): manter o
+  // "max-height" sempre igual ao normal (72vh/560px) resolveu o balão
+  // ficar "esticado demais", mas trouxe o problema oposto — com o teclado
+  // a ocupar uma fatia grande do ecrã, esse tamanho fixo já não cabe no
+  // espaço que sobra por cima do teclado, e como o "bottom" sobe para o
+  // balão não ficar escondido atrás do teclado, é o TOPO do balão que
+  // acaba por sair para fora do ecrã (por trás da barra de estado),
+  // dando a sensação de que "continua muito em cima". Agora, só quando o
+  // teclado está aberto, o "max-height" passa a ser limitado ao espaço
+  // que sobra mesmo entre o topo do ecrã e o teclado — nunca maior do que
+  // isso — para o balão encolher o suficiente e o topo "descer" para
+  // dentro da zona visível. Sem teclado, continua exatamente como antes
+  // (max-height nunca é tocado).
   let kbRaf = null;
   function adjustChatPanelForKeyboard(){
     if(kbRaf) cancelAnimationFrame(kbRaf);
@@ -1584,11 +1613,15 @@ const CURRENT_PRIVACY_VERSION = '2026-09-24';
       const vv = window.visualViewport;
       const keyboardInset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
       panel.style.top = '';
-      panel.style.maxHeight = '';
       if(keyboardInset > 60){
-        panel.style.bottom = (keyboardInset + 8) + 'px';
+        const bottomPx = keyboardInset + 8;
+        const topMargin = 12; // nunca colar ao notch/barra de estado
+        const availableHeight = window.innerHeight - bottomPx - topMargin;
+        panel.style.bottom = bottomPx + 'px';
+        panel.style.maxHeight = Math.max(200, availableHeight) + 'px';
       } else {
         panel.style.bottom = '';
+        panel.style.maxHeight = '';
       }
     });
   }
@@ -2337,6 +2370,26 @@ function migrateCategoryDescriptions(){
    já têm essa categoria pronta a usar, mesmo quem nunca teve
    crianças na lista antiga.
 ============================================================ */
+/* ============================================================
+   Migração: categorias de To-do criadas antes de o campo "icon"
+   existir ficaram gravadas no Firestore sem essa propriedade. Sem
+   isto, ICONS[TODO_ICONS[cat.icon]] devolve undefined e o círculo
+   mostra literalmente a palavra "undefined" em vez de um ícone
+   (bug visto ao vivo em Set 2026, ex: "Acompanhar fornecedores" e
+   "Logística do grande dia"). Só preenche quem não tem — nunca
+   sobrepõe um ícone que a pessoa já tenha escolhido.
+============================================================ */
+function migrateTodoCategoryIcons(){
+  // Nota: corre logo no arranque da página (ver comentário mais abaixo sobre
+  // a "temporal dead zone"), por isso não pode depender de TODO_ICONS (só
+  // declarado bem mais tarde neste ficheiro) — usa a lista de chaves válidas
+  // escrita à mão, que tem de ser mantida igual às chaves de TODO_ICONS.
+  const VALID_TODO_ICON_KEYS = ['music','church','doc'];
+  if(!state || !Array.isArray(state.todoCategories)) return;
+  state.todoCategories.forEach(cat=>{
+    if(!cat.icon || VALID_TODO_ICON_KEYS.indexOf(cat.icon)===-1) cat.icon = 'doc';
+  });
+}
 function migrateGuestCategories(){
   if(!state || !state.guests) return;
   ['noiva','noivo'].forEach(side=>{
@@ -2584,6 +2637,7 @@ normalizeCategories();
 migrateCategoryDescriptions();
 migrateGuestCategories();
 migrateConfirmedAndSeatingToGuestId();
+migrateTodoCategoryIcons();
 // Bug encontrado ao vivo (Set 2026): "defaultSettings()" chamada aqui, sem
 // argumentos, cai no fallback "name1 || ta('genericName1')" — e ta() precisa
 // de APP_I18N, que só é declarado bastante mais abaixo neste mesmo ficheiro.
@@ -3484,6 +3538,7 @@ const APP_I18N = {
     btnReportProblem:'Reportar problema',
     rsvpTabSendInvites:'Enviar convites', rsvpTabGuestList:'Lista de convidados',
     rsvpHubSubtitle:'Escolhe como configurar e acompanhar os convites dos teus convidados.',
+    rsvpHubSubtitleList:'Vê quem já respondeu e acompanha as confirmações.',
     securityHeroTitle:'Os teus dados estão seguros',
     btnGroupFamily:'Agrupar em família',
     btnCancelGroup:'Cancelar',
@@ -4491,6 +4546,7 @@ const APP_I18N = {
     btnReportProblem:'Report a problem',
     rsvpTabSendInvites:'Send invites', rsvpTabGuestList:'Guest list',
     rsvpHubSubtitle:'Choose how to set up and track your guests\' invitations.',
+    rsvpHubSubtitleList:'See who has replied and track confirmations.',
     securityHeroTitle:'Your data is safe with us',
     btnGroupFamily:'Group as family',
     btnCancelGroup:'Cancel',
@@ -6146,7 +6202,7 @@ function viewMesas(){
   </div>
 
   ${tables.length ? `
-  <button id="ai-seating-open-btn" class="rsvp-copy-btn" style="margin:2px 16px 14px; display:flex; align-items:center; justify-content:center; gap:8px;">
+  <button id="ai-seating-open-btn" class="ai-seating-open-link">
     ${ICONS.sparkle||'✨'} ${ta('aiSeatingOpenBtn')}
   </button>` : ''}
 
@@ -6364,7 +6420,7 @@ function viewAISeatingPrefs(){
           <div class="picker-row ${aiSeatingPickIds.includes(g.guestId)?'is-selected':''}" data-aiseatpick="${g.guestId}">
             <span class="side-tag" style="background:${g.side==='noiva'?'var(--blush-dark)':'var(--dusty-dark)'};">${g.side==='noiva'?'N':'N'}</span>
             <span class="pname">${escapeHTML(g.name)}</span>
-            ${aiSeatingPickIds.includes(g.guestId)?ICONS.check:''}
+            ${aiSeatingPickIds.includes(g.guestId)?`<span class="pick-check">${ICONS.check}</span>`:''}
           </div>`).join('') || `<div class="empty-note">${ta('aiSeatingNoConfirmedGuestsText')}</div>`}
       </div>
       <div class="sheet-btns">
@@ -6824,7 +6880,7 @@ function viewTodo(){
     const nextDueUrgency = nextDue ? dueUrgency(nextDue) : '';
     return `
     <div class="todo-cat-card" data-opencat="${cat.id}">
-      <div class="todo-cat-icon">${ICONS[TODO_ICONS[cat.icon]]}</div>
+      <div class="todo-cat-icon">${ICONS[TODO_ICONS[cat.icon]] || ICONS.docnote}</div>
       <div class="todo-cat-mid">
         <div class="todo-cat-toprow"><span class="todo-cat-label">${cat.label}</span><span class="todo-cat-count">${done}/${total}</span></div>
         <div class="todo-cat-title">${cat.title}</div>
@@ -9483,10 +9539,10 @@ function viewRSVPHome(){
   </div>
   <div class="stat-card" style="margin:10px 16px 12px; padding:16px 16px 2px;">
     <div style="display:flex; align-items:flex-start; gap:12px; margin-bottom:6px;">
-      <div class="def-row-icon" style="${rustChip} width:40px; height:40px;">${ICONS.mail}</div>
+      <div class="def-row-icon" style="${rustChip} width:40px; height:40px;">${rsvpHomeTab==='list' ? ICONS.guests : ICONS.mail}</div>
       <div style="flex:1; min-width:0;">
-        <div class="l" style="margin:0 0 3px; font-size:15px; color:var(--ink); font-weight:600; text-align:left;">${ta('rsvpTabSendInvites')}</div>
-        <div class="empty-note" style="margin:0; padding:0; text-align:left; font-style:normal;">${ta('rsvpHubSubtitle')}</div>
+        <div class="l" style="margin:0 0 3px; font-size:15px; color:var(--ink); font-weight:600; text-align:left;">${rsvpHomeTab==='list' ? ta('rsvpTabGuestList') : ta('rsvpTabSendInvites')}</div>
+        <div class="empty-note" style="margin:0; padding:0; text-align:left; font-style:normal;">${rsvpHomeTab==='list' ? ta('rsvpHubSubtitleList') : ta('rsvpHubSubtitle')}</div>
       </div>
     </div>
     ${rsvpHomeTab==='list' ? listRowsHtml : sendRowsHtml}
@@ -9944,7 +10000,7 @@ function viewDefSubscricao(){
       <div class="premium-upsell-icon" style="width:40px; height:40px; margin:0; flex-shrink:0; padding:9px; box-sizing:border-box; border-radius:50%; background:rgba(193,88,62,0.12);">${ICONS.crown}</div>
       <div style="flex:1; min-width:0;">
         <div class="l" style="margin:0; font-size:16px; color:var(--ink); font-weight:600;">Weddy Premium</div>
-        <div class="empty-note" style="margin:2px 0 0; padding:0;">${ta('subscriptionSubtitleText')}</div>
+        <div class="empty-note" style="margin:2px 0 0; padding:0; text-align:left;">${ta('subscriptionSubtitleText')}</div>
       </div>
       <span class="rsvp-pill rsvp-pill-yes">${ta('subscriptionActiveBadge')}</span>
     </div>
@@ -9955,12 +10011,11 @@ function viewDefSubscricao(){
       <div>
         <div class="l" style="margin:0 0 2px; font-size:12.5px; color:var(--ink-soft);">${ta('subscriptionCurrentPlanLabel')}</div>
         <div class="l" style="margin:0 0 2px; font-size:15px; color:var(--ink); font-weight:600;">${escapeHTML(plan)}</div>
-        <div class="empty-note" style="margin:0; padding:0;">${ta('subscriptionPriceText')}</div>
+        <div class="empty-note" style="margin:0; padding:0; text-align:left;">${ta('subscriptionPriceText')}</div>
       </div>
       ${expiryLabel ? `<span class="rsvp-pill" style="background:var(--cream); color:var(--rust-dark); white-space:nowrap;">${ta('subscriptionRenewsOnLabel')(expiryLabel)}</span>` : ''}
     </div>
     <button class="login-btn" id="subscription-cancel-btn" style="margin-top:10px;">${ta('btnCancelSubscription')}</button>
-    <div class="empty-note" style="margin:10px 0 0; padding:0; text-align:center;">${ta('subscriptionManageNote')}</div>
   </div>
   <div class="list-group" style="margin-bottom:30px;">
     <div class="list-row tappable" data-defgoto="reportar" style="cursor:pointer;">
