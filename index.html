@@ -8703,10 +8703,37 @@ function wordsOfNormalized(normStr){ return (normStr||'').split(/[^a-z0-9]+/).fi
 // considera que duas palavras batem certo se partilharem os primeiros
 // carateres (radical), desde que ambas tenham pelo menos 5 — é uma
 // aproximação simples, não IA nenhuma, mas cobre casos comuns em
-// português (fotógrafo/fotografia, florista/flores, decorador/decoração).
+// português (fotógrafo/fotografia, decorador/decoração — ambos com radical
+// comum de 6+ letras).
+//
+// Correção do achado #73 (Set 2026, encontrado ao testar a correção do
+// achado #72): "florista"/"flores" e "músico"/"música" NÃO batiam pela
+// heurística acima, apesar do comentário anterior desta função dizer que
+// "florista/flores" estava coberto — o radical realmente comum
+// ("flor", "music") tem só 4-5 letras, menos do que o prefixo fixo de 6
+// que a heurística exige. A correção NÃO é encurtar esse prefixo de 6 para
+// todas as palavras: testado, isso criaria falsos positivos graves entre
+// palavras sem relação nenhuma que por acaso partilham um radical curto
+// (ex.: "convite" e "convidado" partilham "conv" e teriam uma
+// correspondência de prefixo tão ou mais forte do que "florista"/"flores"
+// — não há forma puramente algorítmica de distinguir os dois casos sem um
+// dicionário real). Numa área financeira, mostrar os dados do fornecedor
+// ERRADO (falso positivo) é pior do que não encontrar nenhum (falso
+// negativo, que já cai numa resposta honesta de "não encontrei"). Por
+// isso a correção é uma pequena lista explícita, mantida à mão tal como o
+// resto deste classificador — nunca inventada pela IA — só com os pares
+// profissão/categoria conhecidos do universo de casamentos que a
+// heurística de prefixo não apanha. Isto só ACRESCENTA correspondências
+// a pares nomeados aqui; não altera o comportamento para nenhuma outra
+// palavra.
+const WORD_MATCH_SYNONYM_PAIRS = [
+  ['florista','flores'], ['florista','floral'],
+  ['musico','musica'], ['musicos','musica'],
+];
 function wordsMatchLoosely(a, b){
   if(!a || !b || a.length<3 || b.length<3) return false;
   if(a.includes(b) || b.includes(a)) return true;
+  if(WORD_MATCH_SYNONYM_PAIRS.some(([x,y])=>(a===x&&b===y)||(a===y&&b===x))) return true;
   const minLen = Math.min(a.length, b.length);
   if(minLen < 5) return false;
   const prefixLen = Math.min(6, minLen);
