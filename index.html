@@ -9171,7 +9171,13 @@ async function respondeAssistente(pergunta){
 // casal carregou (ver viewDefDocumentos), sem nenhuma IA real: procura o
 // trecho (por agora, a página do PDF) que tenha mais palavras da pergunta
 // em comum e devolve-o tal como está escrito — nunca gera texto novo.
-const STOPWORDS_PT = new Set(['o','a','os','as','um','uma','de','da','do','das','dos','e','ou','que','com','para','por','em','no','na','nos','nas','se','é','ao','aos','à','às','como','qual','quais','quando','onde','sobre','diz','tem','há','isso','este','esta','isto','meu','minha','nosso','nossa']);
+// "casamento", "dia" e "data" foram adicionadas aqui (Set 2026, achado nos
+// testes reais da Weddy AI): apareciam em praticamente todos os documentos
+// carregados (contratos, regulamentos, apólices...), por isso qualquer
+// pergunta sobre o casamento — mesmo completamente fora do âmbito, como o
+// tempo que vai fazer — batia sempre com "alguma coisa" só por partilhar
+// essa palavra genérica. Sem sinal nenhum de relevância real.
+const STOPWORDS_PT = new Set(['o','a','os','as','um','uma','de','da','do','das','dos','e','ou','que','com','para','por','em','no','na','nos','nas','se','é','ao','aos','à','às','como','qual','quais','quando','onde','sobre','diz','tem','há','isso','este','esta','isto','meu','minha','nosso','nossa','casamento','dia','data']);
 function normalizeSearchText(s){
   return (s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
 }
@@ -9196,7 +9202,15 @@ function searchWeddingDocuments(pergunta){
   const docs = state.weddingDocuments || [];
   if(!docs.length) return null;
   const tokens = normalizeSearchText(pergunta).split(/[^a-z0-9]+/).filter(w=>w.length>=3 && !STOPWORDS_PT.has(w));
-  if(!tokens.length) return null;
+  // Bug encontrado ao vivo (Set 2026, testes reais da Weddy AI): uma única
+  // palavra genérica em comum com um documento (ex.: "casamento") já
+  // contava como "encontrado", devolvendo excertos completamente
+  // irrelevantes para perguntas fora do âmbito da Weddy (ex.: previsão do
+  // tempo). Exige agora pelo menos 2 palavras com significado na pergunta
+  // ANTES de sequer tentar, e depois só aceita o melhor resultado se a
+  // MAIORIA dessas palavras aparecer no mesmo trecho — uma única
+  // coincidência isolada deixa de contar como "encontrado".
+  if(tokens.length < 2) return null;
   let best = null;
   docs.forEach(doc=>{
     const chunks = buildDocumentChunks(doc.text);
@@ -9209,6 +9223,8 @@ function searchWeddingDocuments(pergunta){
       }
     });
   });
+  const minScore = Math.floor(tokens.length/2) + 1; // maioria estrita das palavras da pergunta
+  if(!best || best.score < minScore) return null;
   return best;
 }
 // Extrai o texto de um PDF inteiramente no browser, com pdf.js — nada é
