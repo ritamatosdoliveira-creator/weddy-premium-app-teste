@@ -3984,6 +3984,11 @@ const APP_I18N = {
     cpSupplierPaymentNotFound:'Não encontrei nenhum fornecedor que corresponda a essa pergunta — tenta usar o nome dele ou a categoria (ex: "fotógrafo", "espaço").',
     cpPaidSoFar:(name,paid)=>`${name} — já pago: ${paid}`,
     cpOfContracted:(x)=>` de ${x} contratados`,
+    // Correção do achado #72 (Set 2026): a resposta já tinha os dados para
+    // calcular quanto falta pagar (total - pago), mas nunca o dizia de
+    // forma explícita — obrigava a pessoa a fazer a conta. Acrescentado
+    // para responder diretamente a "quanto falta pagar ao fornecedor X".
+    cpSupplierRemaining:(x)=>` Ainda falta pagar: ${x}.`,
     cpNextPayment:(amount,date)=>` Próximo pagamento: ${amount} em ${date}.`,
     cpNextPaymentNoDate:(amount)=>` Tens um próximo pagamento de ${amount} sem data definida.`,
     cpSourceContract:' (Fonte: contrato + orçamento.)',
@@ -4992,6 +4997,7 @@ const APP_I18N = {
     cpSupplierPaymentNotFound:'I couldn\'t find a supplier matching that question — try using their name or category (e.g. "photographer", "venue").',
     cpPaidSoFar:(name,paid)=>`${name} — paid so far: ${paid}`,
     cpOfContracted:(x)=>` of ${x} contracted`,
+    cpSupplierRemaining:(x)=>` Still owed: ${x}.`,
     cpNextPayment:(amount,date)=>` Next payment: ${amount} on ${date}.`,
     cpNextPaymentNoDate:(amount)=>` You have an upcoming payment of ${amount} with no date set.`,
     cpSourceContract:' (Source: contract + budget.)',
@@ -8792,21 +8798,46 @@ function classifyCopilotIntent(pergunta){
     return { intent: WEDDY_COPILOT_INTENTS.GET_DIETARY_LIST };
   }
 
-  // "quanto falta pagar" / "próximos pagamentos" / "pagamentos pendentes"
-  if(/falta pagar|pagamentos? (pendentes|por pagar|em falta)|quanto (falta|tenho) (ainda )?(a )?pagar|pr[oó]ximos pagamentos/.test(p)){
-    return { intent: WEDDY_COPILOT_INTENTS.GET_REMAINING_PAYMENTS };
+  // Fase 7 — Wedding Brain: perguntas que cruzam Vendors com Budget e
+  // Documentos. Vêm ANTES das genéricas (GET_REMAINING_PAYMENTS, GET_BUDGET,
+  // GET_TABLE_COUNT) de propósito — são mais específicas, têm de ganhar
+  // quando se aplicam.
+  //
+  // Correção do achado #72 da bateria de 213 testes (Set 2026): "Quanto
+  // falta pagar ao fotógrafo?" batia primeiro na regra genérica de
+  // GET_REMAINING_PAYMENTS (que ficava ANTES desta no código, via "falta
+  // pagar"), e respondia com o total de "próximos pagamentos" de TODOS os
+  // fornecedores, chegando a citar um fornecedor não relacionado — mesmo
+  // com a pergunta a nomear claramente um fornecedor concreto. Os dados e o
+  // cálculo por fornecedor (getSupplierPaymentInfo → supplierPaidTotal,
+  // que já cruza state.expenses por supplierId) sempre estiveram corretos;
+  // o problema era só a ordem/cobertura da classificação. Correção:
+  // 1) esta verificação específica passa a vir PRIMEIRO, antes da genérica;
+  // 2) o gatilho foi alargado (antes só cobria "pagámos ao/à" e "próximo
+  // pagamento do/da"; agora cobre também "falta pagar ao/à", "já paguei
+  // ao/à", "pagamentos que fiz ao/à" e "quanto custa o/a");
+  // 3) quando o gatilho dispara mas não se identifica a que fornecedor a
+  // pergunta se refere, a intenção dispara à mesma — a resposta final
+  // ("não encontrei esse fornecedor", ver cpSupplierPaymentNotFound) é mais
+  // honesta e específica do que cair silenciosamente numa resposta
+  // genérica de orçamento que nada tem a ver com o que foi perguntado.
+  if(
+    /falta\s+pagar\s+(ao|à|a|para)\s+/.test(p)
+    || /(quanto|j[aá]).*pag[aá]?mos?\s+(ao|à|a|para)\s+/.test(p)
+    || /j[aá]\s+paguei\s+(ao|à|a|para)\s+/.test(p)
+    || /pagamentos?\s+(que\s+)?(fiz|fizemos)\s+(ao|à|a|para)\s+/.test(p)
+    || /quanto\s+custa\s+(o|a)\s+/.test(p)
+    || /pr[oó]ximo pagamento\s+(do|da|de)\s+/.test(p)
+    || /valor (do|da) (contrato|fornecedor)/.test(p)
+  ){
+    return { intent: WEDDY_COPILOT_INTENTS.GET_SUPPLIER_PAYMENT_INFO };
   }
 
-  // Fase 7 — Wedding Brain: perguntas que cruzam Vendors com Budget e
-  // Documentos. Vêm antes das genéricas (GET_BUDGET, GET_TABLE_COUNT) de
-  // propósito — são mais específicas, têm de ganhar quando se aplicam.
-
-  // "quanto pagámos ao fotógrafo" / "próximo pagamento do espaço" —
-  // identifica QUAL fornecedor pelo nome ou pela categoria (findSupplierByText)
-  // e só dispara se resolver a um fornecedor concreto.
-  if(/(quanto|j[aá]).*pag[aá]?mos?\s+(ao|à|a|para)\s+/.test(p) || /pr[oó]ximo pagamento\s+(do|da|de)\s+/.test(p) || /valor (do|da) (contrato|fornecedor)/.test(p)){
-    const supplierGuess = findSupplierByText(pergunta);
-    if(supplierGuess) return { intent: WEDDY_COPILOT_INTENTS.GET_SUPPLIER_PAYMENT_INFO };
+  // "quanto falta pagar" (sem nomear fornecedor) / "próximos pagamentos" /
+  // "pagamentos pendentes" — genérica, por isso vem DEPOIS da verificação
+  // específica de fornecedor acima.
+  if(/falta pagar|pagamentos? (pendentes|por pagar|em falta)|quanto (falta|tenho) (ainda )?(a )?pagar|pr[oó]ximos pagamentos/.test(p)){
+    return { intent: WEDDY_COPILOT_INTENTS.GET_REMAINING_PAYMENTS };
   }
 
   // "que fornecedores ainda não estão contratados" / "fornecedores por
@@ -9184,6 +9215,13 @@ async function respondeAssistente(pergunta){
       let resposta = ta('cpPaidSoFar')(info.name, fmtEUR(info.paid));
       if(info.total>0) resposta += ta('cpOfContracted')(fmtEUR(info.total));
       resposta += '.';
+      // Correção do achado #72 (Set 2026): diz explicitamente quanto ainda
+      // falta pagar a ESTE fornecedor (total - pago), em vez de obrigar a
+      // pessoa a subtrair os dois valores da frase anterior.
+      if(info.total>0){
+        const remaining = Math.max(0, info.total - info.paid);
+        resposta += ta('cpSupplierRemaining')(fmtEUR(remaining));
+      }
       if(info.nextAmount>0 && info.nextDate) resposta += ta('cpNextPayment')(fmtEUR(info.nextAmount), formatDatePT(info.nextDate));
       else if(info.nextAmount>0) resposta += ta('cpNextPaymentNoDate')(fmtEUR(info.nextAmount));
       resposta += info.hasContract ? ta('cpSourceContract') : ta('cpSourceBudgetOnly');
