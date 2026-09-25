@@ -8747,7 +8747,19 @@ function classifyCopilotIntent(pergunta){
   }
 
   // "o que tenho esta semana" / "tarefas desta semana" / "agenda da semana"
-  if(/esta semana|nesta semana|essa semana|this week|agenda da semana|tarefas (desta|da) semana|o que tenho (para )?(esta semana|hoje)/.test(p)){
+  // / "o que tenho para tratar nos próximos dias" / "o que falta fazer" /
+  // "que tarefas faltam" / "ajuda-me a organizar o que falta" — os três
+  // últimos padrões foram acrescentados na correção do bug "falta/dias"
+  // (Set 2026, achado na bateria de 213 testes): "falta(m)" só conta aqui
+  // se a MESMA pergunta também tiver uma palavra de tarefa (fazer/tratar/
+  // organizar, com fronteira de palavra \b para não disparar em
+  // "CONtratar" um fornecedor — falso positivo real encontrado ao escrever
+  // esta correção) — nunca "falta" sozinha, para não sequestrar perguntas
+  // de pagamentos ("quanto falta pagar") nem cair na contagem de dias.
+  if(
+    /esta semana|nesta semana|essa semana|this week|agenda da semana|tarefas (desta|da) semana|o que tenho (para )?(esta semana|hoje)|pr[oó]ximos dias/.test(p)
+    || ((/\bfalta(m)?\b/.test(p) && /\b(fazer|tratar|organizar)\b/.test(p)) || /(que\s+)?tarefas\s+(ainda\s+)?falta(m)?\b/.test(p))
+  ){
     return { intent: WEDDY_COPILOT_INTENTS.GET_UPCOMING_TASKS };
   }
 
@@ -8762,8 +8774,16 @@ function classifyCopilotIntent(pergunta){
     return { intent: WEDDY_COPILOT_INTENTS.GET_RSVPS_NEEDING_REMINDER };
   }
 
-  // "quem ainda não respondeu" / "quem falta responder" / "quem não confirmou"
-  if(/quem.*(ainda n[aã]o respond|falta respond|n[aã]o confirmou|n[aã]o respondeu)/.test(p)){
+  // "quem ainda não respondeu" / "quem falta responder" / "quem falta
+  // confirmar" / "quem me falta contactar" / "quem não confirmou" /
+  // "que convidados faltam confirmar". "falta confirmar", "falta
+  // contactar" e a alternativa "convidad" foram acrescentadas na correção
+  // do bug "falta/dias" (Set 2026) — antes só "falta respond" (sem
+  // "confirmar"/"contactar") disparava esta intenção, e perguntas como
+  // "quem falta confirmar?" ou "quem me falta contactar?" caíam por
+  // engano na contagem de dias (a segunda já tinha sido sinalizada como
+  // inconsistente na bateria de 213 testes — Secção 15).
+  if(/(quem|convidad).*(ainda n[aã]o respond|falta(m)?\s*respond|falta(m)?\s*confirmar|falta(m)?\s*contactar|n[aã]o confirmou|n[aã]o respondeu)/.test(p)){
     return { intent: WEDDY_COPILOT_INTENTS.GET_PENDING_RSVPS };
   }
 
@@ -8789,8 +8809,12 @@ function classifyCopilotIntent(pergunta){
     if(supplierGuess) return { intent: WEDDY_COPILOT_INTENTS.GET_SUPPLIER_PAYMENT_INFO };
   }
 
-  // "que fornecedores ainda não estão contratados" / "fornecedores por contratar"
-  if(/fornecedor/.test(p) && /(n[aã]o est[aã]o contratad|por contratar|ainda n[aã]o contratei|falta contratar|sem contrat)/.test(p)){
+  // "que fornecedores ainda não estão contratados" / "fornecedores por
+  // contratar" / "que fornecedores ainda faltam contratar" — "falta(m)?"
+  // (em vez do "falta" fixo no singular) foi corrigido na correção do bug
+  // "falta/dias" (Set 2026): a versão anterior só reconhecia "falta
+  // contratar", não "faltam contratar" (plural, com "fornecedores").
+  if(/fornecedor/.test(p) && /(n[aã]o est[aã]o contratad|por contratar|ainda n[aã]o contratei|falta(m)?\s+contratar|sem contrat)/.test(p)){
     return { intent: WEDDY_COPILOT_INTENTS.GET_UNCONTRACTED_SUPPLIERS };
   }
 
@@ -8833,9 +8857,12 @@ function classifyCopilotIntent(pergunta){
     if(found) return { intent: WEDDY_COPILOT_INTENTS.SEARCH_DOCUMENTS };
   }
 
-  // "que convidados confirmados ainda não têm mesa" — antes do /mesa/
-  // genérico (GET_TABLE_COUNT), que só conta quantas mesas existem.
-  if(/sem mesa|mesa por atribuir|ainda n[aã]o t[eê]m mesa|falta atribuir mesa/.test(p)){
+  // "que convidados confirmados ainda não têm mesa" / "quem falta sentar"
+  // — antes do /mesa/ genérico (GET_TABLE_COUNT), que só conta quantas
+  // mesas existem. "falta(m)? sentar" foi acrescentada na correção do bug
+  // "falta/dias" (Set 2026) — era a Secção 27/28 da bateria de 213 testes
+  // (#207 "Quem falta sentar?") que caía, por engano, na contagem de dias.
+  if(/sem mesa|mesa por atribuir|ainda n[aã]o t[eê]m mesa|falta atribuir mesa|falta(m)?\s+sentar/.test(p)){
     return { intent: WEDDY_COPILOT_INTENTS.GET_GUESTS_WITHOUT_TABLE };
   }
 
@@ -8848,7 +8875,25 @@ function classifyCopilotIntent(pergunta){
   if(/orçamento|orcamento|gast|dinheiro|pago|paguei/.test(p)){
     return { intent: WEDDY_COPILOT_INTENTS.GET_BUDGET };
   }
-  if(/data|dias|falta/.test(p) && weddingSettings.weddingDate){
+  // Correção do bug transversal "falta/dias" (achado na bateria de 213
+  // testes, Set 2026): a versão anterior disparava a contagem de dias
+  // para QUALQUER pergunta que contivesse a palavra "falta" isolada (ex.:
+  // "quem falta confirmar?", "o que falta fazer?", "quanto falta pagar?",
+  // "quem falta sentar?"), roubando essas perguntas às intenções certas
+  // (já corrigidas acima) ou ao UNKNOWN, quando nenhuma intenção
+  // específica existe. Confirmado em 7 ocorrências distintas do relatório
+  // final da bateria (Tarefas, Linguagem natural, Perguntas ambíguas,
+  // Português PT-PT, Perguntas abertas, Convidados, Budget/Despesas).
+  // A contagem de dias só deve disparar quando há evidência semântica
+  // real de que a pergunta é sobre TEMPO até ao casamento — nunca basta
+  // "falta" ou "dias" sozinhas. Três formas de o dizer em PT-PT:
+  //   1) "quantos dias faltam (para o casamento)?" / "dias que faltam"
+  //   2) "quanto falta / quanto tempo falta para o casamento/grande dia"
+  //   3) "qual é a data do casamento?" / "quando é o casamento?"
+  const COUNTDOWN_DIAS_RE = /(quant[oa]s?\s+)?dias?\s+(que\s+)?falta(m)?\b|falta(m)?\s+quant[oa]s?\s+dias/;
+  const COUNTDOWN_TEMPO_RE = /quanto\s+(tempo\s+)?falta\s+para\s+o\s+(nosso\s+)?(casamento|grande dia)/;
+  const COUNTDOWN_DATA_RE = /data\s+(do\s+)?(nosso\s+)?casamento|quando\s+[eé]\s+(o\s+)?(nosso\s+)?casamento|quando\s+vai\s+ser\s+(o\s+)?(nosso\s+)?casamento/;
+  if((COUNTDOWN_DIAS_RE.test(p) || COUNTDOWN_TEMPO_RE.test(p) || COUNTDOWN_DATA_RE.test(p)) && weddingSettings.weddingDate){
     return { intent: WEDDY_COPILOT_INTENTS.GET_COUNTDOWN };
   }
   if(/mesa/.test(p)){
