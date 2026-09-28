@@ -8988,6 +8988,32 @@ function classifyCopilotIntent(pergunta, context){
         return { intent: WEDDY_COPILOT_INTENTS.GET_TABLE_GUESTS, value: context.tableId };
       }
     }
+    // "E ao espaço?" / "E à florista?" depois de uma pergunta sobre
+    // pagamentos a OUTRO fornecedor — o TÓPICO continua (quero saber
+    // pagamentos), mas o ALVO tem de ser lido de novo desta frase, nunca
+    // reaproveitado do turno anterior (por isso NÃO passamos
+    // contextOverride.supplierId aqui — getSupplierPaymentInfo volta a
+    // procurar por findSupplierMatches(pergunta), exatamente como uma
+    // pergunta nova). Acrescentado (Set 2026): o bloco de "seguimento"
+    // acima só reconhecia isto se a frase repetisse "quanto pago/devo" —
+    // uma pergunta puramente "E X?" nomeia sempre um alvo novo
+    // (nomeiaAlvoNovo fica true, de propósito, para a pergunta explícita
+    // ganhar), por isso tem de ser tratada aqui, fora do bloco acima, tal
+    // como "E o João?"/"E a Maria?" já é tratado para mesas mais abaixo.
+    if(context.topic==='supplier'){
+      const m = p.match(/^e\s+(?:ao|à|a|para|o)\s+(.+?)\??$/i);
+      // Guarda contra falsos positivos: "E o que falta pagar no geral?"
+      // também bate no "e o ..." acima, mas não é um novo fornecedor — é
+      // outra pergunta genérica sobre pagamentos, que tem de continuar
+      // para os blocos abaixo (GET_REMAINING_PAYMENTS), nunca ser tratada
+      // como se "que falta pagar no geral" fosse o nome de um fornecedor.
+      const pareceAlvo = m && m[1] && m[1].trim().length>1
+        && !/\b(que|quanto|quem|como|falta|pagar|custa|devo|paguei|pago)\b/.test(m[1]);
+      if(pareceAlvo){
+        return { intent: WEDDY_COPILOT_INTENTS.GET_SUPPLIER_PAYMENT_INFO };
+      }
+    }
+
     // "E o João?" / "E a Maria?" depois de uma pergunta sobre a mesa de
     // alguém — o TÓPICO continua (quero saber a mesa de outra pessoa),
     // mas o ALVO tem de ser lido de novo desta frase, nunca reaproveitado
