@@ -9024,6 +9024,50 @@ function classifyCopilotIntent(pergunta, context){
         return { intent: WEDDY_COPILOT_INTENTS.GET_GUEST_TABLE, contextOverride:{ guestNameOverride: m[1].trim() } };
       }
     }
+    // Resposta a um pedido de desambiguação ("Há mais do que um
+    // fornecedor/convidado... A quem/qual te referes?") — a resposta
+    // seguinte costuma ser só o nome escolhido, sem "e" nem verbo nenhum
+    // (ex.: "Quinta do Vale Dourado"), por isso não passa pelos blocos de
+    // "seguimento" acima (que exigem "e ..." ou frase curta com verbo).
+    // Bug relatado (Set 2026): sem isto, essa resposta caía sempre no
+    // fallback de "modo de demonstração". Só resolve quando o texto bate,
+    // de forma inequívoca, numa ÚNICA das opções guardadas — nunca
+    // adivinha entre duas que batam igualmente bem.
+    if(context.topic==='supplierDisambiguation' && Array.isArray(context.options)){
+      const tokens = normalizeSearchText(p).split(/[^a-z0-9]+/).filter(w=>w.length>=3 && !STOPWORDS_PT.has(w));
+      if(tokens.length){
+        const scored = context.options.map(opt=>{
+          const nameWords = wordsOfNormalized(normalizeSearchText(opt.name));
+          let score = 0;
+          tokens.forEach(t=>{ if(nameWords.some(w=>wordsMatchLoosely(t,w))) score++; });
+          return { opt, score };
+        });
+        const bestScore = Math.max(0, ...scored.map(x=>x.score));
+        const best = bestScore>0 ? scored.filter(x=>x.score===bestScore) : [];
+        if(best.length===1){
+          return { intent: WEDDY_COPILOT_INTENTS.GET_SUPPLIER_PAYMENT_INFO, contextOverride:{ supplierId: best[0].opt.id } };
+        }
+      }
+    }
+    if(context.topic==='guestDisambiguation' && Array.isArray(context.options)){
+      const tokens = normalizeSearchText(p).split(/[^a-z0-9]+/).filter(w=>w.length>=2 && !STOPWORDS_PT.has(w));
+      if(tokens.length){
+        const scored = context.options.map(opt=>{
+          const nameWords = wordsOfNormalized(normalizeSearchText(opt.name));
+          let score = 0;
+          tokens.forEach(t=>{ if(nameWords.some(w=>wordsMatchLoosely(t,w) || w===t)) score++; });
+          return { opt, score };
+        });
+        const bestScore = Math.max(0, ...scored.map(x=>x.score));
+        const best = bestScore>0 ? scored.filter(x=>x.score===bestScore) : [];
+        // Quando os candidatos têm nomes literalmente iguais, todos batem
+        // com a mesma pontuação — continua ambíguo de propósito, nunca
+        // escolhe um convidado ao acaso.
+        if(best.length===1){
+          return { intent: WEDDY_COPILOT_INTENTS.GET_GUEST_TABLE, contextOverride:{ guestIdOverride: best[0].opt.guestId } };
+        }
+      }
+    }
   }
 
   // "cria uma tarefa para X" / "adiciona tarefa X" / "lembra-me de X"
@@ -9456,7 +9500,7 @@ const WeddyActions = {
       }
       if(!s){
         const matches = findSupplierMatches(pergunta);
-        if(matches.length>1) return { ambiguous:true, names: matches.map(m=>m.name) };
+        if(matches.length>1) return { ambiguous:true, names: matches.map(m=>m.name), ids: matches.map(m=>m.id) };
         s = matches[0] || null;
       }
       if(!s) return null;
@@ -9538,13 +9582,24 @@ const WeddyActions = {
     // vem já de uma pergunta de seguimento resolvida pelo contexto
     // conversacional ("E o João?") — nesse caso é o próprio nome, sem
     // mais nada a extrair.
-    getGuestTable(pergunta, overrideName){
-      const nameGuess = overrideName || extractGuestNameFromQuestion(pergunta);
-      if(!nameGuess) return { found:false };
-      const matches = findGuestsByName(nameGuess);
-      if(!matches.length) return { found:false, query:nameGuess };
-      if(matches.length>1) return { found:false, ambiguous:true, names: matches.map(m=>m.name) };
-      const g = matches[0];
+    getGuestTable(pergunta, overrideName, guestIdOverride){
+      let g = null;
+      // guestIdOverride vem de uma resposta a uma pergunta de
+      // desambiguação anterior ("Há mais do que um convidado com esse
+      // nome: X, X. A quem te referes?") já resolvida pelo classificador
+      // para um guestId concreto — nunca volta a procurar por NOME (dois
+      // convidados com o mesmo nome nunca se distinguiriam dessa forma).
+      if(guestIdOverride){
+        g = flattenAllGuestsForRSVP().find(x=>x.guestId===guestIdOverride) || null;
+        if(!g) return { found:false };
+      } else {
+        const nameGuess = overrideName || extractGuestNameFromQuestion(pergunta);
+        if(!nameGuess) return { found:false };
+        const matches = findGuestsByName(nameGuess);
+        if(!matches.length) return { found:false, query:nameGuess };
+        if(matches.length>1) return { found:false, ambiguous:true, names: matches.map(m=>m.name), guestIds: matches.map(m=>m.guestId) };
+        g = matches[0];
+      }
       let tableId = null;
       Object.entries((state.seating && state.seating.assignments)||{}).forEach(([key,guestId])=>{
         if(guestId!==g.guestId) return;
@@ -9773,7 +9828,15 @@ async function respondeAssistente(pergunta){
       if(!info) return ta('cpSupplierPaymentNotFound');
       // Correção global (Set 2026, regra "dois fornecedores com o mesmo
       // nome → pedir clarificação"): nunca escolhe um dos dois sozinho.
-      if(info.ambiguous) return ta('cpSupplierAmbiguous')(info.names.join(', '));
+      if(info.ambiguous){
+        // Guarda as opções (nome + id) para a próxima mensagem, que pode
+        // ser só o nome escolhido ("Quinta do Vale Dourado", sem "e" nem
+        // verbo) — bug relatado (Set 2026): sem isto, essa resposta caía
+        // sempre no fallback de "modo de demonstração", nunca resolvia a
+        // pergunta original.
+        lastCopilotContext = { topic:'supplierDisambiguation', options: info.names.map((n,i)=>({ name:n, id:info.ids[i] })) };
+        return ta('cpSupplierAmbiguous')(info.names.join(', '));
+      }
       let resposta = ta('cpPaidSoFar')(info.name, fmtEUR(info.paid));
       if(info.total>0) resposta += ta('cpOfContracted')(fmtEUR(info.total));
       resposta += '.';
@@ -9834,8 +9897,19 @@ async function respondeAssistente(pergunta){
     }
     case I.GET_GUEST_TABLE: {
       const overrideName = classified.contextOverride && classified.contextOverride.guestNameOverride;
-      const info = WeddyActions.read.getGuestTable(classified.value || pergunta, overrideName);
-      if(info.ambiguous) return ta('cpGuestAmbiguous')(info.names.join(', '));
+      const overrideGuestId = classified.contextOverride && classified.contextOverride.guestIdOverride;
+      const info = WeddyActions.read.getGuestTable(classified.value || pergunta, overrideName, overrideGuestId);
+      if(info.ambiguous){
+        // Mesma correção do lado dos fornecedores, aqui para convidados —
+        // guarda as opções (nome + guestId) para a resposta seguinte poder
+        // ser só a escolha, sem repetir "onde está sentado". Quando os
+        // nomes das opções são literalmente iguais (dois convidados com o
+        // mesmo nome), nenhuma resposta em texto os distingue por si só —
+        // isso é uma limitação dos dados, não algo que este bloco resolva;
+        // continua, corretamente, a pedir para escolher de outra forma.
+        lastCopilotContext = { topic:'guestDisambiguation', options: info.names.map((n,i)=>({ name:n, guestId:info.guestIds[i] })) };
+        return ta('cpGuestAmbiguous')(info.names.join(', '));
+      }
       if(!info.found) return ta('cpGuestNotFound')(info.query || (overrideName||''));
       if(!info.seated) return ta('cpGuestNotSeated')(info.name);
       lastCopilotContext = { topic:'guestTable' };
