@@ -15235,9 +15235,17 @@ function handleAuthSubmit(){
 // Google, por isso nunca passa pelo ecrã "confirma o teu email".
 //
 // Em contexto de PWA instalada (ecrã inicial do iPhone/Android, sem barra
-// de navegador), signInWithPopup costuma falhar ou comportar-se mal — por
-// isso aqui usamos sempre signInWithRedirect nesse caso, e só usamos popup
-// no browser normal (ecrã mais amigável, sem sair da página).
+// de navegador), o signInWithRedirect (navegação completa até à Google e de
+// volta) tem um problema bem conhecido no Safari/iOS: a app instalada corre
+// numa WKWebView "standalone" cujo armazenamento (IndexedDB) muitas vezes
+// não sobrevive a essa ida-e-volta completa — o resultado é exatamente o
+// que a Rita reportou ao testar: "carrega uma página e volta ao login sem
+// acontecer nada", sem erro nenhum (o pedido de login simplesmente perde-se
+// pelo caminho). Por isso deixámos de usar signInWithRedirect por omissão:
+// usamos sempre signInWithPopup (fica na mesma janela/contexto, nunca perde
+// o estado) e só caímos para signInWithRedirect como último recurso, se o
+// próprio browser recusar mesmo abrir o popup (ambientes muito restritos,
+// ex.: certas webviews Android antigas).
 function isStandaloneApp(){
   try{
     return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
@@ -15265,11 +15273,15 @@ function handleGoogleSignIn(){
     else msg = ta('authErrGeneric')((err && (err.code||err.message))||'unknown error');
     renderLoginForm(msg, true);
   };
-  if(isStandaloneApp()){
-    auth.signInWithRedirect(provider).catch(showError);
-  } else {
-    auth.signInWithPopup(provider).catch(showError);
-  }
+  auth.signInWithPopup(provider).catch(err=>{
+    // Só cai para redirect se o browser realmente recusar abrir o popup —
+    // nunca por estarmos em modo instalado (ver comentário acima).
+    if(err && (err.code==='auth/popup-blocked' || err.code==='auth/operation-not-supported-in-this-environment')){
+      auth.signInWithRedirect(provider).catch(showError);
+      return;
+    }
+    showError(err);
+  });
 }
 // Recolhe o resultado de signInWithRedirect (PWA instalada) ao recarregar a
 // página depois do login na Google. Em caso de sucesso não há nada a fazer
