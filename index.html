@@ -14967,16 +14967,30 @@ async function openDocLightbox(url){
     if(myToken !== docLightboxToken) return; // entretanto fechou/trocou de documento
     pagesEl.innerHTML = '';
     const targetWidth = Math.min(pagesEl.clientWidth || 340, 700);
+    // Corrigido (Set 2026, achado pela Rita): a pré-visualização do PDF
+    // abria mas ficava toda desfocada. A causa é clássica em canvas: o
+    // "bitmap" da imagem era desenhado exatamente ao tamanho em pixels
+    // de CSS que aparecia no ecrã (targetWidth), mas em qualquer
+    // iPhone/telemóvel moderno cada "pixel de CSS" ocupa 2 ou 3 pixels
+    // físicos reais (ecrã "Retina") — desenhar 1 pixel de bitmap e esticá-lo
+    // por 2 ou 3 pixels físicos é exatamente o que dá esse aspeto desfocado.
+    // A correção é multiplicar a resolução do bitmap por
+    // "window.devicePixelRatio" (2 ou 3, o número de pixels físicos por
+    // pixel de CSS neste ecrã) e depois mostrar esse bitmap maior no
+    // mesmo tamanho de sempre em CSS (canvas.style.width) — assim há
+    // pixels reais a mais para preencher o ecrã Retina com nitidez, em
+    // vez de esticar poucos pixels.
+    const dpr = window.devicePixelRatio || 1;
     for(let n=1; n<=pdf.numPages; n++){
       if(myToken !== docLightboxToken) return;
       const page = await pdf.getPage(n);
       const baseViewport = page.getViewport({ scale:1 });
-      const scale = targetWidth / baseViewport.width;
+      const scale = (targetWidth / baseViewport.width) * dpr;
       const viewport = page.getViewport({ scale });
       const canvas = document.createElement('canvas');
       canvas.width = viewport.width;
       canvas.height = viewport.height;
-      canvas.style.cssText = 'max-width:100%; height:auto; border-radius:8px; box-shadow:0 4px 16px rgba(0,0,0,0.3); background:#fff;';
+      canvas.style.cssText = `max-width:100%; width:${targetWidth}px; height:auto; border-radius:8px; box-shadow:0 4px 16px rgba(0,0,0,0.3); background:#fff;`;
       pagesEl.appendChild(canvas);
       await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
     }
