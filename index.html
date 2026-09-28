@@ -33,6 +33,8 @@
   --dusty-dark:#96897D;
   --sage:#A8B39C;         /* sage */
   --sage-dark:#7C8A6E;
+  --joint:#C9A480;        /* cor do 3º "lado" dos convidados: Conjunto (dourado, distinto do rosa da noiva e do taupe do noivo) */
+  --joint-dark:#A97F5B;
   --line:rgba(48,44,41,0.09);
   --shadow:0 2px 12px rgba(48,44,41,0.055), 0 1px 2px rgba(48,44,41,0.04);
 }
@@ -1157,6 +1159,7 @@ html{
 .mesa3d-label::after{ content:''; position:absolute; left:50%; bottom:-4px; width:7px; height:7px; background:inherit; box-shadow:inherit; transform:translateX(-50%) rotate(45deg); border-radius:0 0 3px 0; z-index:-1; }
 .mesa3d-label.assigned.noiva{ background:var(--blush-dark); color:#fff; }
 .mesa3d-label.assigned.noivo{ background:var(--dusty-dark); color:#fff; }
+.mesa3d-label.assigned.conjunto{ background:var(--joint-dark); color:#fff; }
 .mesa3d-hint{ position:absolute; left:0; right:0; bottom:11px; text-align:center; font-size:10.5px; color:var(--ink-soft); opacity:.85; pointer-events:none; }
 .mesa3d-fillcount{ font-size:11.5px; color:var(--ink-soft); font-weight:500; margin-left:auto; }
 .mini-ring{ position:relative; width:34px; height:34px; margin-left:auto; flex-shrink:0; }
@@ -1386,6 +1389,7 @@ html.force-portrait-a body, html.force-portrait-b body{ width:100%; height:100%;
       <div class="segmented" id="gf-side-seg">
         <button data-gfside="noiva" class="active" data-t="sideBride">Noiva</button>
         <button data-gfside="noivo" data-t="sideGroom">Noivo</button>
+        <button data-gfside="conjunto" data-t="sideJoint">Conjunto</button>
       </div>
     </div>
     <div class="sheet-field" id="gf-cat-wrap">
@@ -2526,7 +2530,16 @@ function migrateGuestCategories(){
   // padrão já usado por migrateLegacySupplierPayments/migrateExpenseIds:
   // o chamador força pushRemote(true) quando volta true.
   let idAssigned = false;
-  ['noiva','noivo'].forEach(side=>{
+  // Novo lado "Conjunto" (Set 2026): quem já usava a app antes disto tem
+  // guardado no Firestore só "noiva" e "noivo" — esta app nunca tinha tido
+  // um 3º lado. Isto acrescenta "conjunto" vazio a quem ainda não o tem,
+  // sem mexer em nada do que já existia (noiva/noivo continuam
+  // exatamente como estavam) — por isso é seguro correr mesmo para as
+  // pessoas que já têm a app com convidados guardados.
+  if(!state.guests.conjunto){
+    state.guests.conjunto = { familia:[], amigos:[], duvida:[], staff:[], custom:[] };
+  }
+  ALL_GUEST_SIDES.forEach(side=>{
     if(!state.guests[side].custom) state.guests[side].custom = [];
     if(!state.guests[side].custom.some(c=>c.id==='criancas')){
       state.guests[side].custom.push({ id:'criancas', label:'Crianças', names:[] });
@@ -2549,7 +2562,7 @@ function migrateGuestCategories(){
   // idade e um "paying" verdadeiro/falso, em vez da percentagem) fica com
   // formatos antigos aqui — converte tudo para o formato atual, sem perder
   // nome nem idade já preenchidos.
-  ['noiva','noivo'].forEach(side=>{
+  ALL_GUEST_SIDES.forEach(side=>{
     const cat = state.guests[side].custom.find(c=>c.id==='criancas');
     if(cat) cat.names = cat.names.map(n=>{
       if(typeof n==='string') return { name:n, age:'', payingPct:0 };
@@ -2560,7 +2573,7 @@ function migrateGuestCategories(){
   // Staff/fornecedores era só uma lista de nomes (strings) — passa a ter,
   // tal como as crianças, uma percentagem de pagamento por pessoa (por
   // defeito 100%, já que normalmente são convidados como os outros).
-  ['noiva','noivo'].forEach(side=>{
+  ALL_GUEST_SIDES.forEach(side=>{
     if(Array.isArray(state.guests[side].staff)){
       state.guests[side].staff = state.guests[side].staff.map(n=>{
         if(typeof n==='string') return { name:n, payingPct:1 };
@@ -2574,7 +2587,7 @@ function migrateGuestCategories(){
   // simples (ainda em texto) ganham também a forma de objeto, sem perder o
   // nome. Isto é o que permite, por exemplo, que um link de RSVP aponte
   // sempre à mesma pessoa, mesmo que a lista seja reordenada depois.
-  ['noiva','noivo'].forEach(side=>{
+  ALL_GUEST_SIDES.forEach(side=>{
     allGuestCategoriesOf(side).forEach(c=>{
       const arr = getGuestNames(side, c.id);
       if(!Array.isArray(arr)) return;
@@ -2592,7 +2605,7 @@ function migrateGuestCategories(){
   // só que agora É USADO como identidade em todo o lado — ver
   // migrateConfirmedAndSeatingToGuestId() logo a seguir, chamada sempre
   // depois desta função.
-  ['noiva','noivo'].forEach(side=>{
+  ALL_GUEST_SIDES.forEach(side=>{
     allGuestCategoriesOf(side).forEach(c=>{
       const arr = getGuestNames(side, c.id);
       if(!Array.isArray(arr)) return;
@@ -2655,7 +2668,7 @@ function migrateConfirmedAndSeatingToGuestId(){
 // índice/posição.
 function findGuestByGuestId(guestId){
   if(!guestId) return null;
-  for(const side of ['noiva','noivo']){
+  for(const side of ALL_GUEST_SIDES){
     for(const c of allGuestCategoriesOf(side)){
       const arr = getGuestNames(side, c.id);
       if(!Array.isArray(arr)) continue;
@@ -2720,7 +2733,8 @@ function seedData(){
     ],
     guests:{
       noiva:{ familia:[], amigos:[], duvida:[], staff:[], custom:[{id:'criancas', label:'Crianças', names:[]}] },
-      noivo:{ familia:[], amigos:[], duvida:[], staff:[], custom:[{id:'criancas', label:'Crianças', names:[]}] }
+      noivo:{ familia:[], amigos:[], duvida:[], staff:[], custom:[{id:'criancas', label:'Crianças', names:[]}] },
+      conjunto:{ familia:[], amigos:[], duvida:[], staff:[], custom:[{id:'criancas', label:'Crianças', names:[]}] }
     },
     confirmed:{},
     expenses:[],
@@ -2766,6 +2780,25 @@ const FIXED_GUEST_CATS = [
 ];
 const FIXED_GUEST_CAT_KEY = { familia:'catFamilia', amigos:'catFriends', duvida:'catMaybe', staff:'catStaff' };
 const PAYMENT_TRACKING_CATS = ['criancas','staff'];
+// "Lados" dos convidados: noiva/noivo já existiam; "conjunto" foi acrescentado
+// (Set 2026, pedido da Rita) para convidados que não são só de um dos dois —
+// amigos em comum, por exemplo. ALL_GUEST_SIDES é a lista única usada em
+// todo o lado onde antes se percorriam só 'noiva'/'noivo' à mão — acrescentar
+// um 4º lado no futuro passa a ser só mudar aqui. SIDE_COLOR/SIDE_LABEL_KEY
+// substituem os vários "side==='noiva' ? corDaNoiva : corDoNoivo" espalhados
+// pelo código (esses só sabiam escolher entre 2 opções — com 3 lados,
+// precisavam de virar uma tabela em vez de um if/else).
+const ALL_GUEST_SIDES = ['noiva','noivo','conjunto'];
+// Cor usada nas etiquetas/tags de lista (usa as variáveis CSS já existentes).
+const SIDE_COLOR = { noiva:'var(--blush-dark)', noivo:'var(--dusty-dark)', conjunto:'var(--joint-dark)' };
+// Cor usada na vista de Mesas/Lugares (3D e 2D) — é uma paleta ligeiramente
+// diferente da de cima (já existia assim antes desta alteração, só
+// acrescentámos a 3ª cor a condizer). Guardada tanto em texto ("#CB8577",
+// para CSS/canvas 2D) como em número (0xCB8577, para o Three.js do 3D).
+const SIDE_SEAT_COLOR_HEX = { noiva:'#CB8577', noivo:'#6C8296', conjunto:'#C9A480' };
+const SIDE_SEAT_COLOR_THREE = { noiva:0xCB8577, noivo:0x6C8296, conjunto:0xC9A480 };
+const SIDE_LABEL_KEY = { noiva:'sideBride', noivo:'sideGroom', conjunto:'sideJoint' };
+function sideLabel(side){ return ta(SIDE_LABEL_KEY[side] || SIDE_LABEL_KEY.noiva); }
 
 let state = seedData();
 normalizeCategories();
@@ -3036,7 +3069,7 @@ function paidByCategory(id){ return state.expenses.filter(e=>e.category===id).re
 // por isso o nome tem de ser sempre extraído com cuidado.
 function allAdultGuests(){
   const out=[];
-  ['noiva','noivo'].forEach(side=>{
+  ALL_GUEST_SIDES.forEach(side=>{
     allGuestCategoriesOf(side).forEach(c=>{
       (getGuestNames(side,c.id)||[]).forEach((n,idx)=>{
         const name = (typeof n==='object' && n!==null) ? (n.name||'') : n;
@@ -3347,6 +3380,7 @@ const APP_I18N = {
     lblConfirmed:'Confirmados',
     sideBride:'Noiva',
     sideGroom:'Noivo',
+    sideJoint:'Conjunto',
     homeBudgetSpentLabel:'Orçamento gasto',
     homeToSpendLabel:'Por gastar',
     homeBigDayLabel:'O grande dia',
@@ -4371,6 +4405,7 @@ const APP_I18N = {
     lblConfirmed:'Confirmed',
     sideBride:'Bride',
     sideGroom:'Groom',
+    sideJoint:'Joint',
     homeBudgetSpentLabel:'Budget spent',
     homeToSpendLabel:'Left to spend',
     homeBigDayLabel:'The big day',
@@ -5592,8 +5627,8 @@ function getWeddingHealthChecks(){
     .sort((a,b)=> HEALTH_SEVERITY_ORDER[a.severity] - HEALTH_SEVERITY_ORDER[b.severity]);
 }
 function viewInicio(){
-  const totalGuests = countGuests('noiva')+countGuests('noivo');
-  const totalConfirmed = countConfirmed('noiva')+countConfirmed('noivo');
+  const totalGuests = ALL_GUEST_SIDES.reduce((sum,s)=>sum+countGuests(s), 0);
+  const totalConfirmed = ALL_GUEST_SIDES.reduce((sum,s)=>sum+countConfirmed(s), 0);
   const totalValue = totalExpenseValue();
   const budgetTotal = state.budget.total;
   const spentPct = budgetTotal ? Math.round((totalValue/budgetTotal)*100) : 0;
@@ -5703,6 +5738,7 @@ function viewInicio(){
       <div class="ring-breakdown">
         <div><div class="n">${fmtGuestCount(countConfirmed('noiva'))}</div><div class="l">${ta('sideBride')}</div></div>
         <div><div class="n">${fmtGuestCount(countConfirmed('noivo'))}</div><div class="l">${ta('sideGroom')}</div></div>
+        ${countGuests('conjunto')>0 ? `<div><div class="n">${fmtGuestCount(countConfirmed('conjunto'))}</div><div class="l">${ta('sideJoint')}</div></div>` : ''}
       </div>
     </div>
     <div class="ring-card tappable" data-goto="orcamento" style="cursor:pointer;">
@@ -6187,8 +6223,8 @@ function buildGuestBody(){
   return body;
 }
 function buildConvidadosDynamic(){
-  const totalGuests = countGuests('noiva')+countGuests('noivo');
-  const totalConfirmed = countConfirmed('noiva')+countConfirmed('noivo');
+  const totalGuests = ALL_GUEST_SIDES.reduce((sum,s)=>sum+countGuests(s), 0);
+  const totalConfirmed = ALL_GUEST_SIDES.reduce((sum,s)=>sum+countConfirmed(s), 0);
   const perGuest = state.budget.guestsEstimate ? totalExpensePaid()/state.budget.guestsEstimate : 0;
   return `
   <div class="ring-stat-card">
@@ -6217,6 +6253,7 @@ function viewConvidados(){
   <div class="segmented">
     <button data-seg="noiva" class="${guestSeg==='noiva'?'active':''}">${ta('sideBride')}</button>
     <button data-seg="noivo" class="${guestSeg==='noivo'?'active':''}">${ta('sideGroom')}</button>
+    <button data-seg="conjunto" class="${guestSeg==='conjunto'?'active':''}">${ta('sideJoint')}</button>
   </div>
 
   <div class="search-bar">${ICONS.search}<input type="text" id="guest-search" placeholder="${ta('placeholderSearchGuest')}" value="${guestFilter}"></div>
@@ -6642,7 +6679,7 @@ function viewAISeatingPrefs(){
       <div style="max-height:220px; overflow:auto;">
         ${confirmedGuests.filter(g=>!aiSeatingPickQuery || g.name.toLowerCase().includes(aiSeatingPickQuery.toLowerCase())).map(g=>`
           <div class="picker-row ${aiSeatingPickIds.includes(g.guestId)?'is-selected':''}" data-aiseatpick="${g.guestId}">
-            <span class="side-tag" style="background:${g.side==='noiva'?'var(--blush-dark)':'var(--dusty-dark)'};">${g.side==='noiva'?'N':'N'}</span>
+            <span class="side-tag" style="background:${SIDE_COLOR[g.side]||SIDE_COLOR.noiva};">${(g.side==='conjunto'?'C':'N')}</span>
             <span class="pname">${escapeHTML(g.name)}</span>
             ${aiSeatingPickIds.includes(g.guestId)?`<span class="pick-check">${ICONS.check}</span>`:''}
           </div>`).join('') || `<div class="empty-note">${ta('aiSeatingNoConfirmedGuestsText')}</div>`}
@@ -8213,7 +8250,7 @@ function memberRSVPResponse(item){
 // para depois se conseguir marcar como confirmado na lista de Convidados.
 function flattenAllGuestsForRSVP(){
   const out = [];
-  ['noiva','noivo'].forEach(side=>{
+  ALL_GUEST_SIDES.forEach(side=>{
     allGuestCategoriesOf(side).forEach(c=>{
       const arr = getGuestNames(side, c.id);
       if(!Array.isArray(arr)) return;
@@ -9789,8 +9826,8 @@ async function respondeAssistente(pergunta){
   const I = WEDDY_COPILOT_INTENTS;
   if(!permission.allowed) return ta('cpPermDenied');
 
-  const totalConvidados = countGuests('noiva') + countGuests('noivo');
-  const totalConfirmados = countConfirmed('noiva') + countConfirmed('noivo');
+  const totalConvidados = ALL_GUEST_SIDES.reduce((sum,s)=>sum+countGuests(s), 0);
+  const totalConfirmados = ALL_GUEST_SIDES.reduce((sum,s)=>sum+countConfirmed(s), 0);
 
   // Por omissão, cada pergunta LIMPA o contexto reutilizável anterior — só
   // os casos que resolvem um fornecedor/mesa/convidado concreto o voltam a
@@ -10297,7 +10334,7 @@ function exportRSVPToCSV(){
     const declaredChildren = (resp && Array.isArray(resp.children)) ? resp.children : [];
     const criancasTxt = declaredChildren.map(c=>`${c.name||'?'}${c.age!==undefined&&c.age!==null&&c.age!==''?ta('yearsOldSuffix')(c.age):''}${c.attending===false?ta('notGoingSuffix'):''}`).join(', ');
     linhas.push([
-      item.name, item.side==='noiva'?ta('sideBride'):ta('sideGroom'), item.catLabel, estado,
+      item.name, sideLabel(item.side), item.catLabel, estado,
       (resp&&resp.meal)||'', (resp&&resp.dietary)||'', (resp&&resp.transporte)?simTxt:'', (resp&&resp.alojamento)?simTxt:'', criancasTxt
     ].map(csvEscape).join(';'));
   });
@@ -10316,8 +10353,8 @@ function exportRSVPToCSV(){
 function viewDefWeddingHealth(){
   if(!hasActiveSubscription()) return viewDefPremiumLocked(ta('healthTitle'));
   const checks = getWeddingHealthChecks();
-  const totalGuests = countGuests('noiva')+countGuests('noivo');
-  const totalConfirmed = countConfirmed('noiva')+countConfirmed('noivo');
+  const totalGuests = ALL_GUEST_SIDES.reduce((sum,s)=>sum+countGuests(s), 0);
+  const totalConfirmed = ALL_GUEST_SIDES.reduce((sum,s)=>sum+countConfirmed(s), 0);
   const pct = totalGuests>0 ? Math.round((totalConfirmed/totalGuests)*100) : 0;
   const nRed = checks.filter(c=>c.severity==='red').length;
   const nYellow = checks.filter(c=>c.severity==='yellow').length;
@@ -10622,7 +10659,7 @@ function viewRSVPRespostas(){
         ${familyBadgeHtml}
         ${statusHtml}
       </div>
-      <div class="rsvp-row-meta">${item.side==='noiva'?ta('sideBride'):ta('sideGroom')} · ${escapeHTML(item.catLabel)}</div>
+      <div class="rsvp-row-meta">${sideLabel(item.side)} · ${escapeHTML(item.catLabel)}</div>
       ${childrenHtml}
       ${extrasHtml}
       ${autopilotHtml}
@@ -13695,7 +13732,7 @@ function renderSeatPickerList(){
     const childInfo = g.cat==='criancas' ? getGuestNames(g.side,'criancas')[g.idx] : null;
     const childTag = childInfo ? `<span class="pname-hint">${ta('childLabel')}${childInfo.age?' · '+ta('childAgeYears')(escapeHTML(String(childInfo.age))):''}</span>` : '';
     rows += `<div class="picker-row ${current===val?'is-selected':''}" data-pick="${escapeHTML(val)}">
-      <span class="side-tag" style="background:${g.side==='noiva'?'var(--blush-dark)':'var(--dusty-dark)'};">${g.side==='noiva'?ta('sideBride'):ta('sideGroom')}</span>
+      <span class="side-tag" style="background:${SIDE_COLOR[g.side]||SIDE_COLOR.noiva};">${sideLabel(g.side)}</span>
       <span class="pname">${escapeHTML(g.name)}${elsewhere?`<span class="pname-hint">${ta('alreadyAtLabel')(seatLabel(elsewhere))}</span>`:childTag}</span>
     </div>`;
   });
@@ -14259,7 +14296,7 @@ function loadMesa3DTable(){
   mesa3d.chairs.forEach(ch=>{
     const key = 't'+t+'-s'+ch.index;
     const info = resolveSeatGuest(state.seating.assignments[key] || '');
-    const color = info ? (info.side==='noiva' ? 0xCB8577 : 0x6C8296) : 0xFFFCF4;
+    const color = info ? (SIDE_SEAT_COLOR_THREE[info.side] !== undefined ? SIDE_SEAT_COLOR_THREE[info.side] : SIDE_SEAT_COLOR_THREE.noiva) : 0xFFFCF4;
     ch.seatMesh.material.color.setHex(color);
     ch.backMesh.material.color.setHex(color);
     ch.name = info ? info.name : '';
@@ -14349,7 +14386,7 @@ function tableSVG(table){
 
   function seatDot(sx, sy, angle, s){
     const info = resolveSeatGuest(state.seating.assignments['t'+t+'-s'+s] || '');
-    const dotColor = info ? (info.side==='noiva' ? '#CB8577' : '#6C8296') : '#E7DEC8';
+    const dotColor = info ? (SIDE_SEAT_COLOR_HEX[info.side] || SIDE_SEAT_COLOR_HEX.noiva) : '#E7DEC8';
     return `<circle cx="${sx}" cy="${sy}" r="${seatR}" fill="${dotColor}" stroke="#FFFDF8" stroke-width="1"/>`;
   }
 
@@ -14494,8 +14531,9 @@ function renderSalaView(){
   });
   wrap.innerHTML = `
     <div class="sala-legend">
-      <span class="sala-legend-item"><span class="sala-legend-dot" style="background:#CB8577;"></span>${ta('sideBride')}</span>
-      <span class="sala-legend-item"><span class="sala-legend-dot" style="background:#6C8296;"></span>${ta('sideGroom')}</span>
+      <span class="sala-legend-item"><span class="sala-legend-dot" style="background:${SIDE_SEAT_COLOR_HEX.noiva};"></span>${ta('sideBride')}</span>
+      <span class="sala-legend-item"><span class="sala-legend-dot" style="background:${SIDE_SEAT_COLOR_HEX.noivo};"></span>${ta('sideGroom')}</span>
+      <span class="sala-legend-item"><span class="sala-legend-dot" style="background:${SIDE_SEAT_COLOR_HEX.conjunto};"></span>${ta('sideJoint')}</span>
       <span class="sala-legend-item"><span class="sala-legend-dot" style="background:#E7DEC8;"></span>${ta('salaLegendFree')}</span>
     </div>
     <div class="sala-hint">${ta('salaViewHint')}</div>
@@ -15664,14 +15702,14 @@ function exportToExcel(){
 
     // Convidados
     const guestList = [];
-    ['noiva','noivo'].forEach(side=>{
+    ALL_GUEST_SIDES.forEach(side=>{
       allGuestCategoriesOf(side).forEach(c=>{
         (getGuestNames(side,c.id)||[]).forEach((n,idx)=>{
           const isObj = n && typeof n==='object';
           const hasPay = isPaymentTrackingCat(c.id);
           guestList.push({
             name: isObj ? (n.name||'') : n,
-            side: side==='noiva'?ta('sideBride'):ta('sideGroom'),
+            side: sideLabel(side),
             group: c.label,
             confirmed: isConfirmed(side,c.id,idx),
             age: (isObj && c.id==='criancas') ? (n.age||'') : '',
@@ -15817,7 +15855,7 @@ function exportToPDF(){
   addSection(ta('xlSheetExpenses'), [ta('xlColDescription'),ta('xlColCategory'),ta('xlColValue'),ta('xlColPaid'),ta('xlColMethod')], gastosBody);
 
   const guestBody = [];
-  ['noiva','noivo'].forEach(side=>{
+  ALL_GUEST_SIDES.forEach(side=>{
     allGuestCategoriesOf(side).forEach(c=>{
       (getGuestNames(side,c.id)||[]).forEach((n,idx)=>{
         const isObj = n && typeof n==='object';
@@ -15827,7 +15865,7 @@ function exportToPDF(){
           (isObj && c.id==='criancas' && n.age) ? ta('childAgeYears')(n.age) : '',
           hasPay ? `${fmtGuestCount(guestWeight(n)*100)}%` : ''
         ].filter(Boolean).join(' · ');
-        guestBody.push([name, `${side==='noiva'?ta('sideBride'):ta('sideGroom')} · ${c.label}${extra?' · '+extra:''}`, isConfirmed(side,c.id,idx)?ta('xlStatusConfirmed'):'—']);
+        guestBody.push([name, `${sideLabel(side)} · ${c.label}${extra?' · '+extra:''}`, isConfirmed(side,c.id,idx)?ta('xlStatusConfirmed'):'—']);
       });
     });
   });
@@ -16119,7 +16157,7 @@ function showSnapshotPreview(snapshotId){
 function countMeaningfulData(s){
   let guests = 0, todos = 0;
   try{
-    ['noiva','noivo'].forEach(side=>{
+    ALL_GUEST_SIDES.forEach(side=>{
       const g = s.guests && s.guests[side];
       if(!g) return;
       ['familia','amigos','duvida','staff'].forEach(k=>{ if(Array.isArray(g[k])) guests += g[k].length; });

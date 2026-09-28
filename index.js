@@ -1382,9 +1382,9 @@ exports.generateSeatingProposal = onCall({ region: 'europe-west1' }, async (requ
   // (ver FIXED_GUEST_CATS/allGuestCategoriesOf em index.html).
   const FIXED_CAT_LABELS = { familia: 'Família', amigos: 'Amigos', duvida: 'Na dúvida', staff: 'Staff/fornecedores' };
   const FIXED_CATS = ['familia', 'amigos', 'duvida', 'staff'];
-  const SIDE_LABELS = { noiva: 'noiva', noivo: 'noivo' };
+  const SIDE_LABELS = { noiva: 'noiva', noivo: 'noivo', conjunto: 'conjunto' };
   const guests = [];
-  ['noiva', 'noivo'].forEach((side) => {
+  ['noiva', 'noivo', 'conjunto'].forEach((side) => {
     const guestsRoot = clientState?.guests?.[side];
     if (!guestsRoot) return;
     const nameArrays = [
@@ -2328,7 +2328,7 @@ function normalizePhoneE164(raw) {
 function findGuestEntryByGuestId(state, guestId) {
   const guests = state && state.guests;
   if (!guests) return null;
-  for (const side of ['noiva', 'noivo']) {
+  for (const side of ['noiva', 'noivo', 'conjunto']) {
     const sideData = guests[side];
     if (!sideData) continue;
     for (const catId of ['familia', 'amigos', 'duvida', 'staff']) {
