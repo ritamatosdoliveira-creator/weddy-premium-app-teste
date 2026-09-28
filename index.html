@@ -1066,6 +1066,18 @@ html{
 .sheet-backdrop.show{ opacity:1; pointer-events:auto; }
 .sheet{ position:absolute; left:0; right:0; bottom:0; background:var(--cream); border-radius:24px 24px 0 0; z-index:51; transform:translateY(100%); transition:transform .28s cubic-bezier(.32,.72,0,1); padding:10px 18px 28px; }
 .sheet.show{ transform:translateY(0); box-shadow:0 -10px 30px rgba(0,0,0,0.2); }
+/* Bug encontrado em testes (Set 2026): a folha "Atribuir lugar" (mesas) foi
+   vista a aparecer por baixo da tabbar noutras páginas ao fazer scroll até
+   ao fundo. closeAllSheets() já limpa qualquer "transform" inline deixado
+   por um arrastar interrompido a meio, mas só corre nesse momento — esta
+   regra é uma rede de segurança permanente: garante SEMPRE (com !important,
+   que vence qualquer style inline) que uma sheet sem a classe "show" fica
+   escondida fora do ecrã, aconteça o que acontecer ao seu transform inline
+   ou ao tamanho do conteúdo lá dentro (ex: a lista de convidados de
+   #seat-picker-list, que pode ficar muito alta depois de aberta numa mesa
+   com muitos lugares). pointer-events:none evita ainda que fique clicável
+   por engano enquanto está "fechada".*/
+.sheet:not(.show){ transform:translateY(100%) !important; pointer-events:none; }
 .sheet-handle{ width:36px; height:4px; border-radius:2px; background:rgba(20,20,20,0.25); margin:4px auto 12px; }
 .sheet-title{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:20px; color:var(--heading); margin:0 0 12px; text-align:center; }
 .sheet-field{ margin-bottom:10px; }
@@ -6515,7 +6527,7 @@ function commitSeatingProposal(proposal){
   render();
   pushRemote(true);
   Promise.resolve(syncSeatingToGuestDocs()).catch(()=>{
-    alert(ta('aiSeatingRsvpSyncErrorText'));
+    weddyAlert(ta('aiSeatingRsvpSyncErrorText'));
   }).finally(()=>{
     aiSeatingCommitting = false;
     aiSeatingScreen = null;
@@ -7393,10 +7405,10 @@ const SUPPLIER_STATUS_BG = { considerar:'#F3E4DC', contactado:'#EAE6E0', contrat
 function supplierPhotoKey(id){ return 'weddy-sup-photo-'+(currentWeddingId||'none')+'-'+id; }
 function supplierContractKey(id){ return 'weddy-sup-contract-'+(currentWeddingId||'none')+'-'+id; }
 function getSupplierPhoto(id){ try{ return localStorage.getItem(supplierPhotoKey(id)); }catch(e){ return null; } }
-function setSupplierPhoto(id, dataUrl){ try{ localStorage.setItem(supplierPhotoKey(id), dataUrl); }catch(e){ showSaveToast(true); alert(ta('errStoragePhoto')); } }
+function setSupplierPhoto(id, dataUrl){ try{ localStorage.setItem(supplierPhotoKey(id), dataUrl); }catch(e){ showSaveToast(true); weddyAlert(ta('errStoragePhoto')); } }
 function removeSupplierPhoto(id){ try{ localStorage.removeItem(supplierPhotoKey(id)); }catch(e){} }
 function getSupplierContract(id){ try{ const raw = localStorage.getItem(supplierContractKey(id)); return raw ? JSON.parse(raw) : null; }catch(e){ return null; } }
-function setSupplierContract(id, obj){ try{ localStorage.setItem(supplierContractKey(id), JSON.stringify(obj)); }catch(e){ showSaveToast(true); alert(ta('errStorageContract')); } }
+function setSupplierContract(id, obj){ try{ localStorage.setItem(supplierContractKey(id), JSON.stringify(obj)); }catch(e){ showSaveToast(true); weddyAlert(ta('errStorageContract')); } }
 function removeSupplierContract(id){ try{ localStorage.removeItem(supplierContractKey(id)); }catch(e){} }
 // Fase 6.1.1 — migração financeira idempotente dos pagamentos legados de
 // fornecedor. s.payments era um segundo livro de contas, independente do
@@ -7801,7 +7813,7 @@ function bindFornecedorDetalheHandlers(){
         // seletor de ficheiros já filtra para isso, por isso deve ser raro
         // na prática) — nesse caso, avisa e não guarda nada em vez de usar
         // o fallback inseguro.
-        alert(ta('errContractUnsupportedType') || 'Tipo de ficheiro não suportado. Usa um PDF ou uma imagem.');
+        weddyAlert(ta('errContractUnsupportedType') || 'Tipo de ficheiro não suportado. Usa um PDF ou uma imagem.');
         if(contractStatusEl) contractStatusEl.textContent = '';
         if(contractRow) contractRow.style.cssText = contractRow.style.cssText.replace('pointer-events:none; opacity:.6;','');
         return;
@@ -7978,7 +7990,7 @@ async function deleteMemory(memoryId, storagePath){
     render();
   }).catch(err=>{
     console.error('Weddy memory delete error:', err.code, err.message);
-    alert(ta('alertDeleteMemoryError'));
+    weddyAlert(ta('alertDeleteMemoryError'));
   });
 }
 let lastRSVPSyncSummary = null;
@@ -8557,7 +8569,7 @@ async function revokeRSVPLink(side, catId, idx, name){
     render();
   }).catch(err=>{
     console.error('Weddy RSVP revoke error:', err.code, err.message);
-    alert(ta('alertRemoveInviteError'));
+    weddyAlert(ta('alertRemoveInviteError'));
   });
 }
 // Vai buscar todas as respostas já dadas para os convidados deste
@@ -8573,7 +8585,7 @@ function saveAndSyncWeddingSettingsToGuests(btn, fields){
   btn.textContent = ta('btnSavingEllipsis');
   if(!FIREBASE_READY || !auth || !auth.currentUser || !currentWeddingId){
     btn.textContent = original;
-    alert(ta('alertSaveNoConnection'));
+    weddyAlert(ta('alertSaveNoConnection'));
     return;
   }
   CURRENT_DOC().set({ settings: weddingSettings, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge:true }).then(()=>{
@@ -8586,7 +8598,7 @@ function saveAndSyncWeddingSettingsToGuests(btn, fields){
       logMassPropagationFailures('sync_wedding_settings_to_guests_failed', failedTokens);
       if(failedTokens.length){
         btn.textContent = original;
-        alert(ta('alertSettingsSyncPartialFailure')(failedTokens.length, tokens.length));
+        weddyAlert(ta('alertSettingsSyncPartialFailure')(failedTokens.length, tokens.length));
       } else {
         btn.textContent = ta('btnSavedCheck');
       }
@@ -8594,7 +8606,7 @@ function saveAndSyncWeddingSettingsToGuests(btn, fields){
     });
   }).catch(()=>{
     btn.textContent = original;
-    alert(ta('alertSaveError'));
+    weddyAlert(ta('alertSaveError'));
   });
 }
 function loadRSVPResponses(){
@@ -10726,7 +10738,7 @@ function bindChatPanelHandlers(){
   // colidir com o das páginas.
   const subscribeBtn = document.getElementById('chat-premium-subscribe-btn');
   if(subscribeBtn) subscribeBtn.addEventListener('click', ()=>{
-    if(!FIREBASE_READY || !currentWeddingId){ alert(ta('alertNoConnectionRetry')); return; }
+    if(!FIREBASE_READY || !currentWeddingId){ weddyAlert(ta('alertNoConnectionRetry')); return; }
     subscribeBtn.disabled = true;
     subscribeBtn.textContent = ta('btnActivatingEllipsis');
     const payload = buildSubscriptionActivatePayload();
@@ -10740,7 +10752,7 @@ function bindChatPanelHandlers(){
       console.error('Weddy subscribe error:', err.code, err.message);
       subscribeBtn.disabled = false;
       subscribeBtn.textContent = ta('btnSubscribePremium');
-      alert(ta('alertSubscriptionActivateError'));
+      weddyAlert(ta('alertSubscriptionActivateError'));
     });
   });
   const assistInput = document.getElementById('assist-chat-input');
@@ -11574,7 +11586,7 @@ function bindHandlers(){
   // Passa a usar querySelectorAll, que liga o clique a todos eles.
   document.querySelectorAll('.js-premium-subscribe').forEach(subscribeBtn=>{
     subscribeBtn.addEventListener('click', ()=>{
-      if(!FIREBASE_READY || !currentWeddingId){ alert(ta('alertNoConnectionRetry')); return; }
+      if(!FIREBASE_READY || !currentWeddingId){ weddyAlert(ta('alertNoConnectionRetry')); return; }
       subscribeBtn.disabled = true;
       subscribeBtn.textContent = ta('btnActivatingEllipsis');
       const payload = buildSubscriptionActivatePayload();
@@ -11587,7 +11599,7 @@ function bindHandlers(){
         console.error('Weddy subscribe error:', err.code, err.message);
         subscribeBtn.disabled = false;
         subscribeBtn.textContent = ta('btnSubscribePremium');
-        alert(ta('alertSubscriptionActivateError'));
+        weddyAlert(ta('alertSubscriptionActivateError'));
       });
     });
   });
@@ -12025,7 +12037,7 @@ function bindHandlers(){
       if(!d) return;
       if(d.storagePath && storage){
         try{ const url = await storage.ref(d.storagePath).getDownloadURL(); previewAttachment(url, d.name); }
-        catch(err){ alert(ta('errOpenAttachmentFailed')); }
+        catch(err){ weddyAlert(ta('errOpenAttachmentFailed')); }
       }
     });
   });
@@ -12172,7 +12184,7 @@ function bindHandlers(){
   // de reiniciar o relógio dos 24 meses ao cancelar e reativar.
   const cancelSubBtn = document.getElementById('subscription-cancel-btn');
   if(cancelSubBtn) cancelSubBtn.addEventListener('click', async ()=>{
-    if(!FIREBASE_READY || !currentWeddingId){ alert(ta('alertNoConnectionRetry')); return; }
+    if(!FIREBASE_READY || !currentWeddingId){ weddyAlert(ta('alertNoConnectionRetry')); return; }
     if(!await weddyConfirm(ta('confirmCancelSubscriptionText'))) return;
     cancelSubBtn.disabled = true;
     cancelSubBtn.textContent = ta('btnCancelingEllipsis');
@@ -12186,7 +12198,7 @@ function bindHandlers(){
       console.error('Weddy cancel subscription error:', err.code, err.message);
       cancelSubBtn.disabled = false;
       cancelSubBtn.textContent = ta('btnCancelSubscription');
-      alert(ta('alertSubscriptionCancelError'));
+      weddyAlert(ta('alertSubscriptionCancelError'));
     });
   });
   // Botões "Resolver" do Wedding Health — saltam para o separador principal
@@ -12407,7 +12419,7 @@ function bindHandlers(){
       const email = e.currentTarget.dataset.removeowner;
       const myEmail = (auth && auth.currentUser) ? auth.currentUser.email.toLowerCase() : '';
       if(currentWeddingCreator && email===currentWeddingCreator && email!==myEmail){
-        alert(ta('alertOnlyCreatorCanRemoveAccess'));
+        weddyAlert(ta('alertOnlyCreatorCanRemoveAccess'));
         return;
       }
       if(!await weddyConfirm(ta('confirmRemoveAccess')(email))) return;
@@ -12417,7 +12429,7 @@ function bindHandlers(){
       CURRENT_DOC().update(updates).then(()=>{
         currentWeddingOwners = currentWeddingOwners.filter(e2=>e2!==email);
         render();
-      }).catch(()=>{ alert(ta('alertRemoveAccessError')); });
+      }).catch(()=>{ weddyAlert(ta('alertRemoveAccessError')); });
     });
   });
   const defSaveSeguranca = document.getElementById('def-save-seguranca');
@@ -12438,12 +12450,12 @@ function bindHandlers(){
       const idx = Number(idxStr);
       const arr = getGuestNames(side, catId);
       const entry = arr && arr[idx];
-      if(!entry){ alert(ta('alertGuestNotFound')); return; }
+      if(!entry){ weddyAlert(ta('alertGuestNotFound')); return; }
       btn.disabled = true;
       btn.textContent = ta('btnGeneratingEllipsis');
       ensureRSVPLink({ side, catId, idx, entry, name: entry.name||'' }).catch(err=>{
         console.error('Weddy RSVP gerar link error:', err.code, err.message);
-        alert(ta('alertGenerateLinkError'));
+        weddyAlert(ta('alertGenerateLinkError'));
         render();
       });
     });
@@ -12708,7 +12720,7 @@ function bindHandlers(){
   });
   const rsvpCreateFamily = document.getElementById('rsvp-create-family');
   if(rsvpCreateFamily) rsvpCreateFamily.addEventListener('click', ()=>{
-    if(rsvpGroupSelection.length<2){ alert(ta('familyGroupTooFew')); return; }
+    if(rsvpGroupSelection.length<2){ weddyAlert(ta('familyGroupTooFew')); return; }
     const items = rsvpGroupSelection.map(key=>{
       const [side, catId, idxStr] = key.split('|');
       const idx = Number(idxStr);
@@ -12717,17 +12729,17 @@ function bindHandlers(){
       if(!entry) return null;
       return { side, catId, idx, entry, name: entry.name||'' };
     }).filter(Boolean);
-    if(items.length<2){ alert(ta('familyGroupTooFew')); return; }
+    if(items.length<2){ weddyAlert(ta('familyGroupTooFew')); return; }
     rsvpCreateFamily.disabled = true;
     rsvpCreateFamily.textContent = '…';
     ensureFamilyRSVPLink(items).then(()=>{
       rsvpGroupMode = false;
       rsvpGroupSelection = [];
-      alert(ta('familyLinkCreated'));
+      weddyAlert(ta('familyLinkCreated'));
       render();
     }).catch(err=>{
       console.error('Weddy family RSVP link error:', err.code, err.message);
-      alert(ta('alertFamilyLinkError'));
+      weddyAlert(ta('alertFamilyLinkError'));
       render();
     });
   });
@@ -12784,7 +12796,7 @@ function bindHandlers(){
       const id = e.currentTarget.dataset.delcat;
       const c = catById(id);
       const emUso = state.expenses.some(exp=>exp.category===id);
-      if(emUso){ alert(ta('alertCategoryInUse')(c.name)); return; }
+      if(emUso){ weddyAlert(ta('alertCategoryInUse')(c.name)); return; }
       if(!await weddyConfirm(ta('confirmDeleteCategory')(c.name))) return;
       state.categories = state.categories.filter(x=>x.id!==id);
       render();
@@ -13886,7 +13898,7 @@ function syncGuestProgramToGuestDocs(){
 }
 function syncSeatingToGuestDocs(btn){
   if(!FIREBASE_READY || !auth || !auth.currentUser || !currentWeddingId){
-    alert(ta('alertSyncNoConnection'));
+    weddyAlert(ta('alertSyncNoConnection'));
     return;
   }
   const original = btn ? btn.textContent : '';
@@ -13987,7 +13999,7 @@ function syncSeatingToGuestDocs(btn){
       if(failedTokens.length){
         btn.textContent = original;
         btn.disabled = false;
-        alert(ta('alertSeatingSyncPartialFailure')(failedTokens.length, writes.length));
+        weddyAlert(ta('alertSeatingSyncPartialFailure')(failedTokens.length, writes.length));
       } else {
         btn.textContent = ta('btnSyncedCheck');
         setTimeout(()=>{ btn.textContent = original; btn.disabled = false; }, 1400);
@@ -14485,7 +14497,7 @@ function resizeImageFile(file, maxDim, quality){
 function inspirationsKey(){ return 'weddy-inspiracoes-'+(currentWeddingId||'none'); }
 function saveInspirations(){
   try{ localStorage.setItem(inspirationsKey(), JSON.stringify(inspirations)); }
-  catch(e){ showSaveToast(true); alert(ta('alertPhotoSaveError')); }
+  catch(e){ showSaveToast(true); weddyAlert(ta('alertPhotoSaveError')); }
 }
 function loadInspirations(){
   try{
@@ -14524,7 +14536,7 @@ document.getElementById('insp-file-input').addEventListener('change', async (e)=
 function dressInspirationsKey(){ return 'weddy-dress-inspiracoes-'+(currentWeddingId||'none'); }
 function saveDressInspirations(){
   try{ localStorage.setItem(dressInspirationsKey(), JSON.stringify(dressInspirations)); }
-  catch(e){ showSaveToast(true); alert(ta('alertPhotoSaveError')); }
+  catch(e){ showSaveToast(true); weddyAlert(ta('alertPhotoSaveError')); }
 }
 function loadDressInspirations(){
   try{
@@ -14661,7 +14673,7 @@ function closeTodoCatSheet(){
 // acesso a dados, só uma forma de os levar consigo.
 async function exportMyDataAsJson(btn){
   if(!FIREBASE_READY || !auth || !auth.currentUser || !currentWeddingId){
-    alert(ta('exportDataError'));
+    weddyAlert(ta('exportDataError'));
     return;
   }
   const original = btn.textContent;
@@ -14700,7 +14712,7 @@ async function exportMyDataAsJson(btn){
     setTimeout(()=>URL.revokeObjectURL(url), 5000);
   }catch(err){
     console.error('Weddy: falha a exportar os dados.', err && err.message);
-    alert(ta('exportDataError'));
+    weddyAlert(ta('exportDataError'));
   }finally{
     btn.disabled = false;
     btn.textContent = original;
@@ -15079,6 +15091,40 @@ function weddyConfirm(message){
     el.onclick = (e)=>{ if(e.target===el) finish(false); };
     document.getElementById('weddy-confirm-yes').addEventListener('click', ()=>finish(true));
     document.getElementById('weddy-confirm-no').addEventListener('click', ()=>finish(false));
+  });
+}
+// Mesmo motivo do weddyConfirm acima: o alert() nativo também é silenciosamente
+// suprimido nalguns browsers/webviews (confirmado em testes) — a chamada
+// "resolve" de imediato sem mostrar nada à pessoa. Isto é especialmente grave
+// aqui porque muitos destes alert() são a ÚNICA forma de a pessoa perceber
+// que uma ação falhou ou foi bloqueada (ex: "não é possível apagar esta
+// categoria porque tem gastos associados") — sem aviso nenhum, a pessoa fica
+// sem saber porque é que nada aconteceu. Substitui window.alert(msg); devolve
+// uma Promise<void> que resolve quando a pessoa fecha o aviso.
+function weddyAlert(message){
+  return new Promise(resolve=>{
+    let el = document.getElementById('weddy-alert-overlay');
+    if(!el){
+      el = document.createElement('div');
+      el.id = 'weddy-alert-overlay';
+      el.style.cssText = 'position:fixed; inset:0; background:rgba(30,26,23,0.55); z-index:10000; display:none; align-items:flex-end; justify-content:center;';
+      document.body.appendChild(el);
+    }
+    const finish = ()=>{
+      el.style.display = 'none';
+      el.innerHTML = '';
+      el.onclick = null;
+      resolve();
+    };
+    el.innerHTML = `
+      <div style="background:var(--card,#fff); width:100%; max-width:420px; border-radius:20px 20px 0 0; padding:24px 20px 20px;">
+        <div style="font-size:15px; color:var(--ink); line-height:1.45; margin-bottom:20px; text-align:center;">${escapeHTML(message||'')}</div>
+        <button type="button" id="weddy-alert-ok" class="login-btn" style="margin-top:0;">${ta('btnOk')}</button>
+      </div>
+    `;
+    el.style.display = 'flex';
+    el.onclick = (e)=>{ if(e.target===el) finish(); };
+    document.getElementById('weddy-alert-ok').addEventListener('click', finish);
   });
 }
 // Delegação global (em vez de religar a cada render) — apanha os links
@@ -15919,7 +15965,7 @@ function createManualSnapshot(label){
     console.error('Weddy manual snapshot error:', err && err.code, err && err.message);
     historicoCreatingBackup = false;
     _origRender();
-    alert(ta('alertSnapshotCreateError'));
+    weddyAlert(ta('alertSnapshotCreateError'));
   });
 }
 // Restaurar: pedido explícito da Rita para NUNCA ser um simples "carrega o
@@ -15940,7 +15986,7 @@ async function restoreSnapshot(snapshotId){
     restoredState = JSON.parse(snap.json);
     restoredSettings = snap.settings;
   }catch(e){
-    alert(ta('alertRestoreError'));
+    weddyAlert(ta('alertRestoreError'));
     return;
   }
   historicoRestoringId = snapshotId; _origRender();
@@ -15977,7 +16023,7 @@ async function restoreSnapshot(snapshotId){
     console.error('Weddy restore snapshot error:', err && err.message);
     historicoRestoringId = null;
     _origRender();
-    alert(ta('alertRestoreError'));
+    weddyAlert(ta('alertRestoreError'));
   });
 }
 // "Ver" — mostra um resumo rápido do snapshot (nomes, data, local, nº de
@@ -16057,7 +16103,7 @@ function attachFirestoreSync(){
                   userAgent: (typeof navigator!=='undefined' ? navigator.userAgent : '')
                 }).catch(()=>{});
               }catch(e){}
-              setTimeout(()=>{ alert(ta('alertDataAnomaly')); }, 300);
+              setTimeout(()=>{ weddyAlert(ta('alertDataAnomaly')); }, 300);
             }
           } else {
             state = incoming; changed = true;
