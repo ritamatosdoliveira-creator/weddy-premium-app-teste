@@ -1120,8 +1120,19 @@ html{
 .empty-note svg{ width:14px; height:14px; vertical-align:-2px; }
 
 /* Tab bar */
-.tabbar{ position:absolute; left:0; right:0; bottom:0; z-index:20; display:flex; padding:8px 0 calc(env(safe-area-inset-bottom) + 6px); background:rgba(250,248,245,0.92); backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px); border-top:1px solid var(--line); }
-.tabbar button{ all:unset; cursor:pointer; flex:1; min-width:0; display:flex; flex-direction:column; align-items:center; gap:4px; color:#ABA7A0; padding-bottom:6px; position:relative; }
+/* Pedido (Set 2026, Rita): os ícones/texto da barra de baixo pareciam
+   demasiado "para cima", com um espaço vazio grande entre o texto (ex:
+   "Início") e o fundo do ecrã. Esse espaço é composto por duas partes:
+   o "env(safe-area-inset-bottom)" (a zona do gesto de "casa" do iPhone —
+   essa NÃO se mexe, é o próprio iOS que a define, e é preciso respeitá-la
+   para os separadores não ficarem por baixo dela) mais uma margem extra
+   que só nós acrescentávamos por cima dessa zona (8px no topo da barra,
+   +6px a seguir à zona segura, e mais 6px dentro de cada botão). Reduzimos
+   só a parte "nossa", não a zona de segurança do iPhone — o resultado é
+   os ícones ficarem visivelmente mais perto do fundo sem arriscar
+   sobrepor-se ao gesto de deslizar para sair da app. */
+.tabbar{ position:absolute; left:0; right:0; bottom:0; z-index:20; display:flex; padding:5px 0 calc(env(safe-area-inset-bottom) + 2px); background:rgba(250,248,245,0.92); backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px); border-top:1px solid var(--line); }
+.tabbar button{ all:unset; cursor:pointer; flex:1; min-width:0; display:flex; flex-direction:column; align-items:center; gap:4px; color:#ABA7A0; padding-bottom:3px; position:relative; }
 .tabbar button svg{ width:19px; height:19px; }
 .tabbar button span{ font-size:9px; font-weight:600; letter-spacing:-.01em; }
 .tab-icon-wrap{ display:flex; align-items:center; justify-content:center; width:34px; height:24px; }
