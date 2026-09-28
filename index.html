@@ -16442,8 +16442,19 @@ document.getElementById('payment-alert-popup').addEventListener('click', e=>{
   // do browser. Como esta app nunca muda o URL, não há nada nesse histórico
   // para "consumir" — por isso o primeiro gesto fechava a app de repente,
   // mesmo a meio de uma sub-página ou de um formulário aberto.
-  // Isto não muda nada no iOS: lá não existe um gesto de sistema equivalente
-  // ligado ao histórico do browser, por isso o comportamento fica igual.
+  // CORREÇÃO (Set 2026, pedido da Rita — "lua de mel" ficava tudo branco ao
+  // fazer swipe back): o comentário original dizia "isto não muda nada no
+  // iOS" — estava errado. O history.pushState() aqui punha UMA entrada a
+  // mais no histórico do WebKit só para o Android aproveitar; mas essa
+  // mesma entrada extra era o que dava ao Safari/iOS "alguma coisa" para
+  // onde recuar, e é isso que liga o gesto nativo de "deslizar da margem
+  // para trás" do próprio sistema (não é JS, é do WebKit — por isso o
+  // preventEdgeSwipeBack, que só consegue bloquear toques que a página vê,
+  // não chegava sempre para o travar). Sem esta entrada extra no histórico,
+  // não há para onde o iOS "recuar", e o gesto deixa de ter efeito. Por
+  // isso este guard só corre no Android, que é o único que precisa dele.
+  const isAndroid = /Android/i.test(navigator.userAgent);
+  if(!isAndroid) return;
   try{
     history.pushState({weddyGuard:true}, '', location.href);
   }catch(e){ return; }
