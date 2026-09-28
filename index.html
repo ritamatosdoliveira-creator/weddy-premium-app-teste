@@ -3243,6 +3243,7 @@ const APP_I18N = {
     aboutTitle:'Sobre a Weddy', aboutDesc:'Versão 1.0.0',
     reportTitle:'Reporta um problema', reportDesc:'Encontraste um bug? Conta-nos',
     signOut:'Terminar sessão',
+    confirmDialogCancel:'Cancelar', confirmDialogConfirm:'Confirmar',
     languageLabel:'Idioma',
     catFamilia:'Família', catFriends:'Amigos', catMaybe:'Na dúvida', catStaff:'Staff / fornecedores',
     shapeRound:'Redonda', shapeLong:'Longa', shapeSerpentine:'Serpente',
@@ -4302,6 +4303,7 @@ const APP_I18N = {
     aboutTitle:'About Weddy', aboutDesc:'Version 1.0.0',
     reportTitle:'Report a problem', reportDesc:'Found a bug? Tell us',
     signOut:'Sign out',
+    confirmDialogCancel:'Cancel', confirmDialogConfirm:'Confirm',
     languageLabel:'Language',
     catFamilia:'Family', catFriends:'Friends', catMaybe:'Maybe', catStaff:'Staff / vendors',
     shapeRound:'Round', shapeLong:'Long', shapeSerpentine:'Serpentine',
@@ -6069,14 +6071,14 @@ function bindGuestGroupHandlers(scope){
     });
   });
   scope.querySelectorAll('[data-delguestcat]').forEach(btn=>{
-    btn.addEventListener('click', e=>{
+    btn.addEventListener('click', async e=>{
       const [side,cat] = e.currentTarget.dataset.delguestcat.split('|');
       const label = getGuestCatLabel(side,cat);
       const arr = getGuestNames(side,cat) || [];
       const msg = arr.length
         ? ta('confirmDeleteCategoryWithGuests')(label, arr.length)
         : ta('confirmDeleteCategorySimple')(label);
-      if(!confirm(msg)) return;
+      if(!await weddyConfirm(msg)) return;
       // Fase 8.0 (Set 2026): limpa primeiro o estado local de CADA
       // convidado (deleteGuestLocalOnly) e só depois trata do RSVP no
       // Firestore de todos ao mesmo tempo, em lote
@@ -7365,9 +7367,9 @@ function bindSupplierResultHandlers(){
     });
   });
   document.querySelectorAll('[data-delsupplier]').forEach(btn=>{
-    btn.addEventListener('click', e=>{
+    btn.addEventListener('click', async e=>{
       e.stopPropagation();
-      if(confirm(ta('confirmDeleteSupplier'))){
+      if(await weddyConfirm(ta('confirmDeleteSupplier'))){
         state.suppliers = state.suppliers.filter(s=>s.id!==e.currentTarget.dataset.delsupplier);
         render();
       }
@@ -7765,9 +7767,9 @@ function bindFornecedorDetalheHandlers(){
   if(contractRow) contractRow.addEventListener('click', (e)=>{ if(e.target.closest('#supd-contract-remove')) return; openOrPickContract(); });
   if(contractQuickBtn) contractQuickBtn.addEventListener('click', openOrPickContract);
   const contractRemove = document.getElementById('supd-contract-remove');
-  if(contractRemove) contractRemove.addEventListener('click', e=>{
+  if(contractRemove) contractRemove.addEventListener('click', async e=>{
     e.stopPropagation();
-    if(confirm(ta('confirmRemoveContract'))){
+    if(await weddyConfirm(ta('confirmRemoveContract'))){
       const synced = supplierContractDoc(s.id);
       if(synced){
         if(synced.storagePath && storage) storage.ref(synced.storagePath).delete().catch(()=>{});
@@ -7867,8 +7869,8 @@ function bindFornecedorDetalheHandlers(){
   if(lastContactEl) lastContactEl.addEventListener('change', e=>{ s.lastContact = e.target.value; pushRemote(true); });
 
   const deleteBtn = document.getElementById('supd-delete-btn');
-  if(deleteBtn) deleteBtn.addEventListener('click', ()=>{
-    if(confirm(ta('confirmDeleteSupplier'))){
+  if(deleteBtn) deleteBtn.addEventListener('click', async ()=>{
+    if(await weddyConfirm(ta('confirmDeleteSupplier'))){
       state.suppliers = state.suppliers.filter(x=>x.id!==s.id);
       removeSupplierPhoto(s.id);
       removeSupplierContract(s.id);
@@ -7968,8 +7970,8 @@ function loadMemories(){
     render();
   });
 }
-function deleteMemory(memoryId, storagePath){
-  if(!confirm(ta('confirmDeleteMemory'))) return;
+async function deleteMemory(memoryId, storagePath){
+  if(!await weddyConfirm(ta('confirmDeleteMemory'))) return;
   MEMORIES().doc(memoryId).delete().then(()=>{
     if(storage && storagePath){ storage.ref(storagePath).delete().catch(()=>{}); }
     weddingMemories = weddingMemories.filter(m=>m.id!==memoryId);
@@ -8542,11 +8544,11 @@ function deleteGuestRSVPDocsBatch(entries){
     return Promise.all(ops);
   });
 }
-function revokeRSVPLink(side, catId, idx, name){
+async function revokeRSVPLink(side, catId, idx, name){
   const arr = getGuestNames(side, catId);
   const entry = arr && arr[idx];
   if(!entry || !entry.rsvpToken){ return; }
-  if(!confirm(ta('confirmRemoveRSVPInvite')(name))){
+  if(!await weddyConfirm(ta('confirmRemoveRSVPInvite')(name))){
     return;
   }
   deleteGuestRSVPDoc(entry).then(()=>{
@@ -11557,8 +11559,6 @@ function bindHandlers(){
       scrollIntoPanel(target);
     });
   });
-  const btnLogout = document.getElementById('btn-logout');
-  if(btnLogout) btnLogout.addEventListener('click', ()=>{ if(typeof auth!=='undefined' && auth) auth.signOut(); });
   // Botão "Subscrever Weddy Premium" na página de upsell — como ainda não
   // há pagamentos reais ligados, isto ativa já a subscrição de teste desta
   // conta diretamente no Firestore, para poderes experimentar a funcionalidade
@@ -11704,9 +11704,9 @@ function bindHandlers(){
     btn.addEventListener('click', e=>{ e.stopPropagation(); openVisitSheet(e.currentTarget.dataset.editvisit); });
   });
   document.querySelectorAll('[data-delvisit]').forEach(btn=>{
-    btn.addEventListener('click', e=>{
+    btn.addEventListener('click', async e=>{
       e.stopPropagation();
-      if(confirm(ta('confirmDeleteVisit'))){
+      if(await weddyConfirm(ta('confirmDeleteVisit'))){
         state.dressVisits = state.dressVisits.filter(v=>v.id!==e.currentTarget.dataset.delvisit);
         render();
       }
@@ -11844,11 +11844,11 @@ function bindHandlers(){
     document.getElementById('sheet-backdrop').classList.add('show');
   });
   const delTodoCatBtn = document.getElementById('del-todocat-btn');
-  if(delTodoCatBtn) delTodoCatBtn.addEventListener('click', e=>{
+  if(delTodoCatBtn) delTodoCatBtn.addEventListener('click', async e=>{
     const catId = e.currentTarget.dataset.forcat;
     const cat = state.todoCategories.find(c=>c.id===catId);
     if(!cat) return;
-    if(confirm(ta('confirmDeleteTodoCategory')(cat.title))){
+    if(await weddyConfirm(ta('confirmDeleteTodoCategory')(cat.title))){
       state.todoCategories = state.todoCategories.filter(c=>c.id!==catId);
       todoOpenCategoryId = null;
       render();
@@ -11967,14 +11967,14 @@ function bindHandlers(){
     }
   });
   const delHmOptionBtn = document.getElementById('del-hmoption-btn');
-  if(delHmOptionBtn) delHmOptionBtn.addEventListener('click', ()=>{
+  if(delHmOptionBtn) delHmOptionBtn.addEventListener('click', async ()=>{
     if(hmDraftOption){
       // hipótese ainda nem guardada — só descarta, sem pedir confirmação
       hmDraftOption = null;
       render();
       return;
     }
-    if(confirm(ta('confirmDeleteHoneymoonOption'))){
+    if(await weddyConfirm(ta('confirmDeleteHoneymoonOption'))){
       state.honeymoon.options = state.honeymoon.options.filter(x=>x.id!==hmOpenOptionId);
       hmOpenOptionId = null;
       render();
@@ -12030,12 +12030,12 @@ function bindHandlers(){
     });
   });
   document.querySelectorAll('[data-delhmattach]').forEach(btn=>{
-    btn.addEventListener('click', e=>{
+    btn.addEventListener('click', async e=>{
       e.stopPropagation();
       const i = Number(e.currentTarget.dataset.delhmattach);
       const d = state.weddingDocuments && state.weddingDocuments[i];
       if(!d) return;
-      if(confirm(ta('confirmDeleteHoneymoonAttachment'))){
+      if(await weddyConfirm(ta('confirmDeleteHoneymoonAttachment'))){
         if(d.storagePath && storage) storage.ref(d.storagePath).delete().catch(()=>{});
         state.weddingDocuments.splice(i,1);
         pushRemote(true);
@@ -12171,9 +12171,9 @@ function bindHandlers(){
   // "startedAt" (não o apaga) — é exatamente esse campo que impede alguém
   // de reiniciar o relógio dos 24 meses ao cancelar e reativar.
   const cancelSubBtn = document.getElementById('subscription-cancel-btn');
-  if(cancelSubBtn) cancelSubBtn.addEventListener('click', ()=>{
+  if(cancelSubBtn) cancelSubBtn.addEventListener('click', async ()=>{
     if(!FIREBASE_READY || !currentWeddingId){ alert(ta('alertNoConnectionRetry')); return; }
-    if(!confirm(ta('confirmCancelSubscriptionText'))) return;
+    if(!await weddyConfirm(ta('confirmCancelSubscriptionText'))) return;
     cancelSubBtn.disabled = true;
     cancelSubBtn.textContent = ta('btnCancelingEllipsis');
     const startedAt = (currentSubscription && currentSubscription.startedAt) || null;
@@ -12210,8 +12210,8 @@ function bindHandlers(){
   const defBack = document.getElementById('def-back');
   if(defBack) defBack.addEventListener('click', ()=>{ closeAllSheets(); activeTab='inicio'; _origRender(); });
   const defSignout = document.getElementById('def-signout');
-  if(defSignout) defSignout.addEventListener('click', ()=>{
-    if(confirm(ta('confirmSignOut'))){
+  if(defSignout) defSignout.addEventListener('click', async ()=>{
+    if(await weddyConfirm(ta('confirmSignOut'))){
       if(typeof auth!=='undefined' && auth) auth.signOut();
     }
   });
@@ -12403,14 +12403,14 @@ function bindHandlers(){
 
   // Segurança
   document.querySelectorAll('[data-removeowner]').forEach(btn=>{
-    btn.addEventListener('click', e=>{
+    btn.addEventListener('click', async e=>{
       const email = e.currentTarget.dataset.removeowner;
       const myEmail = (auth && auth.currentUser) ? auth.currentUser.email.toLowerCase() : '';
       if(currentWeddingCreator && email===currentWeddingCreator && email!==myEmail){
         alert(ta('alertOnlyCreatorCanRemoveAccess'));
         return;
       }
-      if(!confirm(ta('confirmRemoveAccess')(email))) return;
+      if(!await weddyConfirm(ta('confirmRemoveAccess')(email))) return;
       const uidToRemove = currentUidByEmail[sanitizeEmailKey(email)];
       const updates = { ownerEmails: firebase.firestore.FieldValue.arrayRemove(email) };
       if(uidToRemove) updates.ownerUids = firebase.firestore.FieldValue.arrayRemove(uidToRemove);
@@ -12485,14 +12485,14 @@ function bindHandlers(){
   const documentFileInput = document.getElementById('document-file-input');
   if(documentFileInput) documentFileInput.addEventListener('change', e=>{ handleDocumentUpload(e.target.files); });
   document.querySelectorAll('[data-docdel]').forEach(btn=>{
-    btn.addEventListener('click', e=>{
+    btn.addEventListener('click', async e=>{
       // A linha inteira passou a abrir a pré-visualização ao tocar (ver
       // data-openattach) — sem isto, tocar no "×" também dispararia esse
       // clique por propagação, tentando abrir o documento a seguir a
       // apagá-lo (ou antes, consoante a ordem dos listeners).
       e.stopPropagation();
       const i = Number(e.currentTarget.dataset.docdel);
-      if(!confirm(ta('confirmDeleteDocument'))) return;
+      if(!await weddyConfirm(ta('confirmDeleteDocument'))) return;
       const doc = state.weddingDocuments[i];
       state.weddingDocuments.splice(i,1);
       if(doc && doc.storagePath && storage){ storage.ref(doc.storagePath).delete().catch(()=>{}); }
@@ -12563,13 +12563,13 @@ function bindHandlers(){
     });
   });
   document.querySelectorAll('[data-guestinforemove]').forEach(btn=>{
-    btn.addEventListener('click', e=>{
+    btn.addEventListener('click', async e=>{
       const key = e.currentTarget.dataset.guestinforemove;
       const allFields = GUEST_INFO_FIELDS.concat(CONCIERGE_INFO_FIELDS);
       const f = allFields.find(x=>x.key===key);
       if(!f) return;
       const hasValue = (weddingSettings[f.settingsKey]||'').trim();
-      if(hasValue && !confirm(ta('confirmRemoveGuestInfoField'))) return;
+      if(hasValue && !await weddyConfirm(ta('confirmRemoveGuestInfoField'))) return;
       rsvpInfoAddedFields.delete(key);
       if(hasValue){
         weddingSettings[f.settingsKey] = '';
@@ -12609,9 +12609,9 @@ function bindHandlers(){
     });
   });
   document.querySelectorAll('[data-faqdel]').forEach(btn=>{
-    btn.addEventListener('click', e=>{
+    btn.addEventListener('click', async e=>{
       const i = Number(e.currentTarget.dataset.faqdel);
-      if(!confirm(ta('confirmDeleteFaq'))) return;
+      if(!await weddyConfirm(ta('confirmDeleteFaq'))) return;
       const list = Array.isArray(weddingSettings.guestFaqList) ? weddingSettings.guestFaqList.slice() : [];
       list.splice(i,1);
       rsvpFaqEditingIndex = null;
@@ -12743,9 +12743,9 @@ function bindHandlers(){
     el.addEventListener('click', e=>{ openEventSheet(e.currentTarget.dataset.editevent); });
   });
   document.querySelectorAll('[data-delevent]').forEach(btn=>{
-    btn.addEventListener('click', e=>{
+    btn.addEventListener('click', async e=>{
       e.stopPropagation();
-      if(confirm(ta('confirmDeleteMoment'))) deleteEvent(e.currentTarget.dataset.delevent);
+      if(await weddyConfirm(ta('confirmDeleteMoment'))) deleteEvent(e.currentTarget.dataset.delevent);
     });
   });
 
@@ -12780,12 +12780,12 @@ function bindHandlers(){
     });
   });
   document.querySelectorAll('[data-delcat]').forEach(btn=>{
-    btn.addEventListener('click', e=>{
+    btn.addEventListener('click', async e=>{
       const id = e.currentTarget.dataset.delcat;
       const c = catById(id);
       const emUso = state.expenses.some(exp=>exp.category===id);
       if(emUso){ alert(ta('alertCategoryInUse')(c.name)); return; }
-      if(!confirm(ta('confirmDeleteCategory')(c.name))) return;
+      if(!await weddyConfirm(ta('confirmDeleteCategory')(c.name))) return;
       state.categories = state.categories.filter(x=>x.id!==id);
       render();
     });
@@ -12883,9 +12883,9 @@ function bindHandlers(){
     });
   });
   document.querySelectorAll('[data-deltable]').forEach(btn=>{
-    btn.addEventListener('click', e=>{
+    btn.addEventListener('click', async e=>{
       const id = Number(e.currentTarget.dataset.deltable);
-      if(!confirm(ta('confirmDeleteTable'))) return;
+      if(!await weddyConfirm(ta('confirmDeleteTable'))) return;
       clearAllSeatsForTable(id);
       state.seating.tables = state.seating.tables.filter(t=>t.id!==id);
       render();
@@ -12990,11 +12990,11 @@ function bindGoogleCalendarHandlers(){
   });
 
   const disconnectBtn = document.getElementById('gcal-disconnect-btn');
-  if(disconnectBtn) disconnectBtn.addEventListener('click', ()=>{
+  if(disconnectBtn) disconnectBtn.addEventListener('click', async ()=>{
     if(googleCalendarBusy) return;
     // Spec §40: aviso claro de que desligar NÃO apaga os eventos já
     // criados no Google Calendar.
-    if(!confirm(ta('googleCalendarDisconnectConfirm'))) return;
+    if(!await weddyConfirm(ta('googleCalendarDisconnectConfirm'))) return;
     googleCalendarBusy = true;
     googleCalendarActionMsg = null;
     render();
@@ -14636,8 +14636,8 @@ document.getElementById('todo-notes-save').addEventListener('click', ()=>{
   render();
   pushRemote(true);
 });
-document.getElementById('todo-notes-delete').addEventListener('click', ()=>{
-  if(!state.todoNotes || confirm(ta('confirmDeleteNotes'))){
+document.getElementById('todo-notes-delete').addEventListener('click', async ()=>{
+  if(!state.todoNotes || await weddyConfirm(ta('confirmDeleteNotes'))){
     state.todoNotes = '';
     closeTodoNotesSheet();
     render();
@@ -14818,8 +14818,8 @@ function closeHmOptionSheet(){
   editingHmOptionId = null;
 }
 document.getElementById('hm-option-cancel').addEventListener('click', closeHmOptionSheet);
-document.getElementById('hm-option-delete').addEventListener('click', ()=>{
-  if(editingHmOptionId && confirm(ta('confirmDeleteHmIdea'))){
+document.getElementById('hm-option-delete').addEventListener('click', async ()=>{
+  if(editingHmOptionId && await weddyConfirm(ta('confirmDeleteHmIdea'))){
     state.honeymoon.ideas = state.honeymoon.ideas.filter(x=>x.id!==editingHmOptionId);
     closeHmOptionSheet();
     render();
@@ -15039,6 +15039,47 @@ function openLegalOverlay(titleKey, bodyHtml){
   `;
   el.style.display = 'flex';
   document.getElementById('legal-overlay-close').addEventListener('click', ()=>{ el.style.display='none'; });
+}
+// Confirmação própria da app, em vez do confirm() nativo do browser
+// (Set 2026, pedido direto da Rita: "Terminar sessão" ficava sem fazer
+// nada ao clicar). Descoberto ao testar ao vivo: em certos contextos de
+// browser (browsers embutidos dentro de outras apps, alguns webviews,
+// certas extensões/bloqueadores), o confirm() nativo pode ser suprimido
+// em silêncio — devolve false sem sequer mostrar nada à pessoa — e como
+// TODA a app usava confirm() para confirmar ações destrutivas (eliminar
+// fornecedor, cancelar subscrição, remover acesso, etc.), qualquer uma
+// dessas ações também ficava "muda" da mesma forma. Esta função substitui
+// window.confirm(msg) — devolve uma Promise<boolean>, tal como
+// window.confirm devolve um boolean, mas desenhada como o resto da app e
+// sem depender de nenhuma funcionalidade nativa do browser que possa
+// estar bloqueada.
+function weddyConfirm(message){
+  return new Promise(resolve=>{
+    let el = document.getElementById('weddy-confirm-overlay');
+    if(!el){
+      el = document.createElement('div');
+      el.id = 'weddy-confirm-overlay';
+      el.style.cssText = 'position:fixed; inset:0; background:rgba(30,26,23,0.55); z-index:10000; display:none; align-items:flex-end; justify-content:center;';
+      document.body.appendChild(el);
+    }
+    const finish = (result)=>{
+      el.style.display = 'none';
+      el.innerHTML = '';
+      el.onclick = null;
+      resolve(result);
+    };
+    el.innerHTML = `
+      <div style="background:var(--card,#fff); width:100%; max-width:420px; border-radius:20px 20px 0 0; padding:24px 20px 20px;">
+        <div style="font-size:15px; color:var(--ink); line-height:1.45; margin-bottom:20px; text-align:center;">${escapeHTML(message||'')}</div>
+        <button type="button" id="weddy-confirm-yes" class="login-btn" style="margin-top:0;">${ta('confirmDialogConfirm')}</button>
+        <button type="button" id="weddy-confirm-no" class="login-btn" style="margin-top:10px; background:rgba(60,51,43,0.08); color:var(--ink);">${ta('confirmDialogCancel')}</button>
+      </div>
+    `;
+    el.style.display = 'flex';
+    el.onclick = (e)=>{ if(e.target===el) finish(false); };
+    document.getElementById('weddy-confirm-yes').addEventListener('click', ()=>finish(true));
+    document.getElementById('weddy-confirm-no').addEventListener('click', ()=>finish(false));
+  });
 }
 // Delegação global (em vez de religar a cada render) — apanha os links
 // "Política de Privacidade"/"Termos e Condições" tanto no formulário de
@@ -15887,10 +15928,10 @@ function createManualSnapshot(label){
 // aplica os dados do snapshot escolhido. Se essa cópia de segurança falhar,
 // o restauro é cancelado por completo (nunca troca dados sem essa rede de
 // segurança).
-function restoreSnapshot(snapshotId){
+async function restoreSnapshot(snapshotId){
   const snap = historicoSnapshots.find(s=>s.id===snapshotId);
   if(!snap) return;
-  if(!confirm(ta('confirmRestoreSnapshotText'))) return;
+  if(!await weddyConfirm(ta('confirmRestoreSnapshotText'))) return;
   // Faz o parse ANTES de mexer em seja o que for — se o JSON guardado
   // estiver corrompido, falha aqui, sem sequer chegar a criar o backup de
   // segurança nem a tocar em nada.
