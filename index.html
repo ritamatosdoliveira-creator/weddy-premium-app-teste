@@ -16530,18 +16530,51 @@ document.getElementById('payment-alert-popup').addEventListener('click', e=>{
   // próprio telemóvel reporta (screen.orientation.angle, ou o mais
   // antigo window.orientation em iOS mais velhos) para escolher a
   // variante certa.
+  // Bug reportado ao vivo (Set 2026, 3ª ronda): mesmo depois de só o <body>
+  // ser rodado (já não o <html>+<body> em cadeia), a barra de separadores
+  // continuava sem responder ao toque ao voltar à vertical. A classe CSS
+  // está a ser removida corretamente (confirmado no código), mas o Safari
+  // tem um bug conhecido: quando se retira um "transform" de um elemento
+  // "position:fixed", por vezes só repinta visualmente (parece normal) mas
+  // não invalida a zona de deteção de toques dessa camada — os toques
+  // continuam a ser processados como se o elemento ainda estivesse na
+  // posição/rotação antiga, mesmo já não se vendo isso no ecrã. É o mesmo
+  // tipo de bug que motivou o truque em closeAllSheets() (ligar/desligar
+  // "display" para obrigar o Safari a recalcular tudo do zero) — aplica-se
+  // aqui o mesmo truque, à tabbar e ao botão do Assistente (os dois
+  // elementos "position:fixed/absolute" que ficam por cima do resto e por
+  // isso são os mais visados por este bug), sempre que se sai do estado
+  // "rodado" (ou se entra nele).
+  function forceRepaintAfterRotationChange(){
+    void document.body.offsetHeight;
+    ['tabbar','chat-fab'].forEach(id=>{
+      const el = document.getElementById(id);
+      if(!el) return;
+      const prevDisplay = el.style.display;
+      el.style.display = 'none';
+      void el.offsetHeight;
+      el.style.display = prevDisplay;
+    });
+  }
   function updateForcePortrait(){
-    document.body.classList.remove('force-portrait-a','force-portrait-b');
-    if(isDesktopLike()) return;
-    const isLandscape = window.innerWidth > window.innerHeight;
-    if(!isLandscape || !isTouchDevice()) return;
-    let angle = null;
-    if(screen.orientation && typeof screen.orientation.angle === 'number') angle = screen.orientation.angle;
-    else if(typeof window.orientation === 'number') angle = window.orientation;
-    // angle -90 (ou 270, mesma coisa) é o lado "oposto" ao mais comum
-    // (90) — tudo o resto (incluindo não sabermos o ângulo) usa a
-    // variante "a" por omissão.
-    document.body.classList.add((angle===-90||angle===270) ? 'force-portrait-b' : 'force-portrait-a');
+    const body = document.body;
+    const wasRotated = body.classList.contains('force-portrait-a') || body.classList.contains('force-portrait-b');
+    body.classList.remove('force-portrait-a','force-portrait-b');
+    let nowRotated = false;
+    if(!isDesktopLike()){
+      const isLandscape = window.innerWidth > window.innerHeight;
+      if(isLandscape && isTouchDevice()){
+        let angle = null;
+        if(screen.orientation && typeof screen.orientation.angle === 'number') angle = screen.orientation.angle;
+        else if(typeof window.orientation === 'number') angle = window.orientation;
+        // angle -90 (ou 270, mesma coisa) é o lado "oposto" ao mais comum
+        // (90) — tudo o resto (incluindo não sabermos o ângulo) usa a
+        // variante "a" por omissão.
+        body.classList.add((angle===-90||angle===270) ? 'force-portrait-b' : 'force-portrait-a');
+        nowRotated = true;
+      }
+    }
+    if(wasRotated !== nowRotated) forceRepaintAfterRotationChange();
   }
 
   // Estado inicial.
