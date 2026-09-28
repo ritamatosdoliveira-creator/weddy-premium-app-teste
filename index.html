@@ -85,7 +85,7 @@ body{
 html{
   overscroll-behavior-x: none;
 }
-.screen{ flex:1; min-height:0; min-width:0; display:flex; flex-direction:column; position:relative; overflow:hidden; }
+.screen{ flex:1; min-height:0; min-width:0; display:flex; flex-direction:column; position:relative; overflow:hidden; overscroll-behavior-x:none; touch-action:pan-y; }
 .statusbar-spacer{ height:calc(env(safe-area-inset-top) + 4px); flex-shrink:0; }
 
 /* ===================== PC / ECRÃS LARGOS ===================== */
@@ -16462,14 +16462,27 @@ document.getElementById('payment-alert-popup').addEventListener('click', e=>{
    direita), ignoramos esse arrasto por completo. Toques que começam mais
    para dentro do ecrã continuam a funcionar normalmente (scroll, arrastar
    para reordenar convidados, etc.).
-============================================================ */
+   Alargado (Set 2026, pedido da Rita — visto ao vivo em "Lua de mel", mas
+   não é específico dessa página, é geral): a zona de deteção do próprio
+   iOS para este gesto ("deslizar da margem") é maior do que os 14px que
+   estavam aqui — nalguns iPhones o dedo já ia a 18-20px da margem e o
+   sistema ainda reconhecia o gesto como "voltar", antes sequer deste
+   código o poder bloquear. Alargado para 28px para cobrir essa zona com
+   folga. Também passa a olhar para TODOS os toques que ainda estão a
+   decorrer (não só quando um novo começa exatamente na margem) — cobre o
+   caso de um segundo dedo tocar por engano a meio de um arrasto que já
+   tinha começado perto da margem. */
 (function preventEdgeSwipeBack(){
-  const EDGE_PX = 14;
+  const EDGE_PX = 28;
   let watching = false;
+  function nearEdge(touch){
+    return touch.clientX <= EDGE_PX || touch.clientX >= window.innerWidth - EDGE_PX;
+  }
   document.addEventListener('touchstart', function(e){
-    if(e.touches.length !== 1){ watching = false; return; }
-    const x = e.touches[0].clientX;
-    watching = (x <= EDGE_PX || x >= window.innerWidth - EDGE_PX);
+    watching = false;
+    for(let i=0;i<e.touches.length;i++){
+      if(nearEdge(e.touches[i])){ watching = true; break; }
+    }
   }, { passive:true });
   document.addEventListener('touchmove', function(e){
     if(watching) e.preventDefault();
