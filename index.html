@@ -1344,6 +1344,9 @@ html.rotate-blocked .rotate-lock-overlay{ display:flex; }
       <button type="button" class="mini-toggle" id="gp-consent-toggle"><span class="knob"></span></button>
     </div>
     <div class="login-msg error" id="gp-error" style="display:none; margin-top:4px;"></div>
+    <div class="login-msg error" id="gp-wa-error" style="display:none; margin-top:4px;"></div>
+    <div class="login-msg" id="gp-wa-success" style="display:none; margin-top:4px; color:#1a7d3a;" data-t="waSentOk">Lembrete enviado.</div>
+    <button type="button" class="btn-cancel" id="gp-send-whatsapp" style="display:none; margin-top:8px; width:100%;" data-t="btnSendWhatsappReminder">Enviar lembrete WhatsApp</button>
     <div class="sheet-btns">
       <button class="btn-cancel" id="gp-cancel" data-t="btnCancel">Cancelar</button>
       <button class="btn-save" id="gp-save" data-t="btnSave">Guardar</button>
@@ -1852,6 +1855,22 @@ const GuestCommsService = {
       console.error('Weddy GuestCommsService.updateGuestPhone error:', err.code, err.message);
       return { ok:false, code: err && err.code, message: guestPhoneErrorMessage(err) };
     }
+  },
+  // Fase 9.2 (parte 3) — envio manual do template "rsvp_reminder" por
+  // WhatsApp a UM convidado. Nunca automático: só quando o casal carrega
+  // no botão. A Cloud Function valida de novo tudo (telefone, consentimento,
+  // link de RSVP) do lado do servidor — isto aqui é só para dar feedback
+  // rápido antes de sequer chamar a função, quando já sabemos que vai falhar.
+  async sendWhatsappRsvpReminder(guestId){
+    if(!cloudFunctions) return { ok:false, message:ta('svcNoConnection') };
+    try{
+      const call = cloudFunctions.httpsCallable('sendWhatsappRsvpReminder');
+      const res = await call({ guestId });
+      return { ok:true, messageId: res && res.data && res.data.messageId };
+    }catch(err){
+      console.error('Weddy GuestCommsService.sendWhatsappRsvpReminder error:', err.code, err.message);
+      return { ok:false, code: err && err.code, message: whatsappSendErrorMessage(err) };
+    }
   }
 };
 function guestPhoneErrorMessage(err){
@@ -1860,6 +1879,20 @@ function guestPhoneErrorMessage(err){
   if(code==='invalid-argument') return ta('gpErrInvalidArgument');
   if(code==='not-found') return ta('gpErrNotFound');
   return ta('gpErrGeneric');
+}
+// Mensagens amigáveis para o envio de WhatsApp — nunca mostra o erro cru da
+// Graph API. `err.details.reason` vem da Cloud Function (ver
+// functions-deliverable/index.js, sendWhatsappRsvpReminder) para distinguir
+// as três razões possíveis de "failed-precondition" sem adivinhar pelo texto.
+function whatsappSendErrorMessage(err){
+  const code = err && err.code;
+  const reason = err && err.details && err.details.reason;
+  if(code==='failed-precondition' && reason==='no_phone') return ta('waErrNoPhone');
+  if(code==='failed-precondition' && reason==='no_consent') return ta('waErrNoConsent');
+  if(code==='failed-precondition' && reason==='no_token') return ta('waErrNoToken');
+  if(code==='not-found') return ta('gpErrNotFound');
+  if(code==='unavailable') return ta('waErrUnavailable');
+  return ta('waErrGeneric');
 }
 // Mensagens de erro amigáveis (spec §34) — nunca mostra err.message cru
 // (pode vir em inglês/técnico do lado do Google).
@@ -4008,6 +4041,39 @@ const APP_I18N = {
     cpLessWord:'a menos',
     cpAllGuestsHaveTable:'Todos os convidados confirmados já têm mesa atribuída.',
     cpGuestsWithoutTableList:(lista,extra)=>`Ainda sem mesa: ${lista}${extra}.`,
+    // Correção global (Set 2026) — mesas/convidados, Wedding Health,
+    // Honeymoon, Memories, rascunhos de mensagem, fornecedores/convidados
+    // ambíguos e perguntas vagas.
+    cpSupplierAmbiguous:(nomes)=>`Há mais do que um fornecedor que pode corresponder a essa pergunta: ${nomes}. A qual deles te referes?`,
+    cpTableNotFound:(n)=>`Não encontrei nenhuma mesa número ${n}.`,
+    cpTableEmpty:(n,seats)=>`A mesa ${n} ainda não tem ninguém atribuído (tem ${seats} lugares).`,
+    cpTableGuestsList:(n,count,lista)=>`Na mesa ${n} ${count===1?'está':'estão'} ${count} pessoa${count===1?'':'s'}: ${lista}.`,
+    cpGuestAmbiguous:(nomes)=>`Há mais do que um convidado com esse nome: ${nomes}. A quem te referes?`,
+    cpGuestNotFound:(nome)=>`Não encontrei nenhum convidado${nome?` chamado "${nome}"`:''} — confirma o nome.`,
+    cpGuestNotSeated:(nome)=>`${nome} ainda não tem mesa atribuída.`,
+    cpGuestTableWithMates:(nome,mesa,mates)=>`${nome} está na mesa ${mesa}, com: ${mates}.`,
+    cpGuestTableAlone:(nome,mesa)=>`${nome} está na mesa ${mesa} (ainda sem mais ninguém atribuído a essa mesa).`,
+    cpWeddingHealthAllGood:'Está tudo em ordem — não há nenhum aviso pendente na Saúde do Casamento neste momento. 🎉',
+    cpWeddingHealthList:(lista)=>`Isto é o que precisa da tua atenção agora: ${lista}`,
+    cpHoneymoonNoData:'Ainda não tens nenhuma opção de lua de mel guardada na Weddy.',
+    cpHoneymoonUnnamed:'(sem nome)',
+    cpHoneymoonNoBudgetSet:'sem orçamento definido',
+    cpHoneymoonChosen:(nome,budget,dias)=>`A tua opção escolhida de lua de mel é "${nome}", com orçamento de ${budget}${dias?` para ${dias} dias`:''}. Não tenho dados de pagamentos específicos da lua de mel — isso não está ligado aos gastos gerais da Weddy, só este orçamento que escreveste manualmente.`,
+    cpHoneymoonOptionsList:(lista)=>`Ainda não escolheste uma opção — tens estas guardadas: ${lista}.`,
+    cpMemoriesNone:'Ainda não há nenhuma memória enviada pelos convidados.',
+    cpMemoriesSummary:(total,senders)=>`Há ${total} memória${total===1?'':'s'} enviada${total===1?'':'s'}${senders?`, de: ${senders}`:''}.`,
+    cpMemoriesFiltered:(nome,count)=>count>0 ? `Encontrei ${count} memória${count===1?'':'s'} relacionada${count===1?'':'s'} com "${nome}".` : `Não encontrei nenhuma memória relacionada com "${nome}".`,
+    cpDraftIntro:'Aqui está um rascunho — revê e copia antes de enviar:',
+    cpDraftOutro:'(Não enviei nada — só preparei o texto.)',
+    cpDraftThanks:'Muito obrigado por partilhares este dia connosco! O teu carinho significou muito para nós. Com amor, [Nomes dos noivos]',
+    cpDraftTableChange:'Olá! Só a avisar que a tua mesa mudou — agora estás na mesa [número]. Até já! [Nomes dos noivos]',
+    cpDraftConfirmPresence:'Olá! Confirmamos a tua presença no nosso casamento — mal podemos esperar por celebrar convosco! [Nomes dos noivos]',
+    cpDraftRsvpReminder:'Olá! Só a lembrar que ainda estamos à espera da tua confirmação de presença — quando puderes, responde por aqui. Obrigado! [Nomes dos noivos]',
+    cpDraftSupplier:(nome)=>`Olá ${nome}, obrigado pelo excelente trabalho até agora! Só a confirmar alguns detalhes para o nosso casamento — podemos combinar uma chamada esta semana? [Nomes dos noivos]`,
+    cpDraftSupplierGeneric:'Olá! Só a confirmar alguns detalhes para o nosso casamento — podemos combinar uma chamada esta semana? [Nomes dos noivos]',
+    cpDraftGuestsGeneric:'Olá a todos! Estamos muito contentes por vos ter no nosso grande dia. [Nomes dos noivos]',
+    cpDraftGeneric:'Olá! [Escreve aqui a tua mensagem] [Nomes dos noivos]',
+    cpNeedsClarification:'Falta quanto de quê? Posso ver pagamentos, orçamento, tarefas ou dias até ao casamento — diz-me qual.',
     cpContractedLabel:'contratado',
     cpInBudgetLabel:'no Budget',
     cpSuggestPendingRSVP:(n)=>`${n} convidado${n===1?'':'s'} ainda ${n===1?'não respondeu':'não responderam'} ao RSVP.`,
@@ -4044,6 +4110,13 @@ const APP_I18N = {
     gpErrInvalidArgument:'Número inválido — usa o formato internacional, ex: +351912345678.',
     gpErrNotFound:'Não foi possível encontrar este convidado.',
     gpErrGeneric:'Não foi possível guardar. Tenta novamente.',
+    btnSendWhatsappReminder:'Enviar lembrete WhatsApp',
+    waSentOk:'Lembrete enviado.',
+    waErrNoPhone:'Este convidado ainda não tem telefone guardado.',
+    waErrNoConsent:'Este convidado ainda não deu consentimento para receber WhatsApp.',
+    waErrNoToken:'Este convidado ainda não tem link de RSVP gerado.',
+    waErrUnavailable:'Não foi possível contactar o WhatsApp agora. Tenta outra vez daqui a pouco.',
+    waErrGeneric:'Não foi possível enviar. Tenta novamente.',
     gcalErrSyncTooSoon:'Acabaste de sincronizar — espera um bocadinho antes de tentar outra vez.',
     gcalErrSyncRunning:'Já há uma sincronização em curso — aguarda que termine.',
     gcalErrReauth:'A ligação ao Google Calendar expirou. Volta a ligar a tua conta Google.',
@@ -5017,6 +5090,36 @@ const APP_I18N = {
     cpLessWord:'less',
     cpAllGuestsHaveTable:'All confirmed guests already have a table assigned.',
     cpGuestsWithoutTableList:(lista,extra)=>`Still without a table: ${lista}${extra}.`,
+    cpSupplierAmbiguous:(names)=>`There's more than one supplier that could match that question: ${names}. Which one do you mean?`,
+    cpTableNotFound:(n)=>`I couldn't find a table number ${n}.`,
+    cpTableEmpty:(n,seats)=>`Table ${n} doesn't have anyone assigned yet (it has ${seats} seats).`,
+    cpTableGuestsList:(n,count,lista)=>`Table ${n} has ${count} ${count===1?'person':'people'}: ${lista}.`,
+    cpGuestAmbiguous:(names)=>`There's more than one guest with that name: ${names}. Who do you mean?`,
+    cpGuestNotFound:(name)=>`I couldn't find a guest${name?` named "${name}"`:''} — check the name.`,
+    cpGuestNotSeated:(name)=>`${name} doesn't have a table assigned yet.`,
+    cpGuestTableWithMates:(name,table,mates)=>`${name} is at table ${table}, with: ${mates}.`,
+    cpGuestTableAlone:(name,table)=>`${name} is at table ${table} (no one else assigned to that table yet).`,
+    cpWeddingHealthAllGood:'Everything is in order — no pending warnings in Wedding Health right now. 🎉',
+    cpWeddingHealthList:(lista)=>`Here's what needs your attention right now: ${lista}`,
+    cpHoneymoonNoData:'You don\'t have any honeymoon option saved in Weddy yet.',
+    cpHoneymoonUnnamed:'(unnamed)',
+    cpHoneymoonNoBudgetSet:'no budget set',
+    cpHoneymoonChosen:(name,budget,days)=>`Your chosen honeymoon option is "${name}", with a budget of ${budget}${days?` for ${days} days`:''}. I don't have honeymoon-specific payment data — that isn't linked to Weddy's general expenses, just this manually-entered budget.`,
+    cpHoneymoonOptionsList:(lista)=>`You haven't chosen an option yet — you have these saved: ${lista}.`,
+    cpMemoriesNone:'No memories have been sent by guests yet.',
+    cpMemoriesSummary:(total,senders)=>`There ${total===1?'is':'are'} ${total} memor${total===1?'y':'ies'}${senders?`, from: ${senders}`:''}.`,
+    cpMemoriesFiltered:(name,count)=>count>0 ? `I found ${count} memor${count===1?'y':'ies'} related to "${name}".` : `I couldn't find any memory related to "${name}".`,
+    cpDraftIntro:'Here\'s a draft — review and copy it before sending:',
+    cpDraftOutro:'(I didn\'t send anything — I only prepared the text.)',
+    cpDraftThanks:'Thank you so much for sharing this day with us! Your presence meant the world to us. With love, [Couple\'s names]',
+    cpDraftTableChange:'Hi! Just letting you know your table changed — you\'re now at table [number]. See you soon! [Couple\'s names]',
+    cpDraftConfirmPresence:'Hi! We\'ve confirmed your attendance at our wedding — we can\'t wait to celebrate with you! [Couple\'s names]',
+    cpDraftRsvpReminder:'Hi! Just a reminder that we\'re still waiting for your RSVP — whenever you can, please reply here. Thank you! [Couple\'s names]',
+    cpDraftSupplier:(name)=>`Hi ${name}, thank you for the great work so far! Just confirming a few details for our wedding — can we set up a call this week? [Couple\'s names]`,
+    cpDraftSupplierGeneric:'Hi! Just confirming a few details for our wedding — can we set up a call this week? [Couple\'s names]',
+    cpDraftGuestsGeneric:'Hi everyone! We\'re so happy to have you at our big day. [Couple\'s names]',
+    cpDraftGeneric:'Hi! [Write your message here] [Couple\'s names]',
+    cpNeedsClarification:'How much of what is left? I can check payments, budget, tasks, or days until the wedding — tell me which.',
     cpContractedLabel:'contracted',
     cpInBudgetLabel:'in Budget',
     cpSuggestPendingRSVP:(n)=>`${n} guest${n===1?'':'s'} ${n===1?'has':'have'} not responded to the RSVP yet.`,
@@ -5053,6 +5156,13 @@ const APP_I18N = {
     gpErrInvalidArgument:'Invalid number — use the international format, e.g. +351912345678.',
     gpErrNotFound:'Couldn\'t find this guest.',
     gpErrGeneric:'Couldn\'t save. Try again.',
+    btnSendWhatsappReminder:'Send WhatsApp reminder',
+    waSentOk:'Reminder sent.',
+    waErrNoPhone:'This guest doesn\'t have a phone number saved yet.',
+    waErrNoConsent:'This guest hasn\'t consented to receive WhatsApp messages yet.',
+    waErrNoToken:'This guest doesn\'t have an RSVP link generated yet.',
+    waErrUnavailable:'Couldn\'t reach WhatsApp right now. Try again shortly.',
+    waErrGeneric:'Couldn\'t send. Try again.',
     gcalErrSyncTooSoon:'You just synced — wait a bit before trying again.',
     gcalErrSyncRunning:'A sync is already running — wait for it to finish.',
     gcalErrReauth:'The Google Calendar connection expired. Reconnect your Google account.',
@@ -8618,6 +8728,21 @@ let assistChatHistory = [];
 // contrário dos convites RSVP, que têm de ficar isolados por convidado).
 // Mantém só as últimas mensagens, para o documento não crescer sem limite.
 const ASSIST_CHAT_HISTORY_LIMIT = 30;
+// Correção "conversation context" (Set 2026, relatório final): memória de
+// conversa DELIBERADAMENTE mínima e só de sessão — uma variável JS normal,
+// nunca escrita no Firestore, nunca persistida entre recarregamentos da
+// página, nunca partilhada entre casamentos. Guarda só o suficiente para
+// resolver perguntas de seguimento ("e quanto já paguei?") — nunca dados
+// em si (nunca guarda valores em euros, nomes de convidados completos,
+// etc., só IDs canónicos: supplierId/tableId). Nunca substitui o
+// Firestore como fonte de verdade: cada pergunta de seguimento volta a
+// passar por checkCopilotIntentPermission → WeddyActions, exatamente como
+// uma pergunta nova — o contexto só ajuda a ESCOLHER a que fornecedor/
+// mesa a pergunta se refere, nunca decide sozinho os dados nem ultrapassa
+// permissões. Reiniciada no logout (resetCopilotContext, ver perto do
+// logout) e sempre que uma pergunta não tem um tópico continuável.
+let lastCopilotContext = null;
+function resetCopilotContext(){ lastCopilotContext = null; }
 function saveAssistChatHistory(){
   if(!FIREBASE_READY || !currentWeddingId) return;
   if(assistChatHistory.length > ASSIST_CHAT_HISTORY_LIMIT){
@@ -8691,6 +8816,23 @@ const WEDDY_COPILOT_INTENTS = {
   SEARCH_SUPPLIER_CONTRACT:'SEARCH_SUPPLIER_CONTRACT',
   GET_SUPPLIER_BUDGET_MISMATCHES:'GET_SUPPLIER_BUDGET_MISMATCHES',
   GET_GUESTS_WITHOUT_TABLE:'GET_GUESTS_WITHOUT_TABLE',
+  // Correção global (Set 2026, relatório final de testes): mesas/convidados
+  // específicos, Wedding Health, Honeymoon, Memories e rascunhos de
+  // mensagem — todos read-only (ou, no caso de DRAFT_MESSAGE, só GERAM
+  // texto, nunca enviam nada), todos reutilizando WeddyActions/motores já
+  // existentes (getWeddingHealthChecks, state.honeymoon, weddingMemories),
+  // nunca uma fonte de dados nova.
+  GET_GUEST_TABLE:'GET_GUEST_TABLE',
+  GET_TABLE_GUESTS:'GET_TABLE_GUESTS',
+  GET_WEDDING_HEALTH:'GET_WEDDING_HEALTH',
+  GET_HONEYMOON_INFO:'GET_HONEYMOON_INFO',
+  GET_MEMORIES_INFO:'GET_MEMORIES_INFO',
+  DRAFT_MESSAGE:'DRAFT_MESSAGE',
+  // Pergunta reconhecidamente vaga (ex.: "Quanto falta?" sem fornecedor
+  // nomeado nem contexto de conversa aproveitável) — nunca adivinha, pede
+  // esclarecimento. Ver bloco de resolução de contexto no topo de
+  // classifyCopilotIntent.
+  NEEDS_CLARIFICATION:'NEEDS_CLARIFICATION',
   UNKNOWN:'UNKNOWN'
 };
 // Palavras com menos de 3 letras ("e", "x", "a"...) ficam de fora — são
@@ -8744,11 +8886,20 @@ function wordsMatchLoosely(a, b){
 // "Fotografia e Vídeo", mesmo que essa palavra não esteja no nome dele).
 // Mesma técnica de pontuação por tokens que searchWeddingDocuments usa —
 // nunca é a IA a decidir isto, é sempre comparação de texto direta.
-function findSupplierByText(text){
+// Correção global (Set 2026, regra "se existirem dois fornecedores com o
+// mesmo nome, pedir clarificação"): a pontuação por tokens em si não
+// mudou nada — só passou a devolver TODOS os fornecedores empatados no
+// melhor resultado, não só o primeiro. findSupplierByText (usada pela
+// pesquisa de contratos, inalterada) continua com o mesmo comportamento
+// de sempre (o primeiro empatado, que é sempre matches[0] aqui, dado que
+// a ordem de state.suppliers é preservada) — é um refactor sem mudança de
+// comportamento para quem já a chamava, só uma nova função
+// (findSupplierMatches) para quem precisa de saber SE houve empate.
+function findSupplierMatches(text){
   const tokens = normalizeSearchText(text).split(/[^a-z0-9]+/).filter(w=>w.length>=3 && !STOPWORDS_PT.has(w));
-  if(!tokens.length || !state.suppliers || !state.suppliers.length) return null;
-  let best = null, bestScore = 0;
-  state.suppliers.forEach(s=>{
+  if(!tokens.length || !state.suppliers || !state.suppliers.length) return [];
+  let bestScore = 0;
+  const scored = state.suppliers.map(s=>{
     const nameWords = wordsOfNormalized(normalizeSearchText(s.name));
     const cat = catById(s.category);
     const catWords = cat ? wordsOfNormalized(normalizeSearchText(cat.name)) : [];
@@ -8757,16 +8908,66 @@ function findSupplierByText(text){
       if(nameWords.some(w=>wordsMatchLoosely(t,w))) score += 2;
       if(catWords.some(w=>wordsMatchLoosely(t,w))) score += 1;
     });
-    if(score>bestScore){ bestScore = score; best = s; }
+    if(score>bestScore) bestScore = score;
+    return { s, score };
   });
-  return bestScore>0 ? best : null;
+  if(bestScore<=0) return [];
+  return scored.filter(x=>x.score===bestScore).map(x=>x.s);
+}
+function findSupplierByText(text){
+  const matches = findSupplierMatches(text);
+  return matches.length ? matches[0] : null;
 }
 
 // 1) CLASSIFICAÇÃO — por keywords, nenhuma IA real. Devolve sempre
 // { intent, value? }; nunca decide sozinha se pode executar nem como
 // responder — isso é o trabalho dos passos seguintes.
-function classifyCopilotIntent(pergunta){
+function classifyCopilotIntent(pergunta, context){
   const p = pergunta.toLowerCase().trim();
+
+  // === Resolução de contexto conversacional (achado "conversation
+  // context: 1/6" do relatório final, Set 2026) ===
+  // Só entra em ação quando: (1) existe `context` desta MESMA sessão (ver
+  // lastCopilotContext — nunca persistido, nunca entre sessões, nunca
+  // atravessa weddingId); (2) a frase atual não nomeia ela própria um
+  // fornecedor/mesa/convidado novo (se nomear, a pergunta explícita ganha
+  // sempre — o teste `!/\b(ao|à|a|para)\s+\w/` deteta uma preposição
+  // seguida de alvo, o mesmo sinal que os blocos de fornecedor mais abaixo
+  // já usam); (3) a frase é curta e tem cara de seguimento ("e ...", ou
+  // ≤6 palavras). Isto SÓ preenche qual fornecedor/mesa a pergunta quer
+  // dizer — a permissão e os dados continuam sempre a vir de
+  // checkCopilotIntentPermission → WeddyActions, exatamente como uma
+  // pergunta nova (nunca um atalho que ultrapassa a arquitetura).
+  if(context && context.topic){
+    const curta = p.split(/\s+/).filter(Boolean).length<=6;
+    const seguimento = /^e\s+/.test(p) || curta;
+    // "\b" antes de "à" nunca bate em JS sem a flag /u — "à" não conta
+    // como carácter de palavra (\w é só [A-Za-z0-9_]), por isso um espaço
+    // seguido de "à" nunca é visto como fronteira de palavra e a versão
+    // com \b falhava sempre para "à" (achado ao testar esta correção:
+    // "Quanto falta pagar à florista?" ficava presa no contexto antigo em
+    // vez de reconhecer que nomeava um fornecedor novo). "(^|\s)" resolve
+    // isto sem depender de \b.
+    const nomeiaAlvoNovo = /(^|\s)(ao|à|a|para)\s+\w/.test(p);
+    if(seguimento && !nomeiaAlvoNovo){
+      if(context.topic==='supplier' && context.supplierId && /quanto (j[aá] )?pagu?ei|quanto (ainda )?devo|falta pagar|quanto custa|j[aá] pag/.test(p)){
+        return { intent: WEDDY_COPILOT_INTENTS.GET_SUPPLIER_PAYMENT_INFO, contextOverride:{ supplierId: context.supplierId } };
+      }
+      if(context.topic==='table' && context.tableId!=null && /quantas pessoas|quem (mais|est[aá])|s[aã]o quantas/.test(p)){
+        return { intent: WEDDY_COPILOT_INTENTS.GET_TABLE_GUESTS, value: context.tableId };
+      }
+    }
+    // "E o João?" / "E a Maria?" depois de uma pergunta sobre a mesa de
+    // alguém — o TÓPICO continua (quero saber a mesa de outra pessoa),
+    // mas o ALVO tem de ser lido de novo desta frase, nunca reaproveitado
+    // do turno anterior (senão respondia sempre sobre a mesma pessoa).
+    if(context.topic==='guestTable'){
+      const m = p.match(/^e\s+(?:o|a)\s+(.+?)\??$/i);
+      if(m && m[1] && m[1].trim().length>1){
+        return { intent: WEDDY_COPILOT_INTENTS.GET_GUEST_TABLE, contextOverride:{ guestNameOverride: m[1].trim() } };
+      }
+    }
+  }
 
   // "cria uma tarefa para X" / "adiciona tarefa X" / "lembra-me de X"
   const taskMatch = p.match(/^(?:cria(?:r)?|adiciona(?:r)?)\s+(?:uma\s+)?tarefa\s+(?:para|de)?\s*(.+)$/)
@@ -8777,6 +8978,21 @@ function classifyCopilotIntent(pergunta){
       .replace(/^lembra-?me\s+de\s+/i,'');
     texto = texto.charAt(0).toUpperCase()+texto.slice(1);
     return { intent: WEDDY_COPILOT_INTENTS.CREATE_TASK, value: texto };
+  }
+
+  // Wedding Brain leve — Honeymoon e Memories (achados "sem intent
+  // dedicado", Set 2026). Só leem `state.honeymoon`/`weddingMemories`, que
+  // já existem — nenhuma fonte de dados nova. TÊM de vir ANTES do bloco de
+  // GET_UPCOMING_TASKS logo a seguir: "o que falta tratar da lua de mel?"
+  // contém "falta"+"tratar", que também bate no regex de tarefas — e como
+  // esse bloco corria primeiro, a pergunta nunca chegava aqui (achado ao
+  // testar esta correção). "lua de mel"/"memória" são palavras-chave muito
+  // específicas, sem colisão plausível com nada mais acima nesta função.
+  if(/lua de mel|honeymoon/.test(p)){
+    return { intent: WEDDY_COPILOT_INTENTS.GET_HONEYMOON_INFO };
+  }
+  if(/mem[oó]ria/.test(p)){
+    return { intent: WEDDY_COPILOT_INTENTS.GET_MEMORIES_INFO, value: pergunta };
   }
 
   // "o que tenho esta semana" / "tarefas desta semana" / "agenda da semana"
@@ -8790,7 +9006,7 @@ function classifyCopilotIntent(pergunta){
   // esta correção) — nunca "falta" sozinha, para não sequestrar perguntas
   // de pagamentos ("quanto falta pagar") nem cair na contagem de dias.
   if(
-    /esta semana|nesta semana|essa semana|this week|agenda da semana|tarefas (desta|da) semana|o que tenho (para )?(esta semana|hoje)|pr[oó]ximos dias/.test(p)
+    /esta semana|nesta semana|essa semana|this week|agenda da semana|tarefas (desta|da) semana|o que tenho (para )?(esta semana|hoje)|o que tenho (de |para )?fazer|pr[oó]ximos dias/.test(p)
     || ((/\bfalta(m)?\b/.test(p) && /\b(fazer|tratar|organizar)\b/.test(p)) || /(que\s+)?tarefas\s+(ainda\s+)?falta(m)?\b/.test(p))
   ){
     return { intent: WEDDY_COPILOT_INTENTS.GET_UPCOMING_TASKS };
@@ -8816,13 +9032,31 @@ function classifyCopilotIntent(pergunta){
   // "quem falta confirmar?" ou "quem me falta contactar?" caíam por
   // engano na contagem de dias (a segunda já tinha sido sinalizada como
   // inconsistente na bateria de 213 testes — Secção 15).
-  if(/(quem|convidad).*(ainda n[aã]o respond|falta(m)?\s*respond|falta(m)?\s*confirmar|falta(m)?\s*contactar|n[aã]o confirmou|n[aã]o respondeu)/.test(p)){
+  // Correção global (Set 2026): antes exigia "quem"/"convidad" a aparecer
+  // ANTES da parte "falta confirmar/respond/contactar" na frase (um único
+  // regex sequencial com ".*" no meio é sensível à ORDEM). "Falta
+  // confirmar quantos convidados?" tem as palavras na ordem inversa e não
+  // batia. Duas verificações independentes (E lógico, não uma sequência)
+  // resolvem isto sem depender da ordem das palavras.
+  if(/quem|convidad/.test(p) && /(ainda n[aã]o respond|falta(m)?\s*respond|falta(m)?\s*confirmar|falta(m)?\s*contactar|n[aã]o confirmou|n[aã]o respondeu)/.test(p)){
     return { intent: WEDDY_COPILOT_INTENTS.GET_PENDING_RSVPS };
   }
 
   // "quem é vegetariano" / "quem tem restrições alimentares" / "alergias"
   if(/vegetarian|vegan|alergia/.test(p) || (/restri[cç]/.test(p) && /alimentar/.test(p))){
     return { intent: WEDDY_COPILOT_INTENTS.GET_DIETARY_LIST };
+  }
+
+  // Wedding Health (achado "Wedding Health sem intent dedicado", Set 2026)
+  // — reutiliza o MESMO motor de regras do ecrã (getWeddingHealthChecks),
+  // nunca uma lógica paralela. Serve também como resposta ao planeador
+  // "open-ended" ("por onde começo?", "o que devo tratar agora?") — são a
+  // mesma pergunta de fundo ("o que precisa de atenção agora?"), por isso
+  // usam a mesma intent em vez de inventar uma segunda fonte de dados.
+  // Vocabulário deliberadamente distinto do de GET_UPCOMING_TASKS (fazer/
+  // tratar/organizar) para não colidir com ele.
+  if(/sa[uú]de do (meu |nosso )?casamento|est[aá] tudo em ordem|h[aá] algum problema|o que est[aá] atrasado|o que (falta resolver|precisa da minha aten[cç][aã]o)|o que devo tratar (agora|primeiro)|por onde (come[cç]o|devo come[cç]ar)|o que (est[aá]|tenho) pendente\b/.test(p)){
+    return { intent: WEDDY_COPILOT_INTENTS.GET_WEDDING_HEALTH };
   }
 
   // Fase 7 — Wedding Brain: perguntas que cruzam Vendors com Budget e
@@ -8863,7 +9097,7 @@ function classifyCopilotIntent(pergunta){
   // "quanto falta pagar" (sem nomear fornecedor) / "próximos pagamentos" /
   // "pagamentos pendentes" — genérica, por isso vem DEPOIS da verificação
   // específica de fornecedor acima.
-  if(/falta pagar|pagamentos? (pendentes|por pagar|em falta)|quanto (falta|tenho) (ainda )?(a )?pagar|pr[oó]ximos pagamentos/.test(p)){
+  if(/falta pagar|pagamentos? (pendentes|por pagar|em falta)|quanto (falta|tenho) (ainda )?(a |para )?pagar|quanto (ainda )?devo\b|pr[oó]ximos pagamentos/.test(p)){
     return { intent: WEDDY_COPILOT_INTENTS.GET_REMAINING_PAYMENTS };
   }
 
@@ -8872,7 +9106,17 @@ function classifyCopilotIntent(pergunta){
   // (em vez do "falta" fixo no singular) foi corrigido na correção do bug
   // "falta/dias" (Set 2026): a versão anterior só reconhecia "falta
   // contratar", não "faltam contratar" (plural, com "fornecedores").
-  if(/fornecedor/.test(p) && /(n[aã]o est[aã]o contratad|por contratar|ainda n[aã]o contratei|falta(m)?\s+contratar|sem contrat)/.test(p)){
+  // Correção global (Set 2026): "Falta contratar o fotógrafo?" nomeia um
+  // fornecedor concreto por profissão, sem a palavra "fornecedor" — antes
+  // não batia aqui NEM em mais nenhuma intent (caía em UNKNOWN, o que pelo
+  // menos nunca foi countdown, mas também não respondia à pergunta).
+  // Continua, tal como antes, a nunca poder ser confundida com contagem de
+  // dias (COUNTDOWN exige "dias"/"tempo falta para o casamento"/"data do
+  // casamento" — nenhum destes está presente aqui).
+  if(
+    (/fornecedor/.test(p) && /(n[aã]o est[aã]o contratad|por contratar|ainda n[aã]o contratei|falta(m)?\s+contratar|sem contrat)/.test(p))
+    || /falta(m)?\s+contratar\s+(o|a)\s+\w/.test(p)
+  ){
     return { intent: WEDDY_COPILOT_INTENTS.GET_UNCONTRACTED_SUPPLIERS };
   }
 
@@ -8920,8 +9164,38 @@ function classifyCopilotIntent(pergunta){
   // mesas existem. "falta(m)? sentar" foi acrescentada na correção do bug
   // "falta/dias" (Set 2026) — era a Secção 27/28 da bateria de 213 testes
   // (#207 "Quem falta sentar?") que caía, por engano, na contagem de dias.
-  if(/sem mesa|mesa por atribuir|ainda n[aã]o t[eê]m mesa|falta atribuir mesa|falta(m)?\s+sentar/.test(p)){
+  if(/sem mesa|mesa por atribuir|ainda n[aã]o t[eê]m mesa|falta atribuir mesa|falta(m)?\s+sentar|convidados? (ainda )?n[aã]o est[aã]o sentad|quem (ainda )?n[aã]o est[aá] sentad/.test(p)){
     return { intent: WEDDY_COPILOT_INTENTS.GET_GUESTS_WITHOUT_TABLE };
+  }
+
+  // Achado "mesas/convidados frágil" (Set 2026) — "quem está na mesa 3?" /
+  // "quantas pessoas estão na mesa 2?": pede a lista de UMA mesa concreta,
+  // identificada pelo número. Vem antes do /mesa/ genérico (GET_TABLE_COUNT,
+  // que só conta mesas) porque é mais específica.
+  {
+    const mesaMatch = p.match(/mesa\s+(\d+)/);
+    if(mesaMatch && /quem|quantas pessoas|sentad/.test(p)){
+      return { intent: WEDDY_COPILOT_INTENTS.GET_TABLE_GUESTS, value: Number(mesaMatch[1]) };
+    }
+  }
+
+  // "Onde se senta a Maria?" / "Em que mesa está o João?" / "Quem está
+  // sentado com a Maria?" / "Qual é a mesa da Maria?" — pede a mesa de UM
+  // convidado concreto, identificado pelo nome (guestId é a identidade
+  // canónica usada dentro da Action, nunca o texto em si — ver
+  // findGuestsByName/getGuestTable).
+  if(/onde (se senta|est[aá] sentad[oa])|em que mesa est[aá]|qual (é )?a mesa d[eoa]|quem est[aá] sentad[oa]? com/.test(p)){
+    return { intent: WEDDY_COPILOT_INTENTS.GET_GUEST_TABLE, value: pergunta };
+  }
+
+  // Pedidos de escrita ("escreve uma mensagem...") — GERAM texto só, nunca
+  // executam uma ação (nunca enviam WhatsApp/email/SMS sozinhos). Vem
+  // antes de qualquer intent genérica de convidados/fornecedores para não
+  // ser sequestrada por essas palavras (ex.: "mensagem para o fotógrafo"
+  // contém "fotógrafo", mas o pedido é para ESCREVER, não para consultar
+  // pagamentos).
+  if(/^escreve(-me)?\s+(uma\s+)?(mensagem|texto|algo)/.test(p) || /^prepara(-me)?\s+(uma\s+)?mensagem/.test(p)){
+    return { intent: WEDDY_COPILOT_INTENTS.DRAFT_MESSAGE, value: pergunta };
   }
 
   if(/rsvp/.test(p)){
@@ -8972,6 +9246,28 @@ function classifyCopilotIntent(pergunta){
   // pdf|carreguei|anexei|ficheiro"); sem esse sinal explícito, a pergunta
   // deve seguir para a classificação por IA (e só cair em UNKNOWN se a
   // IA também não conseguir).
+
+  // Achado "perguntas ambíguas" (Set 2026): "Quanto falta?" / "Quem
+  // falta?" / "O que falta?" sozinhas, sem verbo nem fornecedor, já não
+  // adivinham countdown (fix falta/dias) — mas UNKNOWN puro (que cai no
+  // fallback genérico de demo) também não ajuda. Se havia contexto de
+  // conversa aproveitável, o bloco de resolução de contexto no TOPO desta
+  // função já teria respondido antes de chegarmos aqui — chegar aqui com
+  // uma destas frases quer dizer que não há contexto suficiente, e a
+  // resposta certa é pedir esclarecimento, nunca adivinhar. Devolve uma
+  // intent PRÓPRIA (não UNKNOWN) para nunca ser passada à IA como
+  // segunda opinião — a pergunta já foi entendida como "vaga", pedir para
+  // a IA adivinhar na mesma seria o oposto do que se quer aqui.
+  if(/^(quanto|quem|o que)\s+falta\??$/.test(p) || /^ajuda-?me a perceber o que falta\.?$/.test(p)){
+    return { intent: WEDDY_COPILOT_INTENTS.NEEDS_CLARIFICATION };
+  }
+  // "E o João?" / "E a Maria?" chegar até aqui só acontece quando não há
+  // nada mais específico a bater (incluindo o bloco de contexto
+  // "guestTable" no topo desta função) — ou seja, é mesmo uma pergunta de
+  // seguimento sem contexto suficiente para saber a que se refere "E".
+  if(/^e\s+/.test(p) && p.split(/\s+/).filter(Boolean).length<=5){
+    return { intent: WEDDY_COPILOT_INTENTS.NEEDS_CLARIFICATION };
+  }
   return { intent: WEDDY_COPILOT_INTENTS.UNKNOWN };
 }
 
@@ -8982,6 +9278,64 @@ function classifyCopilotIntent(pergunta){
 // verificação própria antes de correr.
 function checkCopilotIntentPermission(intent, context){
   return { allowed:true };
+}
+
+// Correção global (Set 2026) — mesas/convidados: mesma técnica de
+// pontuação por tokens que findSupplierMatches/searchWeddingDocuments já
+// usam, aplicada a nomes de convidados. guestId (nunca o nome nem o índice
+// no array) é a identidade canónica devolvida — quem lê o resultado nunca
+// precisa de voltar a percorrer state.guests. Devolve TODOS os convidados
+// empatados no melhor resultado (nunca só o primeiro) para permitir pedir
+// clarificação quando há nomes duplicados, tal como para fornecedores.
+// Extrai só o nome da pergunta, para nunca passar palavras como "onde"/
+// "sentado"/"mesa" para findGuestsByName (ver comentário em getGuestTable).
+function extractGuestNameFromQuestion(pergunta){
+  const patterns = [
+    /onde (?:se senta|est[aá] sentad[oa])\s+(?:a|o)?\s*(.+?)\??$/i,
+    /em que mesa est[aá]\s+(?:a|o)?\s*(.+?)\??$/i,
+    /qual (?:é )?a mesa d[eoa]\s*(.+?)\??$/i,
+    /quem est[aá] sentad[oa]?\s+com\s+(?:a|o)?\s*(.+?)\??$/i,
+  ];
+  for(const re of patterns){
+    const m = pergunta.match(re);
+    if(m && m[1] && m[1].trim().length>1) return m[1].trim();
+  }
+  return null;
+}
+function findGuestsByName(text){
+  const tokens = normalizeSearchText(text).split(/[^a-z0-9]+/).filter(w=>w.length>=2 && !STOPWORDS_PT.has(w));
+  if(!tokens.length) return [];
+  const all = flattenAllGuestsForRSVP().filter(g=>g.guestId && g.name);
+  let bestScore = 0;
+  const scored = all.map(g=>{
+    const nameWords = wordsOfNormalized(normalizeSearchText(g.name));
+    let score = 0;
+    tokens.forEach(t=>{ if(nameWords.some(w=>wordsMatchLoosely(t,w) || w===t)) score++; });
+    if(score>bestScore) bestScore = score;
+    return { g, score };
+  });
+  // Exige que TODAS as palavras da pergunta relevantes para um nome batam
+  // (score === tokens.length) — meio nome não deve "quase" encontrar a
+  // pessoa errada; é preferível não encontrar ninguém a encontrar alguém
+  // por engano numa área que lida com localização de pessoas reais.
+  if(bestScore < tokens.length) return [];
+  return scored.filter(x=>x.score===bestScore).map(x=>x.g);
+}
+// "t{tableId}-s{seatNumber}" → guestId é o formato de state.seating.
+// assignments desde a Fase 8.0 (ver findGuestByGuestId/migrateConfirmedAnd
+// SeatingToGuestId) — tableId é sempre lido daqui, nunca inventado.
+function getGuestsAtTable(tableId){
+  const byId = new Map(flattenAllGuestsForRSVP().filter(g=>g.guestId).map(g=>[g.guestId, g]));
+  const out = [];
+  Object.entries((state.seating && state.seating.assignments) || {}).forEach(([key, guestId])=>{
+    if(!guestId) return;
+    const m = key.match(/^t(\d+)-s\d+$/);
+    if(m && Number(m[1])===Number(tableId)){
+      const g = byId.get(guestId);
+      if(g) out.push(g);
+    }
+  });
+  return out;
 }
 
 // 3) REGISTO DE AÇÕES — o único sítio que lê o estado do casamento ou
@@ -9029,10 +9383,28 @@ const WeddyActions = {
     // Fase 7 — Wedding Brain: cada uma destas junta Vendors + Budget (+
     // Documentos), usando o link supplierId que a Fase 6.1/6.1.1 criou.
     // Continuam a ser só leitura — nunca escrevem nada.
-    getSupplierPaymentInfo(pergunta){
-      const s = findSupplierByText(pergunta);
+    // Correção global (Set 2026): `contextSupplierId` (opcional) vem só de
+    // uma pergunta de SEGUIMENTO já validada pelo bloco de contexto de
+    // classifyCopilotIntent ("e quanto já paguei?") — quando presente e a
+    // pergunta atual não nomeia ela própria um fornecedor novo, usa-o
+    // diretamente (supplierId é sempre a identidade canónica, nunca o
+    // nome). Quando há dois ou mais fornecedores empatados no nome/
+    // categoria mencionados (ex.: dois fornecedores chamados "Ana Flores"),
+    // devolve `ambiguous:true` em vez de adivinhar um dos dois — a
+    // resposta final pede clarificação (ver cpSupplierAmbiguous).
+    getSupplierPaymentInfo(pergunta, contextSupplierId){
+      let s = null;
+      if(contextSupplierId){
+        s = (state.suppliers||[]).find(x=>x.id===contextSupplierId) || null;
+      }
+      if(!s){
+        const matches = findSupplierMatches(pergunta);
+        if(matches.length>1) return { ambiguous:true, names: matches.map(m=>m.name) };
+        s = matches[0] || null;
+      }
       if(!s) return null;
       return {
+        id: s.id,
         name: s.name,
         paid: supplierPaidTotal(s),
         total: Number(s.valorTotal)||0,
@@ -9099,6 +9471,76 @@ const WeddyActions = {
         if(!isConfirmed(g.side, g.catId, g.idx)) return false;
         return !assignedKeys.has(g.guestId);
       }).map(g=>g.name).filter(Boolean);
+    },
+    // Correção global (Set 2026) — "Onde se senta a Maria?" / "Em que
+    // mesa está o João?" / "Quem está sentado com a Maria?". Extrai só o
+    // NOME da pergunta (nunca passa a frase toda a findGuestsByName —
+    // palavras como "onde"/"sentado"/"mesa" nunca batem no nome de
+    // ninguém e, exigindo correspondência de TODAS as palavras, isso
+    // faria a pesquisa falhar sempre). `overrideName`, quando presente,
+    // vem já de uma pergunta de seguimento resolvida pelo contexto
+    // conversacional ("E o João?") — nesse caso é o próprio nome, sem
+    // mais nada a extrair.
+    getGuestTable(pergunta, overrideName){
+      const nameGuess = overrideName || extractGuestNameFromQuestion(pergunta);
+      if(!nameGuess) return { found:false };
+      const matches = findGuestsByName(nameGuess);
+      if(!matches.length) return { found:false, query:nameGuess };
+      if(matches.length>1) return { found:false, ambiguous:true, names: matches.map(m=>m.name) };
+      const g = matches[0];
+      let tableId = null;
+      Object.entries((state.seating && state.seating.assignments)||{}).forEach(([key,guestId])=>{
+        if(guestId!==g.guestId) return;
+        const m = key.match(/^t(\d+)-s\d+$/);
+        if(m) tableId = Number(m[1]);
+      });
+      if(tableId==null) return { found:true, seated:false, name:g.name };
+      const tablemates = getGuestsAtTable(tableId).filter(x=>x.guestId!==g.guestId).map(x=>x.name).filter(Boolean);
+      return { found:true, seated:true, name:g.name, tableId, tablemates };
+    },
+    // "Quem está na mesa 3?" / "Quantas pessoas estão na mesa 2?" —
+    // tableId vem já extraído (número) pelo classificador; lê sempre os
+    // dados reais de seating, nunca inventa nomes nem mesas.
+    getTableGuests(tableId){
+      const table = getTable(Number(tableId));
+      if(!table) return { found:false };
+      const guests = getGuestsAtTable(tableId).map(g=>g.name).filter(Boolean);
+      return { found:true, tableId: table.id, seats: table.seats, guests };
+    },
+    // Wedding Health — reutiliza integralmente getWeddingHealthChecks (o
+    // MESMO motor do ecrã "Saúde do casamento"); nunca uma lógica paralela.
+    getWeddingHealth(){
+      return getWeddingHealthChecks();
+    },
+    // Honeymoon — só devolve o que existe de facto em state.honeymoon.
+    // Não há, hoje, nenhum registo de pagamentos/tarefas específico da lua
+    // de mel ligado ao motor de despesas geral (confirmado na auditoria) —
+    // por isso a resposta é sempre honesta sobre essa limitação, nunca
+    // inventa valores pagos/tarefas que não existem.
+    getHoneymoonInfo(){
+      const options = (state.honeymoon && state.honeymoon.options) || [];
+      if(!options.length) return { hasData:false };
+      const chosen = options.find(o=>o.favorite) || null;
+      return {
+        hasData: true,
+        count: options.length,
+        chosen: chosen ? { name:chosen.name||'', budget:chosen.budget||'', days:Number(chosen.days)||0, notes:chosen.notes||'' } : null,
+        names: options.map(o=>o.name).filter(Boolean)
+      };
+    },
+    // Memories (Fase 10) — só lê o array já carregado por loadMemories()
+    // (permissões/Storage continuam exatamente como estão: nunca devolve
+    // storagePath/url, só contagens e o guestName já denormalizado no
+    // próprio documento).
+    getMemoriesInfo(pergunta){
+      const list = (typeof weddingMemories!=='undefined' && weddingMemories) || [];
+      if(!list.length) return { count:0, total:0 };
+      const nameMatch = pergunta.match(/fam[ií]lia\s+(\w+)|de\s+(\w+)\??$/i);
+      const nameQuery = nameMatch ? (nameMatch[1]||nameMatch[2]) : null;
+      if(!nameQuery) return { count:list.length, total:list.length, senders:[...new Set(list.map(m=>m.guestName).filter(Boolean))] };
+      const norm = normalizeSearchText(nameQuery);
+      const filtered = list.filter(m=>normalizeSearchText(m.guestName||'').includes(norm));
+      return { count:filtered.length, total:list.length, senders:[...new Set(filtered.map(m=>m.guestName).filter(Boolean))], filteredBy:nameQuery };
     }
   },
   write: {
@@ -9120,6 +9562,27 @@ const WeddyActions = {
   }
 };
 
+// Pedidos de escrita (achado "sem intents dedicados", Set 2026) — GERA
+// texto só, com templates fixos (nenhuma IA real, tal como o resto deste
+// classificador) e, quando a pergunta nomeia um fornecedor real, usa o
+// nome verdadeiro dele (via findSupplierByText — nunca inventado). Nunca
+// envia nada: a resposta do Copilot já deixa isso explícito (ver
+// cpDraftIntro/cpDraftOutro), seguindo exatamente o mesmo padrão de
+// "preparar texto → o casal revê e copia" que openRSVPAutopilotModal já
+// usa para os lembretes de RSVP — nunca um novo mecanismo de envio.
+function draftMessage(pergunta){
+  const p = pergunta.toLowerCase();
+  if(/agradec/.test(p)) return ta('cpDraftThanks');
+  if(/mesa mudou|mudan[cç]a de mesa|mudou de mesa/.test(p)) return ta('cpDraftTableChange');
+  if(/confirmar presen[cç]a/.test(p)) return ta('cpDraftConfirmPresence');
+  if(/lembrar|responder|rsvp/.test(p)) return ta('cpDraftRsvpReminder');
+  const s = findSupplierByText(pergunta);
+  if(s) return ta('cpDraftSupplier')(s.name);
+  if(/fot[oó]grafo|fornecedor|dj|florista|catering|video[gó]rafo/.test(p)) return ta('cpDraftSupplierGeneric');
+  if(/convidados?/.test(p)) return ta('cpDraftGuestsGeneric');
+  return ta('cpDraftGeneric');
+}
+
 // 4) RESPOSTA — junta classificação + permissão + ação numa frase de texto
 // só (este chat, ao contrário do Concierge, não tem passo de confirmação —
 // as ações de hoje, como criar tarefa, são de baixo risco e reversíveis
@@ -9133,7 +9596,12 @@ const WeddyActions = {
 // fica idêntico ao de antes desta camada existir.
 async function respondeAssistente(pergunta){
   const context = {};
-  let classified = classifyCopilotIntent(pergunta);
+  // Correção global (Set 2026) — contexto conversacional: `lastCopilotContext`
+  // é a única "memória" entre mensagens, e é só de sessão (ver comentário
+  // completo perto da sua declaração). Passa a classifyCopilotIntent para
+  // resolver perguntas de seguimento — NUNCA para saltar checkCopilotIntent
+  // Permission nem para decidir dados sozinho.
+  let classified = classifyCopilotIntent(pergunta, lastCopilotContext);
   if(classified.intent === WEDDY_COPILOT_INTENTS.UNKNOWN){
     const aiGuess = await AIService.classify(pergunta, 'couple');
     if(aiGuess && aiGuess.intent && aiGuess.intent!==WEDDY_COPILOT_INTENTS.UNKNOWN && WEDDY_COPILOT_INTENTS[aiGuess.intent]){
@@ -9146,6 +9614,12 @@ async function respondeAssistente(pergunta){
 
   const totalConvidados = countGuests('noiva') + countGuests('noivo');
   const totalConfirmados = countConfirmed('noiva') + countConfirmed('noivo');
+
+  // Por omissão, cada pergunta LIMPA o contexto reutilizável anterior — só
+  // os casos que resolvem um fornecedor/mesa/convidado concreto o voltam a
+  // definir, mais abaixo, logo antes do respetivo `return` (uma pergunta
+  // não relacionada no meio da conversa não deve deixar contexto "preso").
+  lastCopilotContext = null;
 
   switch(classified.intent){
     case I.CREATE_TASK: {
@@ -9237,8 +9711,12 @@ async function respondeAssistente(pergunta){
     // domínio (Vendors+Budget+Documentos, ou Guests+Mesas). Continua tudo a
     // sair só de WeddyActions — nenhuma destas frases é escrita pela IA.
     case I.GET_SUPPLIER_PAYMENT_INFO: {
-      const info = WeddyActions.read.getSupplierPaymentInfo(pergunta);
+      const contextSupplierId = classified.contextOverride && classified.contextOverride.supplierId;
+      const info = WeddyActions.read.getSupplierPaymentInfo(pergunta, contextSupplierId);
       if(!info) return ta('cpSupplierPaymentNotFound');
+      // Correção global (Set 2026, regra "dois fornecedores com o mesmo
+      // nome → pedir clarificação"): nunca escolhe um dos dois sozinho.
+      if(info.ambiguous) return ta('cpSupplierAmbiguous')(info.names.join(', '));
       let resposta = ta('cpPaidSoFar')(info.name, fmtEUR(info.paid));
       if(info.total>0) resposta += ta('cpOfContracted')(fmtEUR(info.total));
       resposta += '.';
@@ -9252,6 +9730,10 @@ async function respondeAssistente(pergunta){
       if(info.nextAmount>0 && info.nextDate) resposta += ta('cpNextPayment')(fmtEUR(info.nextAmount), formatDatePT(info.nextDate));
       else if(info.nextAmount>0) resposta += ta('cpNextPaymentNoDate')(fmtEUR(info.nextAmount));
       resposta += info.hasContract ? ta('cpSourceContract') : ta('cpSourceBudgetOnly');
+      // Contexto conversacional: guarda o supplierId (identidade canónica)
+      // para que "e quanto já paguei?" na mensagem seguinte saiba a quem
+      // se refere, sem ter de nomear o fornecedor outra vez.
+      lastCopilotContext = { topic:'supplier', supplierId: info.id };
       return resposta;
     }
     case I.GET_UNCONTRACTED_SUPPLIERS: {
@@ -9285,6 +9767,54 @@ async function respondeAssistente(pergunta){
       const lista = list.slice(0,15).join(', ');
       return ta('cpGuestsWithoutTableList')(lista, list.length>15 ? ta('cpAndMore')(list.length-15) : '');
     }
+    // Correção global (Set 2026) — mesas/convidados específicos.
+    case I.GET_TABLE_GUESTS: {
+      const info = WeddyActions.read.getTableGuests(classified.value);
+      if(!info.found) return ta('cpTableNotFound')(classified.value);
+      if(!info.guests.length) return ta('cpTableEmpty')(info.tableId, info.seats);
+      lastCopilotContext = { topic:'table', tableId: info.tableId };
+      return ta('cpTableGuestsList')(info.tableId, info.guests.length, info.guests.join(', '));
+    }
+    case I.GET_GUEST_TABLE: {
+      const overrideName = classified.contextOverride && classified.contextOverride.guestNameOverride;
+      const info = WeddyActions.read.getGuestTable(classified.value || pergunta, overrideName);
+      if(info.ambiguous) return ta('cpGuestAmbiguous')(info.names.join(', '));
+      if(!info.found) return ta('cpGuestNotFound')(info.query || (overrideName||''));
+      if(!info.seated) return ta('cpGuestNotSeated')(info.name);
+      lastCopilotContext = { topic:'guestTable' };
+      return info.tablemates.length
+        ? ta('cpGuestTableWithMates')(info.name, info.tableId, info.tablemates.join(', '))
+        : ta('cpGuestTableAlone')(info.name, info.tableId);
+    }
+    // Wedding Health — reutiliza getWeddingHealthChecks (o motor do ecrã
+    // "Saúde do casamento"); também serve o planeador aberto ("por onde
+    // começo?"), mesma pergunta de fundo, mesmos dados reais.
+    case I.GET_WEDDING_HEALTH: {
+      const checks = WeddyActions.read.getWeddingHealth();
+      if(!checks.length) return ta('cpWeddingHealthAllGood');
+      const lista = checks.slice(0,6).map(c=>'• '+c.text).join(' ');
+      return ta('cpWeddingHealthList')(lista);
+    }
+    case I.GET_HONEYMOON_INFO: {
+      const info = WeddyActions.read.getHoneymoonInfo();
+      if(!info.hasData) return ta('cpHoneymoonNoData');
+      if(info.chosen){
+        return ta('cpHoneymoonChosen')(info.chosen.name || ta('cpHoneymoonUnnamed'), info.chosen.budget || ta('cpHoneymoonNoBudgetSet'), info.chosen.days||0);
+      }
+      return ta('cpHoneymoonOptionsList')(info.names.join(', '));
+    }
+    case I.GET_MEMORIES_INFO: {
+      const info = WeddyActions.read.getMemoriesInfo(pergunta);
+      if(!info.total) return ta('cpMemoriesNone');
+      if(info.filteredBy) return ta('cpMemoriesFiltered')(info.filteredBy, info.count);
+      return ta('cpMemoriesSummary')(info.total, info.senders.slice(0,10).join(', '));
+    }
+    case I.DRAFT_MESSAGE: {
+      const texto = draftMessage(pergunta);
+      return ta('cpDraftIntro') + '\n\n' + texto + '\n\n' + ta('cpDraftOutro');
+    }
+    case I.NEEDS_CLARIFICATION:
+      return ta('cpNeedsClarification');
     default:
       return ta('cpDemoFallback');
   }
@@ -12668,9 +13198,40 @@ function openGuestPhoneSheet(side, cat, idx){
   document.getElementById('gp-consent-toggle').classList.toggle('on', consentOn);
   document.getElementById('gp-consent-row').style.display = phoneEl.value.trim() ? '' : 'none';
   document.getElementById('gp-error').style.display = 'none';
+  document.getElementById('gp-wa-error').style.display = 'none';
+  document.getElementById('gp-wa-success').style.display = 'none';
+  // Botão "Enviar lembrete WhatsApp" (Fase 9.2 parte 3) — mostra-se só
+  // quando já há telefone gravado, consentimento dado e link de RSVP
+  // gerado (os mesmos 3 requisitos que a Cloud Function volta a validar
+  // do lado do servidor). A app nunca envia sozinha — é sempre este clique.
+  const waBtn = document.getElementById('gp-send-whatsapp');
+  waBtn.style.display = (phoneEl.value.trim() && consentOn && entry.rsvpToken) ? '' : 'none';
+  waBtn.disabled = false;
+  waBtn.textContent = ta('btnSendWhatsappReminder');
   document.getElementById('guest-phone-sheet').classList.add('show');
   document.getElementById('sheet-backdrop').classList.add('show');
 }
+document.getElementById('gp-send-whatsapp').addEventListener('click', async ()=>{
+  if(!editingGuestPhoneRef) return;
+  const btn = document.getElementById('gp-send-whatsapp');
+  const errEl = document.getElementById('gp-wa-error');
+  const okEl = document.getElementById('gp-wa-success');
+  errEl.style.display = 'none';
+  okEl.style.display = 'none';
+  btn.disabled = true;
+  const original = btn.textContent;
+  btn.textContent = ta('msgSendingEllipsis') || original;
+  const { guestId } = editingGuestPhoneRef;
+  const res = await GuestCommsService.sendWhatsappRsvpReminder(guestId);
+  btn.disabled = false;
+  btn.textContent = original;
+  if(!res.ok){
+    errEl.textContent = res.message;
+    errEl.style.display = '';
+    return;
+  }
+  okEl.style.display = '';
+});
 function closeGuestPhoneSheet(){
   document.getElementById('guest-phone-sheet').classList.remove('show');
   document.getElementById('sheet-backdrop').classList.remove('show');
@@ -15586,6 +16147,7 @@ if(FIREBASE_READY){
       // de onde tinha ficado. "Perder a sessão" é exatamente este ramo do
       // onAuthStateChanged (user===null), por isso é aqui que limpamos.
       assistChatHistory = [];
+      resetCopilotContext(); // memória de conversa é só de sessão — nunca sobrevive a um logout
       if(unsubscribeSnapshot){ unsubscribeSnapshot(); unsubscribeSnapshot = null; }
       document.getElementById('login-screen').classList.remove('hidden'); document.documentElement.classList.add('login-active');
       renderLoginForm();
