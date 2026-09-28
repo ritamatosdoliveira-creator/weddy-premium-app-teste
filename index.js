@@ -1380,26 +1380,44 @@ exports.generateSeatingProposal = onCall({ region: 'europe-west1' }, async (requ
   // em state.guests[side][catId]; as criadas pelo casal vivem em
   // state.guests[side].custom, cada uma com o seu próprio array "names"
   // (ver FIXED_GUEST_CATS/allGuestCategoriesOf em index.html).
+  const FIXED_CAT_LABELS = { familia: 'Família', amigos: 'Amigos', duvida: 'Na dúvida', staff: 'Staff/fornecedores' };
   const FIXED_CATS = ['familia', 'amigos', 'duvida', 'staff'];
+  const SIDE_LABELS = { noiva: 'noiva', noivo: 'noivo' };
   const guests = [];
   ['noiva', 'noivo'].forEach((side) => {
     const guestsRoot = clientState?.guests?.[side];
     if (!guestsRoot) return;
     const nameArrays = [
-      ...FIXED_CATS.map((catId) => guestsRoot[catId]).filter(Array.isArray),
-      ...(Array.isArray(guestsRoot.custom) ? guestsRoot.custom.map((c) => c.names).filter(Array.isArray) : []),
-    ];
-    nameArrays.forEach((arr) => {
+      ...FIXED_CATS.map((catId) => ({ catLabel: FIXED_CAT_LABELS[catId], arr: guestsRoot[catId] })),
+      ...(Array.isArray(guestsRoot.custom) ? guestsRoot.custom.map((c) => ({ catLabel: c.label || c.id || 'Categoria própria', arr: c.names })) : []),
+    ].filter((x) => Array.isArray(x.arr));
+    nameArrays.forEach(({ catLabel, arr }) => {
       arr.forEach((entry) => {
         if (!entry || typeof entry !== 'object' || !entry.guestId) return;
         const isConfirmed = clientState?.confirmed?.[entry.guestId];
         if (!isConfirmed) return;
-        guests.push({ guestId: entry.guestId, name: entry.name || '' });
+        guests.push({ guestId: entry.guestId, name: entry.name || '', side: SIDE_LABELS[side], catLabel });
       });
     });
   });
 
   const guestIds = new Set(guests.map((g) => g.guestId));
+
+  // Vários convidados confirmados podem legitimamente ter o mesmo nome
+  // (é um dado real, não um erro) — por isso não escolhemos um deles à
+  // sorte quando um pedido em texto livre os menciona: isso arriscava
+  // aplicar "separar o Nuno Ferreira" ao Nuno Ferreira errado, sem o
+  // casal alguma vez saber. Em vez disso, agrupamos por nome e, se um
+  // nome pedido por texto livre for ambíguo, pedimos ao casal para
+  // esclarecer (ver ambiguousFreeText mais abaixo) em vez de gerar uma
+  // proposta que pareça ter respeitado o pedido sem o ter feito.
+  const guestsByName = new Map();
+  guests.forEach((g) => {
+    const key = g.name.trim().toLowerCase();
+    if (!key) return;
+    if (!guestsByName.has(key)) guestsByName.set(key, []);
+    guestsByName.get(key).push(g);
+  });
   const namesToId = new Map(guests.map((g) => [g.name.trim().toLowerCase(), g.guestId]));
 
   // Valida as constraints vindas do cliente: só ficam guestIds que são
@@ -1410,9 +1428,20 @@ exports.generateSeatingProposal = onCall({ region: 'europe-west1' }, async (requ
     .filter((c) => c.guestIds.length >= 2);
 
   const unresolvedFreeText = [];
+  const ambiguousFreeText = [];
   if (freeText) {
     const interpreted = await interpretSeatingFreeText(freeText, guests.map((g) => g.name).filter(Boolean));
     interpreted.forEach((c) => {
+      const ambiguousNames = c.names.filter((n) => (guestsByName.get(String(n).trim().toLowerCase()) || []).length > 1);
+      if (ambiguousNames.length) {
+        ambiguousNames.forEach((n) => {
+          const key = String(n).trim().toLowerCase();
+          if (ambiguousFreeText.some((a) => a.name.toLowerCase() === key)) return;
+          const options = guestsByName.get(key).map((g) => `${g.catLabel} (lado ${g.side})`);
+          ambiguousFreeText.push({ name: n, options });
+        });
+        return; // não resolve às cegas — o pedido inteiro fica por aplicar até esclarecer
+      }
       const ids = c.names.map((n) => namesToId.get(String(n).trim().toLowerCase())).filter(Boolean);
       const notFound = c.names.filter((n) => !namesToId.has(String(n).trim().toLowerCase()));
       if (notFound.length) unresolvedFreeText.push(...notFound);
@@ -1436,6 +1465,12 @@ exports.generateSeatingProposal = onCall({ region: 'europe-west1' }, async (requ
       warnings: result.warnings,
       explanation,
       unresolvedFreeText: Array.from(new Set(unresolvedFreeText)),
+      // Nomes do texto livre que correspondem a MAIS DE UM convidado
+      // confirmado — a preferência para esse nome não foi aplicada, e o
+      // frontend mostra isto para o casal esclarecer (ex: renomear um dos
+      // dois na lista de convidados, ou definir a preferência manualmente
+      // pelo seletor em vez de por texto livre).
+      ambiguousFreeText,
     },
   };
 });

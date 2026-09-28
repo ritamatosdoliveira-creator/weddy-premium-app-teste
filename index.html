@@ -3386,6 +3386,7 @@ const APP_I18N = {
     pctPreferencesRespectedLabel:'das preferências pedidas foram respeitadas',
     requiredPreferencesNotRespectedLabel:'Preferências obrigatórias não respeitadas',
     aiSeatingUnresolvedFreeTextText:(list)=>`Não encontrei "${list}" na lista de convidados confirmados — essa parte do texto foi ignorada.`,
+    aiSeatingAmbiguousFreeTextText:(list)=>`Tens mais do que um convidado chamado ${list} — essa preferência não foi aplicada. Podes renomear um deles em Convidados (ex: acrescentar o apelido da família) ou defini-la manualmente com os botões "Juntos/Separados/Perto" acima, escolhendo a pessoa certa.`,
     aiSeatingStaleProposalText:'Esta proposta já não corresponde à configuração atual das mesas/convidados (algo mudou entretanto). Gera uma nova proposta antes de aceitar.',
     aiSeatingFailedCountText:(n)=>`${n} preferência(s) não foi(ram) possível respeitar.`,
     btnAcceptProposal:'Aceitar proposta', btnConfirmingEllipsis:'A confirmar…',
@@ -4404,6 +4405,7 @@ const APP_I18N = {
     pctPreferencesRespectedLabel:'of requested preferences were honored',
     requiredPreferencesNotRespectedLabel:'Required preferences not honored',
     aiSeatingUnresolvedFreeTextText:(list)=>`I couldn't find "${list}" among the confirmed guests — that part of the text was ignored.`,
+    aiSeatingAmbiguousFreeTextText:(list)=>`You have more than one guest named ${list} — that preference wasn't applied. You can rename one of them under Guests (e.g. add a family surname) or set it manually with the "Together/Apart/Near" buttons above, picking the right person.`,
     aiSeatingStaleProposalText:"This proposal no longer matches the current tables/guests setup (something changed meanwhile). Generate a new proposal before accepting.",
     aiSeatingFailedCountText:(n)=>`${n} preference(s) could not be honored.`,
     btnAcceptProposal:'Accept proposal', btnConfirmingEllipsis:'Confirming…',
@@ -6673,6 +6675,13 @@ function viewAISeatingProposal(){
   const unresolvedHTML = (p.unresolvedFreeText||[]).length ? `
     <div class="empty-note" style="margin:8px 16px;">${ta('aiSeatingUnresolvedFreeTextText')(p.unresolvedFreeText.map(escapeHTML).join('", "'))}</div>
   ` : '';
+  // Cada nome ambíguo mostra as opções (categoria + lado) para o casal
+  // perceber logo a quem se refere cada um, sem ter de ir procurar.
+  const ambiguousHTML = (p.ambiguousFreeText||[]).length ? p.ambiguousFreeText.map((a)=>{
+    const optionsText = (a.options||[]).map(escapeHTML).join(' / ');
+    const label = `"${escapeHTML(a.name)}" (${optionsText})`;
+    return `<div class="empty-note" style="margin:8px 16px; color:var(--danger,#b3413a);">${ta('aiSeatingAmbiguousFreeTextText')(label)}</div>`;
+  }).join('') : '';
 
   // Checklist ✓/⚠ por preferência pedida, calculado aqui no cliente a
   // partir de p.assignments (mesma lógica TOGETHER/APART/NEAR do
@@ -6712,6 +6721,7 @@ function viewAISeatingProposal(){
   </div>
   <div class="empty-note" style="margin:0 16px 14px;">${escapeHTML(p.explanation||'')}</div>
   ${unresolvedHTML}
+  ${ambiguousHTML}
   ${violationsHTML}
   ${constraintChecklistHTML}
   <div class="section-label" style="margin-top:16px;">${ta('navTablesTitle')}</div>
