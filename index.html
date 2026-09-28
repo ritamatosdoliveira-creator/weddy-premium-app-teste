@@ -1907,6 +1907,7 @@ function whatsappSendErrorMessage(err){
   if(code==='failed-precondition' && reason==='no_token') return ta('waErrNoToken');
   if(code==='not-found') return ta('gpErrNotFound');
   if(code==='unavailable') return ta('waErrUnavailable');
+  if(code==='permission-denied') return ta('waErrNoPremium');
   return ta('waErrGeneric');
 }
 // Mensagens de erro amigáveis (spec §34) — nunca mostra err.message cru
@@ -4144,6 +4145,7 @@ const APP_I18N = {
     waErrNoConsent:'Este convidado ainda não deu consentimento para receber WhatsApp.',
     waErrNoToken:'Este convidado ainda não tem link de RSVP gerado.',
     waErrUnavailable:'Não foi possível contactar o WhatsApp agora. Tenta outra vez daqui a pouco.',
+    waErrNoPremium:'O envio de lembretes por WhatsApp faz parte do Weddy Premium.',
     waErrGeneric:'Não foi possível enviar. Tenta novamente.',
     gcalErrSyncTooSoon:'Acabaste de sincronizar — espera um bocadinho antes de tentar outra vez.',
     gcalErrSyncRunning:'Já há uma sincronização em curso — aguarda que termine.',
@@ -5190,6 +5192,7 @@ const APP_I18N = {
     waErrNoConsent:'This guest hasn\'t consented to receive WhatsApp messages yet.',
     waErrNoToken:'This guest doesn\'t have an RSVP link generated yet.',
     waErrUnavailable:'Couldn\'t reach WhatsApp right now. Try again shortly.',
+    waErrNoPremium:'Sending WhatsApp reminders is a Weddy Premium feature.',
     waErrGeneric:'Couldn\'t send. Try again.',
     gcalErrSyncTooSoon:'You just synced — wait a bit before trying again.',
     gcalErrSyncRunning:'A sync is already running — wait for it to finish.',
@@ -13278,8 +13281,12 @@ function openGuestPhoneSheet(side, cat, idx){
   // quando já há telefone gravado, consentimento dado e link de RSVP
   // gerado (os mesmos 3 requisitos que a Cloud Function volta a validar
   // do lado do servidor). A app nunca envia sozinha — é sempre este clique.
+  // Pedido (Set 2026): cada envio custa dinheiro (API da Meta), por isso
+  // também exige subscrição ativa — só cosmético aqui (esconde o botão),
+  // quem impede mesmo o envio é o assertPremiumWedding() do lado do
+  // servidor (ver sendWhatsappRsvpReminder em functions-deliverable).
   const waBtn = document.getElementById('gp-send-whatsapp');
-  waBtn.style.display = (phoneEl.value.trim() && consentOn && entry.rsvpToken) ? '' : 'none';
+  waBtn.style.display = (phoneEl.value.trim() && consentOn && entry.rsvpToken && hasActiveSubscription()) ? '' : 'none';
   waBtn.disabled = false;
   waBtn.textContent = ta('btnSendWhatsappReminder');
   document.getElementById('guest-phone-sheet').classList.add('show');
