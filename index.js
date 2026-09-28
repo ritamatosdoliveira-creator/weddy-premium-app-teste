@@ -1188,6 +1188,74 @@ async function callOpenAIStructured(prompt, schemaName, schema) {
   }
 }
 
+// Interpretador de reserva por regras simples (sem OpenAI), usado quando a
+// chave não está configurada ou a chamada à API falha por qualquer motivo
+// (rede, quota, erro). NUNCA deve deixar o campo de texto livre completamente
+// mudo — mesmo sem IA, cobre os pedidos mais comuns em português:
+// "separar/não quero X perto de Y" (APART), "X e Y juntos/mesma mesa"
+// (TOGETHER), "X perto de Y" (NEAR), com prioridade opcional
+// (nunca/obrigatório = HARD, se der/se possível = SOFT, resto = STRONG).
+// Só aceita nomes que apareçam literalmente na lista de convidados
+// confirmados — nunca inventa nem adivinha nomes parecidos.
+function interpretSeatingFreeTextByRegex(freeText, guestNames) {
+  const text = String(freeText || '');
+  if (!text.trim() || !Array.isArray(guestNames) || guestNames.length < 2) return [];
+
+  const normalize = (s) => String(s || '')
+    .toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .trim();
+
+  // Nomes mais longos primeiro, para um nome composto ("Ana Sofia Ribeiro")
+  // ser reconhecido antes de um nome mais curto que seja seu prefixo
+  // ("Ana Ribeiro").
+  const uniqueNames = [...new Set(guestNames.filter(Boolean))].sort((a, b) => b.length - a.length);
+  const normalizedNames = uniqueNames.map((n) => ({ name: n, norm: normalize(n) }));
+
+  // Cada frase é tratada como um pedido independente — o próprio placeholder
+  // da app já sugere duas preferências numa frase só ("Quero os meus pais
+  // perto dos padrinhos e não quero o tio António perto do João.").
+  const clauses = text
+    .split(/(?:\.|;|\n)+|,?\s+(?:e|mas)\s+(?=n[aã]o quero|quero|gostava)/i)
+    .map((c) => c.trim())
+    .filter(Boolean);
+
+  const out = [];
+  for (const clause of clauses) {
+    const normClause = normalize(clause);
+    if (!normClause) continue;
+
+    // Nomes mencionados nesta cláusula, por ordem de aparição no texto —
+    // só nomes que aparecem literalmente na lista de convidados.
+    const found = [];
+    for (const { name, norm } of normalizedNames) {
+      if (!norm) continue;
+      const idx = normClause.indexOf(norm);
+      if (idx !== -1 && !found.some((f) => f.name === name)) found.push({ name, idx });
+    }
+    if (found.length < 2) continue;
+    found.sort((a, b) => a.idx - b.idx);
+    const names = [found[0].name, found[1].name];
+
+    let type = null;
+    if (/n[aã]o quero|separad|separar|long[ei] (um|uma)? ?d[eo]|n[aã]o (fica|ficam|sentar)/i.test(clause)) {
+      type = 'APART';
+    } else if (/junt[oa]s?|mesma mesa/i.test(clause)) {
+      type = 'TOGETHER';
+    } else if (/perto/i.test(clause)) {
+      type = 'NEAR';
+    }
+    if (!type) continue;
+
+    let priority = 'STRONG';
+    if (/\bnunca\b|n[aã]o pode|tem de|tem que|obrigat[oó]rio/i.test(clause)) priority = 'HARD';
+    else if (/se der|se poss[ií]vel/i.test(clause)) priority = 'SOFT';
+
+    out.push({ type, priority, names });
+  }
+  return out;
+}
+
 // Interpreta texto livre em constraints por NOME (nunca por guestId — a
 // IA não sabe guestIds, só os nomes que existem nesta lista, que lhe
 // damos explicitamente para ela nunca inventar gente que não existe).
@@ -1222,8 +1290,15 @@ async function interpretSeatingFreeText(freeText, guestNames) {
     `Texto: "${String(freeText).replace(/"/g, '\\"').slice(0, 1000)}"`,
   ].join('\n');
   const parsed = await callOpenAIStructured(prompt, 'weddy_seating_constraints', schema);
-  if (!parsed || !Array.isArray(parsed.constraints)) return [];
-  return parsed.constraints.filter((c) => c && SEATING_TYPES.includes(c.type) && SEATING_PRIORITIES.includes(c.priority) && Array.isArray(c.names) && c.names.length >= 2);
+  if (parsed && Array.isArray(parsed.constraints)) {
+    return parsed.constraints.filter((c) => c && SEATING_TYPES.includes(c.type) && SEATING_PRIORITIES.includes(c.priority) && Array.isArray(c.names) && c.names.length >= 2);
+  }
+  // callOpenAIStructured devolve null sempre que a chave não está
+  // configurada ou a chamada falhou por qualquer razão (nunca por a IA ter
+  // decidido que não há preferências — isso vem como constraints: [], que
+  // já foi tratado acima). Nestes casos, cai para o interpretador por
+  // regras simples em vez de deixar o campo de texto livre sem efeito.
+  return interpretSeatingFreeTextByRegex(freeText, guestNames);
 }
 
 // Gera uma explicação em português do resultado já calculado — nunca lhe
