@@ -56,7 +56,6 @@ body{
   display:flex; flex-direction:column;
   overflow:hidden;
   position:fixed;
-  top:0; left:0;
   /* Corrigido (Set 2026): isto tem de ser o próprio CSS a preencher o ecrã,
      nunca JavaScript a medir "window.innerHeight" e a aplicar esse valor em
      pixels fixos — havia código legado (na função lockOrientation) que fazia
@@ -64,13 +63,19 @@ body{
      window.innerHeight vem sistematicamente mais pequeno do que o ecrã real
      (o iOS subtrai a barra de estado por engano, mesmo ela estando sobreposta
      ao conteúdo e não devendo ocupar espaço nenhum). O resultado era um
-     espaço em branco a aparecer no FUNDO do ecrã, por baixo da tabbar — a
-     app inteira ficava mais curta do que devia. "100dvh" (dynamic viewport
-     height) é a unidade pensada exatamente para isto: segue o tamanho real
-     e atual da área visível do browser, sem os problemas do innerHeight.
-     "100vh" fica como respaldo para browsers muito antigos que não
-     conhecem "dvh" (nesse caso a linha seguinte é ignorada). */
-  width:100vw; height:100vh; height:100dvh;
+     espaço em branco a aparecer no FUNDO do ecrã, por baixo da tabbar.
+     Corrigido outra vez (Set 2026, 2ª ronda): "width:100vw; height:100dvh"
+     ainda deixava esse mesmo espaço voltar a aparecer nalguns iPhones (visto
+     ao vivo — conteúdo de sheets fechadas, como "Mesa X · Lugar Y", a
+     "escapar" por baixo da tabbar), porque calcular largura+altura à parte
+     e esperar que bata certo com o ecrã real é frágil quando o Safari
+     redimensiona a área visível (barra de endereço a esconder/aparecer,
+     modo standalone da app instalada, etc.) — havia uma janela onde o
+     tamanho calculado ficava ligeiramente errado. "inset:0" é a forma
+     robusta de o fazer: em vez de calcular um tamanho, diz ao browser para
+     colar as 4 margens ao ecrã visível, sempre, e o browser trata do resto —
+     não há um "tamanho calculado" que possa ficar desatualizado. */
+  inset:0;
   /* Impede o gesto nativo de "deslizar da margem para voltar" (o que causava
      o ecrã a ficar branco a meio da transição). overscroll-behavior é feito
      especificamente para isto — mais fiável do que só bloquear com JS. */
@@ -1241,7 +1246,7 @@ html{
 .rotate-lock-overlay .rl-title{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:21px; color:var(--heading); margin-bottom:8px; }
 .rotate-lock-overlay .rl-text{ font-size:13px; color:var(--ink-soft); max-width:260px; line-height:1.5; }
 
-/* "Força vertical": aplicada ao <html> pelo JS (updateForcePortrait())
+/* "Força vertical": aplicada ao <body> pelo JS (updateForcePortrait())
    quando o telemóvel está fisicamente na horizontal. Troca a largura
    pela altura (e vice-versa) e roda o conteúdo todo -90°/+90° à volta do
    canto superior esquerdo, para o ecrã continuar a parecer vertical aos
@@ -1249,17 +1254,24 @@ html{
    ser rodado para qualquer um dos dois lados — cada lado precisa de
    rodar no sentido contrário para o conteúdo não ficar de pernas para o
    ar; o JS escolhe a variante certa consoante o ângulo que o telemóvel
-   reporta. O <body> (que normalmente mede 100vw/100dvh do ecrã real, ver
-   a regra do body mais acima) passa a medir 100% do <html> aqui, para
-   encaixar exatamente dentro da caixa já trocada, em vez de voltar a
-   medir o ecrã físico (que ficaria com o tamanho errado). */
-html.force-portrait-a, html.force-portrait-b{
-  width:100vh; height:100vw; overflow:hidden; position:fixed; top:0; left:0;
+   reporta.
+   Corrigido (Set 2026, 2ª ronda): isto rodava o <html> (não o <body>), com
+   o <body> a passar a medir 100% desse <html> já rodado — dois elementos
+   diferentes com "position:fixed" ao mesmo tempo (o <html> aqui, o <body>
+   na regra normal dele). É frágil: basta o Safari escolher o "containing
+   block" errado num repaint (voltar da horizontal, teclado a abrir/fechar,
+   etc.) para o <body> ficar com o tamanho/posição errados — e foi isso que
+   se viu ao vivo (barra de separadores sem responder ao toque depois de
+   voltar à vertical). Agora só o <body> é rodado — já é ele que tem
+   "position:fixed" (ver a regra do body, "inset:0"), por isso ganha as
+   dimensões trocadas diretamente, sem precisar de um segundo elemento
+   "fixed" à volta dele. */
+body.force-portrait-a, body.force-portrait-b{
+  width:100vh; height:100vw; inset:auto; top:0; left:0;
   transform-origin: top left;
 }
-html.force-portrait-a{ transform: rotate(-90deg) translate(-100%, 0); }
-html.force-portrait-b{ transform: rotate(90deg) translate(0, -100%); }
-html.force-portrait-a body, html.force-portrait-b body{ width:100%; height:100%; }
+body.force-portrait-a{ transform: rotate(-90deg) translate(-100%, 0); }
+body.force-portrait-b{ transform: rotate(90deg) translate(0, -100%); }
 
 </style>
 </head>
@@ -16495,8 +16507,10 @@ document.getElementById('payment-alert-popup').addEventListener('click', e=>{
   // funciona dentro de apps nativas), por isso usamos um truque de CSS:
   // quando o telemóvel está de lado, "rodamos" o conteúdo inteiro -90°/
   // +90° para parecer sempre vertical aos olhos da pessoa, por baixo do
-  // deslizar físico do ecrã. A classe aplicada ao <html> (ver CSS
-  // "force-portrait-a"/"force-portrait-b") tem duas variantes porque o
+  // deslizar físico do ecrã. A classe aplicada ao <body> (ver CSS
+  // "force-portrait-a"/"force-portrait-b" — passou a ser o <body>, não o
+  // <html>, numa 2ª correção de Set 2026, para não termos dois elementos
+  // "position:fixed" diferentes a interagir) tem duas variantes porque o
   // telemóvel pode ser rodado para qualquer um dos dois lados, e cada
   // lado precisa de rodar o conteúdo no sentido contrário para ficar
   // direito (senão fica de pernas para o ar). Usamos o ângulo que o
@@ -16504,8 +16518,7 @@ document.getElementById('payment-alert-popup').addEventListener('click', e=>{
   // antigo window.orientation em iOS mais velhos) para escolher a
   // variante certa.
   function updateForcePortrait(){
-    const html = document.documentElement;
-    html.classList.remove('force-portrait-a','force-portrait-b');
+    document.body.classList.remove('force-portrait-a','force-portrait-b');
     if(isDesktopLike()) return;
     const isLandscape = window.innerWidth > window.innerHeight;
     if(!isLandscape || !isTouchDevice()) return;
@@ -16515,7 +16528,7 @@ document.getElementById('payment-alert-popup').addEventListener('click', e=>{
     // angle -90 (ou 270, mesma coisa) é o lado "oposto" ao mais comum
     // (90) — tudo o resto (incluindo não sabermos o ângulo) usa a
     // variante "a" por omissão.
-    html.classList.add((angle===-90||angle===270) ? 'force-portrait-b' : 'force-portrait-a');
+    document.body.classList.add((angle===-90||angle===270) ? 'force-portrait-b' : 'force-portrait-a');
   }
 
   // Estado inicial.
@@ -16525,15 +16538,31 @@ document.getElementById('payment-alert-popup').addEventListener('click', e=>{
   // aparelho) — nunca a pequenas variações de altura causadas pela
   // barra de endereço do browser a aparecer/desaparecer durante o
   // scroll, que não devem mexer no tamanho fixo da app.
+  // Corrigido (Set 2026, 2ª ronda): 60ms era por vezes curto demais — em
+  // alguns iPhones o "orientationchange" dispara antes de
+  // window.innerWidth/innerHeight refletirem o novo layout, e a função
+  // corria com os valores ainda antigos (podia deixar a app presa na
+  // "versão rodada" mesmo já com o telemóvel direito outra vez, o que
+  // explicava a barra de separadores a não responder ao toque). Corre-se
+  // a função duas vezes (150ms e depois 400ms) para apanhar o caso de o
+  // primeiro valor ainda estar errado.
   function onOrientationChange(){
-    setTimeout(function(){
-      updateForcePortrait();
-    }, 60);
+    setTimeout(updateForcePortrait, 150);
+    setTimeout(updateForcePortrait, 400);
   }
   window.addEventListener('orientationchange', onOrientationChange);
   if(screen.orientation && screen.orientation.addEventListener){
     screen.orientation.addEventListener('change', onOrientationChange);
   }
+  // Rede de segurança extra: em alguns iPhones (sobretudo com a app
+  // instalada no ecrã principal, em modo "standalone"), nem
+  // "orientationchange" nem "screen.orientation.change" disparam sempre de
+  // forma fiável. "resize" dispara sempre que o layout muda de verdade
+  // (incluindo ao rodar o ecrã), por isso serve de rede de segurança — sem
+  // risco de reagir ao teclado a abrir/fechar, porque updateForcePortrait()
+  // só faz alguma coisa quando a largura passa a ser maior que a altura
+  // (o que nunca acontece só por causa do teclado).
+  window.addEventListener('resize', onOrientationChange);
 })();
 
 (function detectInAppBrowser(){
