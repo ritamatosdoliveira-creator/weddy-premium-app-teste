@@ -55,9 +55,20 @@ body{
   overflow:hidden;
   position:fixed;
   top:0; left:0;
-  /* O tamanho é definido em pixels fixos por JavaScript, uma única vez, e nunca
-     mais é atualizado — por isso rodar o telemóvel não muda literalmente nada
-     aqui, a app fica exatamente com o mesmo aspeto e tamanho de sempre. */
+  /* Corrigido (Set 2026): isto tem de ser o próprio CSS a preencher o ecrã,
+     nunca JavaScript a medir "window.innerHeight" e a aplicar esse valor em
+     pixels fixos — havia código legado (na função lockOrientation) que fazia
+     exatamente isso, e no iOS, com a barra de estado "black-translucent",
+     window.innerHeight vem sistematicamente mais pequeno do que o ecrã real
+     (o iOS subtrai a barra de estado por engano, mesmo ela estando sobreposta
+     ao conteúdo e não devendo ocupar espaço nenhum). O resultado era um
+     espaço em branco a aparecer no FUNDO do ecrã, por baixo da tabbar — a
+     app inteira ficava mais curta do que devia. "100dvh" (dynamic viewport
+     height) é a unidade pensada exatamente para isto: segue o tamanho real
+     e atual da área visível do browser, sem os problemas do innerHeight.
+     "100vh" fica como respaldo para browsers muito antigos que não
+     conhecem "dvh" (nesse caso a linha seguinte é ignorada). */
+  width:100vw; height:100vh; height:100dvh;
   /* Impede o gesto nativo de "deslizar da margem para voltar" (o que causava
      o ecrã a ficar branco a meio da transição). overscroll-behavior é feito
      especificamente para isto — mais fiável do que só bloquear com JS. */
@@ -16386,10 +16397,14 @@ document.getElementById('payment-alert-popup').addEventListener('click', e=>{
   function isTouchDevice(){
     return ('ontouchstart' in window) || (navigator.maxTouchPoints>0) || (navigator.msMaxTouchPoints>0);
   }
-  function setBodySize(){
-    document.body.style.width = window.innerWidth + 'px';
-    document.body.style.height = window.innerHeight + 'px';
-  }
+  // NOTA (Set 2026): já NÃO fixamos o tamanho da app em pixels via JS
+  // (document.body.style.width/height = window.innerWidth/innerHeight+'px').
+  // Isso foi removido daqui de propósito — era a causa de um espaço em
+  // branco a aparecer no fundo do ecrã, por baixo da tabbar, em alguns
+  // iPhones (ver explicação completa junto à regra CSS do body, mais
+  // acima no ficheiro, sobre "100dvh"). O tamanho da app é controlado
+  // apenas por CSS agora; esta função só decide se o aviso de "rodar o
+  // telemóvel" deve aparecer.
   // Decide, de forma explícita em JS (não só por CSS), se a app deve
   // mostrar o aviso a bloquear o ecrã. Isto garante que a barra de
   // navegação nunca fica visível/tocável por baixo de um layout virado —
@@ -16404,14 +16419,8 @@ document.getElementById('payment-alert-popup').addEventListener('click', e=>{
     document.documentElement.classList.toggle('rotate-blocked', isTouchDevice() && isLandscape);
   }
 
-  // Estado inicial: mede o ecrã e fixa a app nesse tamanho em pixels.
-  setBodySize();
+  // Estado inicial.
   updateRotationLock();
-
-  // PC: a janela pode ser redimensionada de verdade — acompanha.
-  window.addEventListener('resize', function(){
-    if(isDesktopLike()) setBodySize();
-  });
 
   // Telemóvel: só reage a mudanças reais de orientação (rodar o
   // aparelho) — nunca a pequenas variações de altura causadas pela
@@ -16420,9 +16429,6 @@ document.getElementById('payment-alert-popup').addEventListener('click', e=>{
   function onOrientationChange(){
     setTimeout(function(){
       updateRotationLock();
-      if(!isDesktopLike() && window.innerWidth <= window.innerHeight){
-        setBodySize(); // voltou a vertical — reajusta ao ecrã atual
-      }
     }, 60);
   }
   window.addEventListener('orientationchange', onOrientationChange);
