@@ -2116,6 +2116,27 @@ async function startPremiumCheckout(){
   if(!url) throw new Error('no-checkout-url');
   window.location.href = url;
 }
+// Bug reportado pela Rita (Set 2026): ao clicar em "Cancelar" na própria
+// página do Stripe (a seta/link de voltar, não o nosso cancel_url), o
+// Stripe usa o HISTÓRICO do browser para voltar — e o Chrome/Safari
+// muitas vezes restauram a página a partir do bfcache (back-forward
+// cache) em vez de a recarregar. Isso significa que a nossa página volta
+// EXATAMENTE como a deixámos a meio do clique — botão desativado, a
+// dizer "A ativar…" — porque nenhum código nosso chegou a correr (não
+// houve erro nenhum: o redirecionamento para o Stripe funcionou
+// perfeitamente, só nunca se completou o pagamento). O evento "pageshow"
+// com persisted:true é como se deteta que a página voltou do bfcache em
+// vez de carregar de novo — sempre que isso acontece, repomos qualquer
+// botão de subscrever que tenha ficado preso neste estado.
+window.addEventListener('pageshow', (event)=>{
+  if(!event.persisted) return;
+  document.querySelectorAll('#chat-premium-subscribe-btn, .js-premium-subscribe').forEach(btn=>{
+    if(btn.disabled){
+      btn.disabled = false;
+      btn.textContent = ta('btnSubscribePremium');
+    }
+  });
+});
 const WEDDINGS = () => db.collection('weddings');
 const CURRENT_DOC = () => db.collection('weddings').doc(currentWeddingId);
 // Coleção separada dos convites RSVP — nunca contém o casamento inteiro,
