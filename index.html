@@ -16453,8 +16453,19 @@ function proceedIntoExistingWedding(user){
     const status = pendingStripeCheckoutReturn;
     pendingStripeCheckoutReturn = null;
     setTimeout(()=>{
-      if(status==='success') weddyPopupCenter(ta('stripeCheckoutSuccessText'), { icon: '🎉' });
-      else if(status==='cancelled') weddyPopupCenter(ta('stripeCheckoutCancelledText'), { icon: '↩️' });
+      if(status==='success'){
+        // Pedido direto da Rita (Set 2026): depois de fechar esta popup, força
+        // um reload completo da página. Já não é preciso para a subscrição
+        // aparecer ativa em si (isso já é ao vivo via attachFirestoreSync,
+        // ver fix acima) — mas GARANTE que carregamos sempre a versão mais
+        // recente do código/service worker. Sem isto, se o separador tivesse
+        // ficado aberto desde ANTES de uma atualização da app ser publicada,
+        // o browser só troca para o código novo num load seguinte — e nesse
+        // load antigo esta correção podia nem sequer existir ainda.
+        weddyPopupCenter(ta('stripeCheckoutSuccessText'), { icon: '🎉' }).then(()=>{
+          window.location.reload();
+        });
+      } else if(status==='cancelled') weddyPopupCenter(ta('stripeCheckoutCancelledText'), { icon: '↩️' });
     }, 300);
   }
 }
