@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>Política de Privacidade — Weddy</title>
+<style>
+  :root{
+    --cream:#FAF8F5;
+    --ink:#3C332B;
+    --ink-soft:#7A6F63;
+    --accent:#9C6B4E;
+    --card:#fff;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--cream); color:var(--ink);
+    font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Manrope, Arial, sans-serif;
+    line-height:1.6;
+  }
+  .wrap{ max-width:720px; margin:0 auto; padding:40px 20px 80px; }
+  h1{
+    font-family:'Cormorant Garamond', Georgia, serif;
+    font-size:34px; color:var(--accent); margin:0 0 6px;
+  }
+  .updated{ color:var(--ink-soft); font-size:14px; margin-bottom:32px; }
+  h2{
+    font-family:'Cormorant Garamond', Georgia, serif;
+    font-size:22px; color:var(--ink); margin:36px 0 10px;
+    border-bottom:1px solid rgba(60,51,43,0.12); padding-bottom:6px;
+  }
+  p, li{ font-size:15px; color:var(--ink); }
+  ul{ padding-left:20px; }
+  li{ margin-bottom:8px; }
+  .card{
+    background:var(--card); border-radius:16px; padding:18px 20px;
+    margin:16px 0; border:1px solid rgba(60,51,43,0.08);
+  }
+  .fill{
+    background:#fff3cd; color:#7a5c00; padding:2px 6px; border-radius:4px;
+    font-weight:600; font-size:14px;
+  }
+  a{ color:var(--accent); }
+  footer{ margin-top:48px; color:var(--ink-soft); font-size:13px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Política de Privacidade</h1>
+  <div class="updated">Última atualização: 29 de setembro de 2026</div>
+
+  <p>Esta Política de Privacidade explica que dados a aplicação <strong>Weddy</strong> recolhe, para que servem, com quem são partilhados e quais são os teus direitos, em conformidade com o Regulamento Geral sobre a Proteção de Dados (RGPD).</p>
+
+  <h2>1. Quem é o responsável pelo tratamento</h2>
+  <div class="card">
+    <p>
+      <span class="fill">[PREENCHER: nome legal / empresa]</span><br>
+      <span class="fill">[PREENCHER: NIF, se aplicável]</span><br>
+      <span class="fill">[PREENCHER: morada, se aplicável]</span><br>
+      Contacto: <span class="fill">[PREENCHER: email de suporte, ex: suporte@weddy.pt]</span>
+    </p>
+  </div>
+
+  <h2>2. Que dados recolhemos</h2>
+  <p><strong>Conta e autenticação</strong></p>
+  <ul>
+    <li>Email (usado para criar e aceder à tua conta, através do Firebase Authentication). A palavra-passe nunca é vista nem guardada por nós em texto simples — é gerida diretamente pelo Firebase.</li>
+  </ul>
+  <p><strong>Dados do casamento que introduzes na app</strong></p>
+  <ul>
+    <li>Convidados (nomes, categorias, confirmações de presença, restrições alimentares, telefone — quando fornecido)</li>
+    <li>Orçamento, gastos e pagamentos a fornecedores</li>
+    <li>Plano de mesas e lugares</li>
+    <li>Documentos, contratos e fotografias que carregues</li>
+    <li>Tarefas, datas e notas de planeamento</li>
+  </ul>
+  <p><strong>Pagamento da subscrição Weddy Premium</strong></p>
+  <ul>
+    <li>O pagamento é processado inteiramente pela <strong>Stripe</strong>. Nunca vemos, recebemos nem guardamos o número do teu cartão — apenas o resultado (pago/não pago) e um identificador da transação.</li>
+  </ul>
+  <p><strong>Assistente de IA</strong></p>
+  <ul>
+    <li>As perguntas que escreves ao Assistente Weddy são enviadas à OpenAI apenas para identificar do que estás a falar. A resposta em si é sempre gerada com os teus próprios dados guardados na app — nunca enviamos dados de pagamento ou de outros casamentos.</li>
+  </ul>
+  <p><strong>Integração opcional com o Google Calendar</strong></p>
+  <ul>
+    <li>Se decidires ligar o teu Google Calendar, pedimos autorização para aceder apenas aos calendários que escolheres, para criar/atualizar eventos do teu casamento. Podes desligar esta integração a qualquer momento.</li>
+  </ul>
+  <p><strong>WhatsApp (opcional, para convidados)</strong></p>
+  <ul>
+    <li>Se um convidado optar por receber mensagens por WhatsApp, o número de telefone é usado através da WhatsApp Business API (Meta) apenas para esse fim, e só depois de consentimento explícito. Pode ser retirado a qualquer momento.</li>
+  </ul>
+
+  <h2>3. Para que usamos os teus dados</h2>
+  <ul>
+    <li>Disponibilizar e manter o funcionamento da aplicação</li>
+    <li>Processar a subscrição Weddy Premium</li>
+    <li>Responder a pedidos de suporte</li>
+    <li>Cumprir obrigações legais (ex: faturação)</li>
+  </ul>
+  <p>Não vendemos os teus dados a terceiros, nem os usamos para publicidade.</p>
+
+  <h2>4. Com quem partilhamos dados</h2>
+  <p>Usamos os seguintes prestadores de serviços (subprocessadores), cada um com o seu próprio compromisso de proteção de dados:</p>
+  <ul>
+    <li><strong>Google Firebase / Google Cloud</strong> — alojamento da base de dados, autenticação e funções do servidor</li>
+    <li><strong>Stripe</strong> — processamento de pagamentos</li>
+    <li><strong>OpenAI</strong> — classificação de perguntas do Assistente de IA</li>
+    <li><strong>Meta (WhatsApp Business API)</strong> — apenas para convidados que optem por receber mensagens por WhatsApp</li>
+    <li><strong>GitHub Pages</strong> — alojamento do site da aplicação</li>
+  </ul>
+
+  <h2>5. Quanto tempo guardamos os dados</h2>
+  <p>Guardamos os teus dados enquanto a tua conta estiver ativa. Podes eliminar a tua conta e todos os dados associados a qualquer momento, diretamente na aplicação, em Definições → Eliminar a minha conta.</p>
+
+  <h2>6. Os teus direitos</h2>
+  <p>Ao abrigo do RGPD, tens direito a:</p>
+  <ul>
+    <li>Aceder aos dados que temos sobre ti</li>
+    <li>Corrigir dados incorretos</li>
+    <li>Eliminar a tua conta e os teus dados</li>
+    <li>Retirar consentimentos dados anteriormente (ex: WhatsApp, Google Calendar)</li>
+    <li>Apresentar reclamação junto da Comissão Nacional de Proteção de Dados (CNPD), em <a href="https://www.cnpd.pt" target="_blank" rel="noopener">www.cnpd.pt</a></li>
+  </ul>
+  <p>Para exercer estes direitos, contacta-nos através do email indicado no ponto 1.</p>
+
+  <h2>7. Segurança</h2>
+  <p>Os dados são protegidos por regras de acesso ao nível da base de dados (só tu, e quem convidares para o teu casamento, conseguem ver os teus dados), e as chaves de pagamento e de serviços de terceiros nunca ficam expostas no código da aplicação.</p>
+
+  <h2>8. Menores</h2>
+  <p>A Weddy não se destina a menores de 18 anos.</p>
+
+  <h2>9. Alterações a esta política</h2>
+  <p>Podemos atualizar esta política ocasionalmente. A data no topo desta página indica sempre a versão mais recente.</p>
+
+  <footer>Weddy — <span class="fill">[PREENCHER: URL do site, ex: www.weddy.pt]</span></footer>
+</div>
+</body>
+</html>
