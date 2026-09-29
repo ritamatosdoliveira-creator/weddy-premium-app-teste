@@ -3976,8 +3976,10 @@ const APP_I18N = {
     // Rita depois de rever a Política de Privacidade de uma app concorrente
     // como referência ("não mudes absolutamente nada do que já temos, só
     // acrescenta o que faltar"). Nada acima desta linha foi tocado.
+    privacyWhatsappTitle:'Nota sobre o WhatsApp',
+    privacyWhatsappText:'Se ativares para um convidado o envio de lembretes por WhatsApp, usamos o número de telefone que introduzires, com o consentimento explícito desse convidado, exclusivamente para lhe enviar lembretes de confirmação de presença através da API oficial da Meta (WhatsApp Business Platform). O convidado pode retirar o consentimento a qualquer momento, respondendo "PARAR" a qualquer mensagem, ou pedindo-te para removeres o número.',
     privacySubprocessorsTitle:'Com quem partilhamos os teus dados (subcontratantes)',
-    privacySubprocessorsText:'Não vendemos os teus dados nem os cedemos a terceiros para fins de marketing. Para o funcionamento da Weddy, recorremos aos seguintes prestadores, que tratam dados em nosso nome, sob contrato: Firebase / Google Cloud — base de dados, autenticação, armazenamento de ficheiros e as Cloud Functions que processam pedidos como a eliminação de conta; GitHub Pages — alojamento dos ficheiros da aplicação; EmailJS — envio do email que nos chega quando usas "Reporta um problema"; e, apenas se ligares essa funcionalidade, a API do Google Calendar (ver ponto seguinte). Usamos ainda redes de entrega de conteúdo (como a cdnjs e a jsDelivr) só para carregar bibliotecas técnicas do browser (como o gerador de Excel/PDF) — não lhes é enviado nenhum dado teu.',
+    privacySubprocessorsText:'Não vendemos os teus dados nem os cedemos a terceiros para fins de marketing. Para o funcionamento da Weddy, recorremos aos seguintes prestadores, que tratam dados em nosso nome, sob contrato: Firebase / Google Cloud — base de dados, autenticação, armazenamento de ficheiros e as Cloud Functions que processam pedidos como a eliminação de conta; GitHub Pages — alojamento dos ficheiros da aplicação; Stripe — processamento de pagamentos da subscrição Weddy Premium; EmailJS — envio do email que nos chega quando usas "Reporta um problema"; Meta / WhatsApp Business Platform — apenas se ativares lembretes por WhatsApp para um convidado; OpenAI — apenas para ajudar a interpretar perguntas em linguagem livre no Assistente Weddy e no Weddy Concierge, como descrito acima; e, apenas se ligares essa funcionalidade, a API do Google Calendar (ver ponto seguinte). Usamos ainda redes de entrega de conteúdo (como a cdnjs e a jsDelivr) só para carregar bibliotecas técnicas do browser (como o gerador de Excel/PDF) — não lhes é enviado nenhum dado teu.',
     privacyGCalTitle:'Google Calendar e APIs Google',
     privacyGCalText:'Se ligares a tua conta Google em Definições, acedemos ao teu Google Calendar apenas para criar, atualizar e eliminar os eventos que escolheres sincronizar a partir da Agenda — nunca aos restantes eventos do teu calendário. A utilização desta informação respeita a Política de Dados de Utilizador dos Serviços de API Google, incluindo os requisitos de Utilização Limitada (Limited Use). Podes revogar este acesso a qualquer momento em myaccount.google.com/permissions ou desligando a conta em Definições → Google Calendar.',
     privacyIntlTransferTitle:'Transferências internacionais',
@@ -5036,8 +5038,10 @@ const APP_I18N = {
     // after reviewing a competitor app's Privacy Policy as a reference
     // ("don't change anything we already have, just add what's missing").
     // Nothing above this line was touched.
+    privacyWhatsappTitle:'Note on WhatsApp',
+    privacyWhatsappText:'If you turn on WhatsApp reminders for a guest, we use the phone number you enter, with that guest\'s explicit consent, solely to send them RSVP reminders through Meta\'s official API (WhatsApp Business Platform). The guest can withdraw consent at any time by replying "STOP" to any message, or by asking you to remove the number.',
     privacySubprocessorsTitle:'Who we share your data with (sub-processors)',
-    privacySubprocessorsText:'We don\'t sell your data or share it with third parties for marketing purposes. To run Weddy, we rely on the following providers, who process data on our behalf, under contract: Firebase / Google Cloud — database, authentication, file storage, and the Cloud Functions that process requests like account deletion; GitHub Pages — hosting of the app\'s files; EmailJS — sending the email we receive when you use "Report a problem"; and, only if you connect that feature, the Google Calendar API (see next point). We also use content delivery networks (such as cdnjs and jsDelivr) only to load technical browser libraries (like the Excel/PDF generator) — no data of yours is sent to them.',
+    privacySubprocessorsText:'We don\'t sell your data or share it with third parties for marketing purposes. To run Weddy, we rely on the following providers, who process data on our behalf, under contract: Firebase / Google Cloud — database, authentication, file storage, and the Cloud Functions that process requests like account deletion; GitHub Pages — hosting of the app\'s files; Stripe — payment processing for the Weddy Premium subscription; EmailJS — sending the email we receive when you use "Report a problem"; Meta / WhatsApp Business Platform — only if you turn on WhatsApp reminders for a guest; OpenAI — only to help interpret free-text questions in the Weddy Assistant and Weddy Concierge, as described above; and, only if you connect that feature, the Google Calendar API (see next point). We also use content delivery networks (such as cdnjs and jsDelivr) only to load technical browser libraries (like the Excel/PDF generator) — no data of yours is sent to them.',
     privacyGCalTitle:'Google Calendar and Google APIs',
     privacyGCalText:'If you connect your Google account in Settings, we access your Google Calendar only to create, update and delete the events you choose to sync from the Agenda — never your other calendar events. Use of this information complies with the Google API Services User Data Policy, including the Limited Use requirements. You can revoke this access at any time at myaccount.google.com/permissions or by disconnecting the account under Settings → Google Calendar.',
     privacyIntlTransferTitle:'International transfers',
@@ -11421,6 +11425,15 @@ function privacyBodyHtml(){
     de uma app concorrente como referência. As 8 secções abaixo são
     inteiramente novas e escritas de raiz com a arquitetura real da Weddy
     (nunca copiadas) — nada do que já existia foi alterado. -->
+
+    <!-- Fase Publicação nas stores (Set 2026): adicionada nota sobre o
+    WhatsApp e o texto de subcontratantes atualizado com Stripe/OpenAI/
+    WhatsApp, que ainda não constavam aqui (a lista tinha ficado desatualizada
+    desde que essas integrações foram construídas). Mesma regra: só
+    acrescentar, nunca reescrever o que já existia. -->
+    <p><b>${ta('privacyWhatsappTitle')}</b><br>
+    ${ta('privacyWhatsappText')}</p>
+
     <p><b>${ta('privacySubprocessorsTitle')}</b><br>
     ${ta('privacySubprocessorsText')}</p>
 
