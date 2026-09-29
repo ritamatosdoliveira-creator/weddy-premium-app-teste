@@ -15295,6 +15295,42 @@ function weddyAlert(message){
     document.getElementById('weddy-alert-ok').addEventListener('click', finish);
   });
 }
+// Popup centrado no ecrã (Set 2026, pedido direto da Rita para as mensagens
+// de confirmação/cancelamento do Stripe: "deviam ser pop ups no centro da
+// página", em vez da folha que sobe a partir de baixo que o weddyAlert()
+// normal usa). Feito como função à parte em vez de mudar o weddyAlert()
+// global, porque o weddyAlert() é usado por toda a app (avisos de erro,
+// limites, etc.) e mudar o estilo dele mudaria tudo isso também — algo que
+// a Rita não pediu.
+function weddyPopupCenter(message, opts){
+  opts = opts || {};
+  return new Promise(resolve=>{
+    let el = document.getElementById('weddy-popup-center-overlay');
+    if(!el){
+      el = document.createElement('div');
+      el.id = 'weddy-popup-center-overlay';
+      el.style.cssText = 'position:fixed; inset:0; background:rgba(30,26,23,0.55); z-index:10000; display:none; align-items:center; justify-content:center; padding:20px;';
+      document.body.appendChild(el);
+    }
+    const finish = ()=>{
+      el.style.display = 'none';
+      el.innerHTML = '';
+      el.onclick = null;
+      resolve();
+    };
+    const iconHtml = opts.icon ? `<div style="font-size:34px; line-height:1; margin-bottom:12px;">${opts.icon}</div>` : '';
+    el.innerHTML = `
+      <div style="background:var(--card,#fff); width:100%; max-width:340px; border-radius:20px; padding:28px 22px 22px; text-align:center; box-shadow:0 12px 40px rgba(0,0,0,0.25);">
+        ${iconHtml}
+        <div style="font-size:15px; color:var(--ink); line-height:1.45; margin-bottom:20px;">${escapeHTML(message||'')}</div>
+        <button type="button" id="weddy-popup-center-ok" class="login-btn" style="margin-top:0;">${ta('btnOk')}</button>
+      </div>
+    `;
+    el.style.display = 'flex';
+    el.onclick = (e)=>{ if(e.target===el) finish(); };
+    document.getElementById('weddy-popup-center-ok').addEventListener('click', finish);
+  });
+}
 // Delegação global (em vez de religar a cada render) — apanha os links
 // "Política de Privacidade"/"Termos e Condições" tanto no formulário de
 // registo como no ecrã de reconsentimento.
@@ -16322,7 +16358,21 @@ function attachFirestoreSync(){
       if(data.creatorEmail) currentWeddingCreator = data.creatorEmail;
       if(data.lastLoginByEmail) currentLastLogins = data.lastLoginByEmail;
       if(data.uidByEmail) currentUidByEmail = data.uidByEmail;
-      if(data.subscription !== undefined) currentSubscription = data.subscription;
+      // Fix (Set 2026, pedido da Rita: "a ativação deveria ficar imediatamente"):
+      // esta linha só atualizava a variável currentSubscription, mas nunca
+      // marcava changed=true — e é só "changed" que decide, mais abaixo, se
+      // vale a pena voltar a desenhar o ecrã (_origRender()). Como o webhook
+      // do Stripe escreve subscription.active DIRETAMENTE (não mexe em
+      // data.json), esse "changed" continuava false, e a app só mostrava a
+      // subscrição ativa na próxima vez que ALGUMA outra coisa disparasse um
+      // render (ex: mudar de página) — daí a sensação de atraso. Agora
+      // qualquer alteração real a subscription força logo o re-render.
+      if(data.subscription !== undefined){
+        if(JSON.stringify(data.subscription) !== JSON.stringify(currentSubscription)){
+          currentSubscription = data.subscription;
+          changed = true;
+        }
+      }
       if(data.lastAutoSnapshotAt !== undefined) currentLastAutoSnapshotAt = data.lastAutoSnapshotAt;
       // Pedido (Set 2026): a conversa do Assistente já NÃO deve continuar de
       // onde ficou ao reabrir a app ou trocar de sessão — por isso deixámos
@@ -16403,8 +16453,8 @@ function proceedIntoExistingWedding(user){
     const status = pendingStripeCheckoutReturn;
     pendingStripeCheckoutReturn = null;
     setTimeout(()=>{
-      if(status==='success') weddyAlert(ta('stripeCheckoutSuccessText'));
-      else if(status==='cancelled') weddyAlert(ta('stripeCheckoutCancelledText'));
+      if(status==='success') weddyPopupCenter(ta('stripeCheckoutSuccessText'), { icon: '🎉' });
+      else if(status==='cancelled') weddyPopupCenter(ta('stripeCheckoutCancelledText'), { icon: '↩️' });
     }, 300);
   }
 }
