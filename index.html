@@ -16809,6 +16809,20 @@ if(FIREBASE_READY){
 window.flushPendingSave = flushPendingSave;
 window.closeAllSheets = closeAllSheets;
 
+// App nativa (Capacitor, iOS/Android): reserva corretamente o espaço da
+// barra de estado / entalhe, para páginas que a nossa própria CSS não cobre
+// (ex.: o Checkout do Stripe, que é uma página deles, carregada dentro da
+// mesma WebView — ver allowNavigation no capacitor.config.json). Usamos o
+// plugin StatusBar (setOverlaysWebView) em vez do "contentInset" da própria
+// WebView porque o contentInset "automatic" partia o teclado dos campos de
+// texto em toda a app (bug reportado pela Rita, Set 2026).
+if(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()){
+  try{
+    const StatusBar = window.Capacitor.Plugins && window.Capacitor.Plugins.StatusBar;
+    if(StatusBar && StatusBar.setOverlaysWebView) StatusBar.setOverlaysWebView({ overlay:false });
+  }catch(e){}
+}
+
 })();
 
 if('serviceWorker' in navigator){
