@@ -1802,6 +1802,26 @@ let pendingGoogleCalendarReturn = null;
     window.history.replaceState({}, '', clean);
   }
 })();
+
+// Fase Pagamentos (Set 2026) — o browser volta aqui depois do Checkout do
+// Stripe (sucesso ou cancelado). Quem ATIVA a subscrição a sério é sempre
+// o webhook do Stripe (stripeWebhook, na Cloud Function), nunca este
+// regresso — isto é só para mostrar a mensagem certa à pessoa. Como o
+// Firestore já está a ser ouvido em tempo real (onSnapshot), assim que o
+// webhook gravar "active:true" a app atualiza-se sozinha, sem precisar de
+// refresh. Mesmo padrão de leitura/limpeza do URL que o Google Calendar
+// acima já usa.
+let pendingStripeCheckoutReturn = null;
+(function(){
+  const params = new URLSearchParams(window.location.search);
+  const status = params.get('weddyCheckout');
+  if(status){
+    pendingStripeCheckoutReturn = status; // 'success' | 'cancelled'
+    params.delete('weddyCheckout');
+    const clean = window.location.pathname + (params.toString()? '?'+params.toString():'') + window.location.hash;
+    window.history.replaceState({}, '', clean);
+  }
+})();
 // ============================================================
 // AI SERVICE (Fase 3B.1) — única porta de entrada para qualquer chamada a
 // um modelo de IA real em toda a app. Não sabe qual fornecedor está por
@@ -2060,11 +2080,13 @@ function hasActiveSubscription(){
   expiry.setMonth(expiry.getMonth() + SUBSCRIPTION_MAX_MONTHS);
   return new Date() < expiry;
 }
-// Ponto único que monta o payload de ativação — usado pelos 2 botões
-// "Subscrever" (janela do Assistente e página de upsell). "startedAt" só é
-// definido a primeira vez (nunca é reposto num cancelar+reativar), para o
-// limite de 24 meses acima ser mesmo um limite, não um relógio que qualquer
-// pessoa pode reiniciar à vontade.
+// Fase Pagamentos (Set 2026): isto era o que os botões "Subscrever"
+// chamavam quando ativar a subscrição era só um protótipo — escrevia
+// "active:true" diretamente no Firestore, sem nenhum pagamento a sério
+// por trás. Já não é chamado por nenhum botão (ver startPremiumCheckout,
+// logo a seguir); fica só como referência do formato do campo
+// "subscription", que o webhook do Stripe (stripeWebhook, na Cloud
+// Function) agora escreve com a mesma forma.
 function buildSubscriptionActivatePayload(){
   const existingStartedAt = (currentSubscription && currentSubscription.startedAt) || new Date().toISOString();
   return {
@@ -2073,6 +2095,26 @@ function buildSubscriptionActivatePayload(){
     startedAt: existingStartedAt,
     updatedAt: firebase.firestore.FieldValue.serverTimestamp()
   };
+}
+// Ponto único chamado pelos 2 botões "Subscrever" (janela do Assistente e
+// página de upsell). Já não escreve nada no Firestore diretamente — só a
+// Cloud Function stripeWebhook pode marcar "active:true" (ver
+// subscription-logic.js), porque só ela sabe que o pagamento foi mesmo
+// recebido. Aqui só pedimos à Cloud Function createSubscriptionCheckout
+// uma sessão de Checkout do Stripe e levamos a pessoa até lá; o weddingId
+// nunca é enviado por nós — a função deriva-o sempre da sessão (ver
+// resolveWeddingId no index.js), tal como todas as outras chamadas.
+// returnUrl é o URL exato para onde o Stripe deve trazer a pessoa de
+// volta depois de pagar (ou cancelar) — a própria página atual, sem
+// parâmetros antigos, para o Stripe poder acrescentar "?weddyCheckout=…".
+async function startPremiumCheckout(){
+  if(!cloudFunctions) throw new Error('cloud-functions-unavailable');
+  const returnUrl = window.location.origin + window.location.pathname;
+  const call = cloudFunctions.httpsCallable('createSubscriptionCheckout');
+  const res = await call({ returnUrl });
+  const url = res && res.data && res.data.url;
+  if(!url) throw new Error('no-checkout-url');
+  window.location.href = url;
 }
 const WEDDINGS = () => db.collection('weddings');
 const CURRENT_DOC = () => db.collection('weddings').doc(currentWeddingId);
@@ -3749,6 +3791,9 @@ const APP_I18N = {
     alertSaveError:'Não foi possível guardar. Tenta novamente.',
     alertNoConnectionRetry:'Sem ligação — tenta novamente.',
     alertSubscriptionActivateError:'Não foi possível ativar a subscrição. Tenta novamente.',
+    stripeCheckoutSuccessText:'Pagamento recebido! A tua subscrição Weddy Premium fica ativa em poucos instantes — não precisas de fazer mais nada.',
+    stripeCheckoutCancelledText:'Pagamento cancelado — não te foi cobrado nada. Podes tentar subscrever outra vez quando quiseres.',
+    alertCheckoutStartError:'Não foi possível iniciar o pagamento. Verifica a ligação e tenta novamente.',
     confirmDeleteVisit:'Eliminar esta visita?',
     confirmDeleteTodoCategory: title=>`Eliminar "${title}"? Os itens lá dentro perdem-se.`,
     confirmDeleteHoneymoonOption:'Eliminar esta hipótese de lua-de-mel?',
@@ -4806,6 +4851,9 @@ const APP_I18N = {
     alertSaveError:'Could not save. Please try again.',
     alertNoConnectionRetry:'No connection — please try again.',
     alertSubscriptionActivateError:'Could not activate the subscription. Please try again.',
+    stripeCheckoutSuccessText:'Payment received! Your Weddy Premium subscription will be active in a few moments — nothing else to do.',
+    stripeCheckoutCancelledText:'Payment cancelled — you were not charged. You can try subscribing again anytime.',
+    alertCheckoutStartError:'Could not start the payment. Check your connection and try again.',
     confirmDeleteVisit:'Delete this visit?',
     confirmDeleteTodoCategory: title=>`Delete "${title}"? The items inside will be lost.`,
     confirmDeleteHoneymoonOption:'Delete this honeymoon option?',
@@ -10831,18 +10879,15 @@ function bindChatPanelHandlers(){
     if(!FIREBASE_READY || !currentWeddingId){ weddyAlert(ta('alertNoConnectionRetry')); return; }
     subscribeBtn.disabled = true;
     subscribeBtn.textContent = ta('btnActivatingEllipsis');
-    const payload = buildSubscriptionActivatePayload();
-    CURRENT_DOC().update({
-      subscription: payload
-    }).then(()=>{
-      currentSubscription = payload;
-      renderChatPanelBody();
-      updateChatFab();
-    }).catch(err=>{
-      console.error('Weddy subscribe error:', err.code, err.message);
+    // Fase Pagamentos (Set 2026): já não ativa nada diretamente — leva a
+    // pessoa ao Checkout do Stripe (ver startPremiumCheckout). Se correr
+    // bem, o próprio window.location.href muda de página, por isso não
+    // há um "then" de sucesso aqui para repor o botão.
+    startPremiumCheckout().catch(err=>{
+      console.error('Weddy subscribe checkout error:', err && err.message);
       subscribeBtn.disabled = false;
       subscribeBtn.textContent = ta('btnSubscribePremium');
-      weddyAlert(ta('alertSubscriptionActivateError'));
+      weddyAlert(ta('alertCheckoutStartError'));
     });
   });
   const assistInput = document.getElementById('assist-chat-input');
@@ -11679,17 +11724,14 @@ function bindHandlers(){
       if(!FIREBASE_READY || !currentWeddingId){ weddyAlert(ta('alertNoConnectionRetry')); return; }
       subscribeBtn.disabled = true;
       subscribeBtn.textContent = ta('btnActivatingEllipsis');
-      const payload = buildSubscriptionActivatePayload();
-      CURRENT_DOC().update({
-        subscription: payload
-      }).then(()=>{
-        currentSubscription = payload;
-        _origRender();
-      }).catch(err=>{
-        console.error('Weddy subscribe error:', err.code, err.message);
+      // Fase Pagamentos (Set 2026): idem ao botão do Assistente (ver
+      // bindChatPanelHandlers) — leva a pessoa ao Checkout do Stripe em
+      // vez de ativar diretamente.
+      startPremiumCheckout().catch(err=>{
+        console.error('Weddy subscribe checkout error:', err && err.message);
         subscribeBtn.disabled = false;
         subscribeBtn.textContent = ta('btnSubscribePremium');
-        weddyAlert(ta('alertSubscriptionActivateError'));
+        weddyAlert(ta('alertCheckoutStartError'));
       });
     });
   });
@@ -16329,6 +16371,20 @@ function proceedIntoExistingWedding(user){
     else googleCalendarActionMsg = { type:'error', text: ta('googleCalendarOAuthError') };
     pendingGoogleCalendarReturn = null;
     googleCalendarIntegration = null; // força recarregar do zero
+  }
+  // Fase Pagamentos (Set 2026) — se acabámos de voltar do Checkout do
+  // Stripe. Não ativamos nada aqui (isso é só o webhook, ver
+  // stripeWebhook) — só avisamos a pessoa. Se foi sucesso, o onSnapshot
+  // já em curso (attachFirestoreSync, chamado mesmo acima) atualiza
+  // currentSubscription sozinho assim que o webhook gravar, por isso não
+  // é preciso reler nada aqui à força.
+  if(pendingStripeCheckoutReturn){
+    const status = pendingStripeCheckoutReturn;
+    pendingStripeCheckoutReturn = null;
+    setTimeout(()=>{
+      if(status==='success') weddyAlert(ta('stripeCheckoutSuccessText'));
+      else if(status==='cancelled') weddyAlert(ta('stripeCheckoutCancelledText'));
+    }, 300);
   }
 }
 // Fase Consentimento (Set 2026): ecrã "Antes de continuares" — mostrado a
