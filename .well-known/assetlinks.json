@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "pt.weddy.app",
+      "sha256_cert_fingerprints": [
+        "3F:28:5B:39:81:39:84:F4:68:38:01:29:DD:9E:75:6D:AB:60:FE:BE:CC:20:B0:86:DE:3C:62:1E:3D:39:25:32"
+      ]
+    }
+  }
+]
