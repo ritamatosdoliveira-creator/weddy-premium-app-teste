@@ -245,7 +245,22 @@ html{
 .premium-hub-badge svg{ width:12px; height:12px; }
 .premium-hub-header-chev{ flex-shrink:0; color:var(--ink-soft); opacity:.6; }
 .premium-hub-grid{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:9px; }
-.premium-hub-tile{ all:unset; box-sizing:border-box; position:relative; display:block; background:rgba(255,255,255,0.55); border-radius:16px; padding:12px 10px; cursor:pointer; overflow:hidden; min-height:96px; }
+/* Correção (Set 2026, achado "Estes 3 continuam mal" — depois de já ter
+   corrigido a altura do título e o enquadramento dos ícones, 3 dos 6
+   azulejos SEMPRE ficavam com o ícone/título mais para baixo do que os
+   outros 3, mesmo com o mesmo CSS e o mesmo HTML. Causa raiz real,
+   confirmada ao vivo medindo os elementos no browser: este azulejo é um
+   <button>, e o Chrome centra verticalmente o conteúdo de um <button>
+   sempre que a sua altura (aqui esticada pela grelha para igualar a
+   linha mais alta) é maior do que a altura natural do próprio conteúdo —
+   mesmo com "display:block" no CSS do autor. Como cada azulejo tem uma
+   descrição de comprimento ligeiramente diferente, a "altura natural" do
+   conteúdo também difere, por isso cada um ficava centrado com um
+   deslocamento diferente. "display:block" nunca resolvia isto porque a
+   centragem é um comportamento interno do <button>, não do "display"
+   pedido. A correção é forçar explicitamente flex-column com
+   justify-content:flex-start, que sobrepõe essa centragem interna. */
+.premium-hub-tile{ all:unset; box-sizing:border-box; position:relative; display:flex; flex-direction:column; align-items:stretch; justify-content:flex-start; background:rgba(255,255,255,0.55); border-radius:16px; padding:12px 10px; cursor:pointer; overflow:hidden; min-height:96px; }
 .premium-hub-tile:active{ opacity:.8; }
 .premium-hub-tile-top{ display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
 .premium-hub-tile-icon{ width:26px; height:26px; color:var(--rust-dark); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
