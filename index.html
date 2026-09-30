@@ -8108,15 +8108,30 @@ const RSVP_BASE_URL = 'https://ritamatosdoliveira-creator.github.io/weddy-premiu
 // Intent para a app do WhatsApp (scheme=whatsapp;package=com.whatsapp) —
 // isto é tratado pelo próprio Chrome como uma troca de app nativa, não
 // como uma nova página. Só cai para o link https://wa.me normal (via
-// browser_fallback_url) se o WhatsApp não estiver instalado. No iOS/
-// desktop mantemos o link normal, que já não tem este problema.
+// browser_fallback_url) se o WhatsApp não estiver instalado.
+//
+// A Rita confirmou que está a testar em iOS, não Android — e a app da
+// Weddy no iPhone é instalada no ecrã principal ("Adicionar ao ecrã
+// principal"), o que corre em modo "standalone". Nesse modo, o iOS abre
+// QUALQUER link https dentro de um mini-browser embutido por cima da app
+// (o ecrã com o "X" no canto — é essa a "página em branco" presa); os
+// Universal Links (que fariam o wa.me saltar sozinho para a app do
+// WhatsApp) não funcionam a partir de dentro desse mini-browser, só a
+// partir do Safari a sério. A solução é usar o esquema próprio da app,
+// whatsapp://, em vez de https://wa.me — um esquema não-http não passa
+// por esse mini-browser: o iOS entrega-o diretamente à app do WhatsApp,
+// tal como já acontece com "tel:" ou "mailto:".
 function openWhatsAppLink(digits, texto){
   const encoded = encodeURIComponent(texto);
   const waUrl = `https://wa.me/${digits}?text=${encoded}`;
-  const isAndroid = /Android/i.test(navigator.userAgent);
+  const ua = navigator.userAgent;
+  const isAndroid = /Android/i.test(ua);
+  const isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1);
   if(isAndroid){
     const fallback = encodeURIComponent(waUrl);
     window.location.href = `intent://send?phone=${digits}&text=${encoded}#Intent;scheme=whatsapp;package=com.whatsapp;S.browser_fallback_url=${fallback};end`;
+  } else if(isIOS){
+    window.location.href = `whatsapp://send?phone=${digits}&text=${encoded}`;
   } else {
     window.location.href = waUrl;
   }
