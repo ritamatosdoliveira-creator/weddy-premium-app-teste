@@ -9669,13 +9669,20 @@ function classifyCopilotIntent(pergunta, context){
     || /quanto\s+custa\s+(o|a)\s+/.test(p)
     || /pr[oó]ximo pagamento\s+(do|da|de)\s+/.test(p)
     || /valor (do|da) (contrato|fornecedor)/.test(p)
-    || /still (need|have) to pay\s+(the\s+)?\w/.test(p)
-    || /how much (have (we|i) paid|did (we|i) pay)\s+(the\s+)?\w/.test(p)
-    || /(have|has) (we|i) paid\s+(the\s+)?\w/.test(p)
-    || /payments? (i|we)('ve| have) made to\s+(the\s+)?\w/.test(p)
-    || /how much does\s+(the\s+)?\w+\s+cost/.test(p)
-    || /next payment (for|to)\s+(the\s+)?\w/.test(p)
-    || /contract value (for|of)\s+(the\s+)?\w/.test(p)
+    // Nota (correção ao vivo, Set 2026): as versões iniciais destes padrões em
+    // inglês usavam "(the\s+)?\w" (artigo opcional) e por isso bastava
+    // qualquer palavra a seguir — "how much have we paid so far?" batia aqui
+    // por engano (via "paid" + "so"), roubando a pergunta à intent genérica
+    // GET_REMAINING_PAYMENTS. Corrigido para exigir sempre "to/for the X" ou
+    // "the X", tal como o original em português exige sempre uma preposição
+    // (ao|à|a|para) antes do alvo — nunca dispara sem um alvo nomeado a seguir.
+    || /still (need|have) to pay\s+(to|for)?\s*the\s+\w/.test(p)
+    || /how much (have (we|i) paid|did (we|i) pay)\s+(to|for)\s+the\s+\w/.test(p)
+    || /(have|has) (we|i) paid\s+the\s+\w/.test(p)
+    || /payments? (i|we)('ve| have) made to\s+the\s+\w/.test(p)
+    || /how much does\s+the\s+\w+\s+cost/.test(p)
+    || /next payment (for|to)\s+the\s+\w/.test(p)
+    || /contract value (for|of)\s+the\s+\w/.test(p)
   ){
     return { intent: WEDDY_COPILOT_INTENTS.GET_SUPPLIER_PAYMENT_INFO };
   }
@@ -9703,7 +9710,7 @@ function classifyCopilotIntent(pergunta, context){
     (/fornecedor/.test(p) && /(n[aã]o est[aã]o contratad|por contratar|ainda n[aã]o contratei|falta(m)?\s+contratar|sem contrat)/.test(p))
     || /falta(m)?\s+contratar\s+(o|a)\s+\w/.test(p)
     || (/supplier/.test(p) && /(not (yet )?(hired|booked|contracted)|still need to (hire|book)|haven'?t (hired|booked))/.test(p))
-    || /still need to (hire|book)\s+(the\s+)?\w/.test(p)
+    || /still need to (hire|book)\s+the\s+\w/.test(p)
   ){
     return { intent: WEDDY_COPILOT_INTENTS.GET_UNCONTRACTED_SUPPLIERS };
   }
