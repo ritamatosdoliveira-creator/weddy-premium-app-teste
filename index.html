@@ -1021,7 +1021,16 @@ html{
 .timeline-card{ margin:0 0 18px; overflow:hidden; }
 .timeline-scroll{ display:flex; overflow-x:auto; padding:6px calc(16px + 62px) 4px 16px; min-width:0; -webkit-overflow-scrolling:touch; }
 .timeline-scroll::-webkit-scrollbar{ display:none; }
-.timeline-item{ flex:0 0 108px; display:flex; flex-direction:column; align-items:center; position:relative; }
+/* Correção (Set 2026, achado "este espaçamento"): os itens ficavam
+   encostados uns aos outros sem nenhum respiro entre os textos — não dava
+   para simplesmente adicionar "gap" entre eles, porque a linha ondulada
+   que os liga (::before, logo abaixo) assume que cada item ocupa a
+   largura TOTAL até ao seguinte, sem espaço nenhum, para a onda parecer
+   contínua. A solução é dar o respiro por DENTRO de cada item (padding
+   lateral + border-box), o que estreita só a zona onde o texto pode
+   escrever, sem tocar na largura total do item nem na posição da linha/
+   bolinha — a onda continua perfeita, só o texto ganha uma margem.  */
+.timeline-item{ flex:0 0 108px; box-sizing:border-box; padding:0 7px; display:flex; flex-direction:column; align-items:center; position:relative; }
 .timeline-item::before{ content:''; position:absolute; left:0; right:0; top:21px; height:14px; z-index:1; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='36' height='14' viewBox='0 0 36 14'%3E%3Cpath d='M0,7 Q9,1 18,7 T36,7' stroke='%23C9A480' stroke-width='1.1' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat:repeat-x; background-size:36px 14px; opacity:.85; }
 .timeline-item:first-child::before{ left:50%; }
 .timeline-item:last-child::before{ right:50%; }
