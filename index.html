@@ -2129,17 +2129,19 @@ let currentLastAutoSnapshotAt = null;
 // subscrição ativa — este campo vem do documento do casamento
 // (data.subscription), capturado em attachFirestoreSync().
 //
-// Pedido direto da Rita (Fase 4): a subscrição só deve durar 24 meses a
-// partir do INÍCIO dela, para não ficar reutilizável indefinidamente entre
-// pessoas diferentes (comprar uma vez e "passar a conta" para sempre). Como
-// ainda não há um Cloud Scheduler a desativar subscrições automaticamente
-// ao fim desse prazo, o limite é aplicado aqui, no próprio cliente: mesmo
-// que o Firestore continue a dizer "active:true", se já passaram mais de 24
-// meses desde "startedAt", a subscrição deixa de contar como ativa. Contas
-// de teste/antigas sem "startedAt" (criadas antes desta correção) NÃO são
-// retroativamente bloqueadas — ficam válidas como sempre estiveram, para
-// não quebrar contas que já tinham acesso.
-const SUBSCRIPTION_MAX_MONTHS = 24;
+// Pedido direto da Rita (Fase 4; duração alterada de 24 para 12 meses a
+// pedido dela em Set 2026): a subscrição só deve durar SUBSCRIPTION_MAX_MONTHS
+// meses a partir do INÍCIO dela, para não ficar reutilizável indefinidamente
+// entre pessoas diferentes (comprar uma vez e "passar a conta" para sempre).
+// Como ainda não há um Cloud Scheduler a desativar subscrições
+// automaticamente ao fim desse prazo, o limite é aplicado aqui, no próprio
+// cliente: mesmo que o Firestore continue a dizer "active:true", se já
+// passaram mais meses do que este limite desde "startedAt", a subscrição
+// deixa de contar como ativa. Contas de teste/antigas sem "startedAt"
+// (criadas antes desta correção) NÃO são retroativamente bloqueadas — ficam
+// válidas como sempre estiveram, para não quebrar contas que já tinham
+// acesso.
+const SUBSCRIPTION_MAX_MONTHS = 12;
 function hasActiveSubscription(){
   if(!currentSubscription || !currentSubscription.active) return false;
   const startedAt = currentSubscription.startedAt;
@@ -3403,7 +3405,7 @@ const APP_I18N = {
     subscriptionActiveBadge:'Ativo',
     subscriptionFeatureGuests:'Convidados ilimitados', subscriptionFeatureAISeating:'AI Seating', subscriptionFeatureWeddingHealth:'Wedding Health',
     subscriptionFeatureMemories:'Memórias', subscriptionFeatureRSVP:'RSVP avançado', subscriptionFeatureMore:'E muito mais…',
-    subscriptionCurrentPlanLabel:'Plano atual', subscriptionDefaultPlanName:'Premium — 24 meses', subscriptionPriceText:'22,99€ / 24 meses',
+    subscriptionCurrentPlanLabel:'Plano atual', subscriptionDefaultPlanName:'Premium — 12 meses', subscriptionPriceText:'22,99€ / 12 meses',
     subscriptionRenewsOnLabel:(d)=>`Renova a ${d}`,
     subscriptionNeedHelpTitle:'Precisas de ajuda?', subscriptionNeedHelpDesc:'Fala com a nossa equipa de suporte.',
     confirmCancelSubscriptionText:'Isto cancela já a subscrição Weddy Premium — todas as funcionalidades Premium (RSVP, Wedding Health, Memórias, Documentos, Google Calendar, Assistente) ficam bloqueadas de imediato. Confirmas?',
@@ -4096,7 +4098,7 @@ const APP_I18N = {
     termsAccountTitle:'3. A tua conta',
     termsAccountText:'És responsável por manteres a password da tua conta em segurança e por tudo o que acontece através dela. O registo exige a confirmação do teu email através de um link de verificação. Podes convidar outras pessoas (por exemplo, o teu par) a aceder ao mesmo casamento, em "Segurança" — cada uma passa a ter acesso total aos dados desse casamento.',
     termsSubscriptionTitle:'4. Weddy Premium e pagamentos',
-    termsSubscriptionText:'Algumas funcionalidades fazem parte do plano Weddy Premium, com um período de acesso de 24 meses a partir da data de ativação. Os detalhes exatos — funcionalidades incluídas, duração e preço — são sempre mostrados dentro da app antes de subscreveres, e podem ser revistos ao longo do tempo, sem efeito retroativo sobre períodos já pagos. Podes cancelar a subscrição a qualquer momento em Definições — o acesso Premium mantém-se até ao fim do período já pago. Nota: à data destes termos, a Weddy ainda não tem nenhum meio de pagamento real ligado — esta secção descreve como o plano vai funcionar quando isso acontecer.',
+    termsSubscriptionText:'Algumas funcionalidades fazem parte do plano Weddy Premium, com um período de acesso de 12 meses a partir da data de ativação. Os detalhes exatos — funcionalidades incluídas, duração e preço — são sempre mostrados dentro da app antes de subscreveres, e podem ser revistos ao longo do tempo, sem efeito retroativo sobre períodos já pagos. Podes cancelar a subscrição a qualquer momento em Definições — o acesso Premium mantém-se até ao fim do período já pago. Nota: à data destes termos, a Weddy ainda não tem nenhum meio de pagamento real ligado — esta secção descreve como o plano vai funcionar quando isso acontecer.',
     termsWithdrawalTitle:'5. Direito de livre resolução',
     termsWithdrawalText:'Quando existirem pagamentos reais, e enquanto consumidor, terás um prazo de 14 dias para resolver a compra sem indicar motivo (Decreto-Lei n.º 24/2014). Como o acesso Premium é ativado de imediato, ao concluíres a compra vais poder pedir esse acesso imediato — sendo um conteúdo digital fornecido de imediato com o teu consentimento expresso, isso faz cessar o direito de livre resolução assim que o acesso for ativado, tal como a lei prevê.',
     termsContentTitle:'6. O teu conteúdo',
@@ -4512,7 +4514,7 @@ const APP_I18N = {
     subscriptionActiveBadge:'Active',
     subscriptionFeatureGuests:'Unlimited guests', subscriptionFeatureAISeating:'AI Seating', subscriptionFeatureWeddingHealth:'Wedding Health',
     subscriptionFeatureMemories:'Memories', subscriptionFeatureRSVP:'Advanced RSVP', subscriptionFeatureMore:'And much more…',
-    subscriptionCurrentPlanLabel:'Current plan', subscriptionDefaultPlanName:'Premium — 24 months', subscriptionPriceText:'€22.99 / 24 months',
+    subscriptionCurrentPlanLabel:'Current plan', subscriptionDefaultPlanName:'Premium — 12 months', subscriptionPriceText:'€22.99 / 12 months',
     subscriptionRenewsOnLabel:(d)=>`Renews on ${d}`,
     subscriptionNeedHelpTitle:'Need help?', subscriptionNeedHelpDesc:'Get in touch with our support team.',
     confirmCancelSubscriptionText:'This cancels your Weddy Premium subscription right away — every Premium feature (RSVP, Wedding Health, Memories, Documents, Google Calendar, Assistant) is locked immediately. Confirm?',
@@ -5190,7 +5192,7 @@ const APP_I18N = {
     termsAccountTitle:'3. Your account',
     termsAccountText:'You are responsible for keeping your account password secure and for everything that happens through it. Signing up requires confirming your email through a verification link. You can invite other people (for example, your partner) to access the same wedding, under "Security" — each one gets full access to that wedding\'s data.',
     termsSubscriptionTitle:'4. Weddy Premium and payments',
-    termsSubscriptionText:'Some features are part of the Weddy Premium plan, with a 24-month access period from the activation date. The exact details — features included, duration and price — are always shown inside the app before you subscribe, and may be revised over time, with no retroactive effect on periods already paid for. You can cancel your subscription at any time in Settings — Premium access stays active until the end of the period already paid for. Note: as of these terms, Weddy does not yet have any real payment method connected — this section describes how the plan will work once that happens.',
+    termsSubscriptionText:'Some features are part of the Weddy Premium plan, with a 12-month access period from the activation date. The exact details — features included, duration and price — are always shown inside the app before you subscribe, and may be revised over time, with no retroactive effect on periods already paid for. You can cancel your subscription at any time in Settings — Premium access stays active until the end of the period already paid for. Note: as of these terms, Weddy does not yet have any real payment method connected — this section describes how the plan will work once that happens.',
     termsWithdrawalTitle:'5. Right of withdrawal',
     termsWithdrawalText:'Once real payments exist, and as a consumer, you will have a 14-day period to withdraw from the purchase without giving a reason (Decree-Law no. 24/2014, Portugal). Since Premium access is activated immediately, completing the purchase will let you request that immediate access — being digital content supplied immediately with your express consent, this ends the right of withdrawal as soon as access is activated, as the law provides.',
     termsContentTitle:'6. Your content',
@@ -11319,7 +11321,7 @@ function viewDefSubscricao(){
   const plan = (currentSubscription && currentSubscription.plan) || ta('subscriptionDefaultPlanName');
   // Pedido direto da Rita (Fase 4, e reestruturação visual pedida em Set
   // 2026 para ficar igual ao mock "Manage subscription"): mostrar a
-  // data-limite dos 24 meses (SUBSCRIPTION_MAX_MONTHS) como um selo "Renova
+  // data-limite (SUBSCRIPTION_MAX_MONTHS, 12 meses) como um selo "Renova
   // a", e dar uma forma de cancelar a subscrição na própria área de gerir
   // subscrição — o botão cancela mesmo o acesso Premium (que é o que a
   // pessoa quer quando pede para cancelar); a nota "(Protótipo…)" mantém-se
@@ -12719,7 +12721,8 @@ function bindHandlers(){
   // subscriptionManageNote), isto é simétrico à ativação de teste que já
   // existia: escreve subscription.active=false no Firestore. Mantém
   // "startedAt" (não o apaga) — é exatamente esse campo que impede alguém
-  // de reiniciar o relógio dos 24 meses ao cancelar e reativar.
+  // de reiniciar o relógio dos meses (SUBSCRIPTION_MAX_MONTHS) ao cancelar e
+  // reativar.
   const cancelSubBtn = document.getElementById('subscription-cancel-btn');
   if(cancelSubBtn) cancelSubBtn.addEventListener('click', async ()=>{
     if(!FIREBASE_READY || !currentWeddingId){ weddyAlert(ta('alertNoConnectionRetry')); return; }
