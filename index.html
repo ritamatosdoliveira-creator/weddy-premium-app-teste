@@ -14400,12 +14400,23 @@ function autopilotReviewCardHtml(){
     const entry = item.entry;
     const already = token && sentTokens.has(token);
     const waReady = canWa && !already && !!(entry.phone && token && entry.communicationPreferences && entry.communicationPreferences.whatsapp && entry.communicationPreferences.whatsapp.optedIn);
+    // Pedido direto da Rita (Set 2026): tirar o pontinho colorido antes do
+    // nome e deixar só o ícone do WhatsApp, agora à FRENTE do nome (antes
+    // era depois) — e sem a caixa cinzenta à volta (essa caixa vinha da
+    // classe "btn-cancel", partilhada com os botões de cancelar, que tem
+    // sempre fundo cinzento; aqui passa a ser só o ícone, sem fundo
+    // nenhum). Quando não há nem WhatsApp pronto nem "já enviado", fica um
+    // espaço reservado do mesmo tamanho (sem ícone lá dentro) para o nome
+    // continuar sempre alinhado com o das linhas que têm ícone.
+    const rowIcon = waReady
+      ? `<button type="button" class="autopilot-row-icon" data-autopilot-wa-send="${escapeHTML(token)}" aria-label="WhatsApp" style="all:unset; box-sizing:border-box; width:32px; height:32px; display:flex; align-items:center; justify-content:center; flex-shrink:0; color:#25D366; cursor:pointer;">${ICONS.whatsapp}</button>`
+      : already
+        ? `<span class="autopilot-row-icon" style="width:32px; height:32px; display:flex; align-items:center; justify-content:center; flex-shrink:0; color:var(--ink-soft);">${ICONS.check}</span>`
+        : `<span style="width:32px; height:32px; flex-shrink:0;"></span>`;
     return `
     <div class="list-row" style="padding:8px 0;" data-autopilot-row="${escapeHTML(token||'')}">
-      <span style="width:8px; height:8px; border-radius:50%; background:${bucket==='late'?'#C0523F':'#D8A657'}; flex-shrink:0;"></span>
+      ${rowIcon}
       <div style="flex:1;">${escapeHTML(item.name)}</div>
-      ${waReady ? `<button type="button" class="btn-cancel autopilot-row-icon" data-autopilot-wa-send="${escapeHTML(token)}" aria-label="WhatsApp" style="padding:6px; width:32px; height:32px; display:flex; align-items:center; justify-content:center; flex-shrink:0; color:#25D366;">${ICONS.whatsapp}</button>` : ''}
-      ${already ? `<span class="autopilot-row-icon" style="width:32px; height:32px; display:flex; align-items:center; justify-content:center; flex-shrink:0; color:var(--ink-soft);">${ICONS.check}</span>` : ''}
     </div>`;
   }).join('');
   return `
