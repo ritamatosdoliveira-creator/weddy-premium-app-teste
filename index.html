@@ -3365,6 +3365,8 @@ const APP_I18N = {
     premiumTileGoogleCalDesc:'Sincroniza o teu calendário do casamento.',
     rsvpTitle:'Convites RSVP', rsvpDesc:'Envia e acompanha as respostas dos convidados',
     rsvpRespostasNavTitle:'Respostas dos convidados', rsvpRespostasNavDesc:'Vê, pesquisa e agrupa quem já respondeu',
+    rsvpLembretesNavTitle:'Lembretes automáticos', rsvpLembretesNavDesc:'Prazo de resposta e lembretes para quem falta responder',
+    rsvpLembretesIntro:'Define o prazo de resposta e deixa a Weddy tratar de lembrar quem ainda não respondeu.',
     rsvpDeadlineNavDesc:'Define até quando os convidados podem responder',
     rsvpFaqNavTitle:'Perguntas personalizadas', rsvpFaqNavDesc:'O que o assistente responde aos convidados',
     rsvpDeadlineUnset:'Ainda não definido',
@@ -4451,6 +4453,8 @@ const APP_I18N = {
     premiumTileGoogleCalDesc:'Sync your wedding calendar.',
     rsvpTitle:'RSVP invitations', rsvpDesc:"Send and track your guests' responses",
     rsvpRespostasNavTitle:'Guest responses', rsvpRespostasNavDesc:"See, search and group who's already replied",
+    rsvpLembretesNavTitle:'Automatic reminders', rsvpLembretesNavDesc:'Response deadline and reminders for anyone yet to reply',
+    rsvpLembretesIntro:'Set the response deadline and let Weddy handle reminding anyone who hasn\'t answered yet.',
     rsvpDeadlineNavDesc:'Set the deadline for guests to respond',
     rsvpFaqNavTitle:'Custom questions', rsvpFaqNavDesc:'What the assistant answers to guests',
     rsvpDeadlineUnset:'Not set yet',
@@ -6093,12 +6097,25 @@ function guestGroupHTML(side, catKey, catLabel, icon, colorIdx, isCustom){
     const conf = isConfirmed(side,catKey,idx);
     const age = isChildren ? ((n&&n.age)||'') : '';
     const payingPct = hasPayment ? guestWeight(n) : 1;
+    // Atalho direto para o RSVP deste convidado (Set 2026, pedido da Rita):
+    // antes, ver o estado da resposta ou gerar o link obrigava a ir a
+    // Definições > Convites RSVP > Respostas e procurar a pessoa lá — agora
+    // este ícone salta logo para ela (ver data-rsvpstatus mais abaixo).
+    // Cor conta a história: cinzento = ainda sem convite gerado, ferrugem =
+    // convite enviado mas ainda sem resposta, verde/laranja/cinzento-escuro
+    // = já respondeu (sim/talvez/não).
+    const rsvpToken = (typeof n==='object' && n) ? n.rsvpToken : null;
+    const rsvpResp = rsvpToken ? memberRSVPResponse({entry:n}) : null;
+    const rsvpStatus = rsvpToken ? rsvpStatusOf(rsvpResp) : null;
+    const rsvpColor = rsvpStatus==='yes' ? '#3F8F5F' : rsvpStatus==='no' ? '#8A8A8A' : rsvpStatus==='maybe' ? '#D8A657' : 'var(--rust,#B5654B)';
+    const rsvpTitle = !rsvpToken ? ta('btnGenerateLink') : rsvpStatus==='yes' ? ta('rsvpStatusGoing') : rsvpStatus==='no' ? ta('rsvpStatusNotGoing') : rsvpStatus==='maybe' ? ta('rsvpStatusMaybe') : ta('rsvpStatusPending');
     return `
     <div class="list-row guest-row ${hasPayment?'child-row':''} ${conf?'confirmed':''}" data-rowidx="${idx}">
       ${!isSearching ? `<button class="drag-handle" data-draghandle="${side}|${catKey}">${ICONS.draghandle}</button>` : '<span style="width:20px;flex-shrink:0;"></span>'}
       <div class="check tappable" data-confirm="${side}|${catKey}|${idx}">${ICONS.check}</div>
       <input type="text" class="title-input-inline" style="flex:1; min-width:0;" data-editguest="${side}|${catKey}|${idx}" value="${escapeHTML(name)}">
       <button class="remove-x" style="${(typeof n==='object'&&n&&n.phone)?'color:var(--rust,#B5654B);opacity:1;':'opacity:.35;'}" data-editphone="${side}|${catKey}|${idx}" title="${ta('labelPhoneOptional')}">${ICONS.phone}</button>
+      <button class="remove-x" style="color:${rsvpColor}; opacity:${rsvpToken?1:.35};" data-rsvpstatus="${side}|${catKey}|${idx}" title="${escapeHTML(rsvpTitle)}">${ICONS.guests}</button>
       <button class="remove-x" data-remove="${side}|${catKey}|${idx}">✕</button>
       ${hasPayment ? `
       <div class="child-extra-row">
@@ -6221,6 +6238,29 @@ function bindGuestGroupHandlers(scope){
     btn.addEventListener('click', e=>{
       const [side,cat,idx] = e.currentTarget.dataset.editphone.split('|');
       openGuestPhoneSheet(side, cat, Number(idx));
+    });
+  });
+  // Atalho "Convidados" → "Respostas" (ver comentário junto de rsvpBackToTab):
+  // salta direto para esta pessoa em Respostas, com a pesquisa já preenchida
+  // com o nome dela, em vez de a pessoa ter de a procurar na lista toda.
+  scope.querySelectorAll('[data-rsvpstatus]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      const [side,cat,idx] = e.currentTarget.dataset.rsvpstatus.split('|');
+      const arr = getGuestNames(side, cat);
+      const entry = arr && arr[Number(idx)];
+      if(!entry || typeof entry!=='object' || !entry.guestId) return;
+      closeAllSheets();
+      activeTab = 'definicoes';
+      definicoesSection = 'rsvp';
+      setRSVPSeenCount(countRSVPResponded());
+      rsvpSubScreen = 'respostas';
+      rsvpSubScreenReturnTo = null;
+      rsvpBackToTab = 'convidados';
+      rsvpAutopilotReview = null;
+      rsvpGroupMode = false;
+      rsvpStatusFilter = 'all';
+      rsvpSearchQuery = entry.name || '';
+      _origRender();
     });
   });
   scope.querySelectorAll('[data-editguest]').forEach(inp=>{
@@ -8280,11 +8320,6 @@ let rsvpSearchQuery = '';
 let rsvpStatusFilter = 'all'; // all | yes | pending | no
 let rsvpFilterChipsOpen = false;
 let lastRSVPRefreshAt = null;
-// Separadores do hub do RSVP (Set 2026, pedido da Rita): "send" agrupa a
-// configuração de como convidar (prazo + info para os convidados), "list"
-// agrupa o acompanhamento de quem já respondeu — só organiza a navegação,
-// não é dado gravado, por isso não precisa de ir para o Firestore.
-let rsvpHomeTab = 'send';
 // Modo de agrupar convidados num único link de RSVP de família: enquanto
 // ativo, cada linha ganha uma checkbox; rsvpGroupSelection guarda as chaves
 // "side|catId|idx" dos convidados escolhidos até se criar o link.
@@ -8300,6 +8335,14 @@ let rsvpSubScreen = null; // null | 'deadline' | 'info' | 'faq' | 'respostas'
 // onde se estava. Guarda o sub-ecrã de onde se veio, para o botão "voltar"
 // (data-defback) o poder repor em vez de assumir sempre null.
 let rsvpSubScreenReturnTo = null;
+// Atalho "Convidados" → "Respostas" (Set 2026, pedido da Rita): o ícone de
+// RSVP em cada linha da lista de Convidados salta direto para essa pessoa
+// em "Respostas", sem passar pelo hub do RSVP — por isso o "voltar" também
+// não deve passar por lá. Quando isto está definido, o botão voltar sai da
+// secção RSVP inteira direto para este separador, em vez do caminho normal
+// (hub → menu de Definições). null = entrada normal, segue o caminho de
+// sempre.
+let rsvpBackToTab = null;
 // Edição de perguntas frequentes (Concierge): null = nenhuma a editar,
 // 'new' = a criar uma nova, ou o índice (número) da pergunta existente.
 let rsvpFaqEditingIndex = null;
@@ -10609,19 +10652,16 @@ function viewRSVPHome(){
     if(status!=='pending') responded++;
     if(status==='yes') confirmedYes++;
   });
-  const deadline = weddingSettings.rsvpDeadline || '';
-  const deadlineLabel = deadline ? formatDatePT(deadline) : ta('rsvpDeadlineUnset');
   const rustChip = 'background:rgba(193,88,62,0.12); color:var(--rust-dark);';
-  // Fase 9.4 (Set 2026): a Rita reparou que "Enviar convites"/"Lista de
-  // convidados" apareciam duplicados — uma vez no separador (segmented) e
-  // outra vez como título do cartão logo a seguir. Tirámos esse cartão-
-  // cabeçalho: o separador já diz onde estamos, e cada linha (Prazo,
-  // Informações, Respostas) passa a ser o seu próprio cartão avulso — como
-  // nas imagens que a Rita mandou como referência — em vez de estarem
-  // aninhadas dentro de um único cartão maior.
-  // As três linhas usam sempre o mesmo tom rust (rustChip), não as cores
-  // variadas de chipStyle (essas são para categorias de convidados) — é
-  // assim que aparece na referência que a Rita mandou.
+  // Fase 9.5 (Set 2026): a Rita achou a organização anterior confusa —
+  // "Prazo" era uma gaveta com 3 coisas (data, aviso de prazo passado e o
+  // Autopilot todo lá dentro), e o aviso ainda saltava para "Respostas" como
+  // se essa lista fosse uma sub-página do prazo, quando é uma coisa à parte.
+  // Já não há separadores "Enviar convites"/"Lista de convidados" a esconder
+  // isto em dois grupos — passam a ser 3 linhas ao mesmo nível, cada uma a
+  // sua própria ferramenta independente: Lembretes automáticos (prazo +
+  // Autopilot, fundidos numa só página — ver viewRSVPDeadline), Respostas
+  // (a lista, sempre existiu à parte) e Informações.
   const hubNavRow = (key, icon, title, desc)=>`
     <div class="rsvp-nav-row tappable" data-rsvpgoto="${key}">
       <div class="rsvp-nav-row-icon" style="${rustChip}">${icon}</div>
@@ -10631,27 +10671,17 @@ function viewRSVPHome(){
       </div>
       <span class="rsvp-nav-row-chev">${ICONS.chev}</span>
     </div>`;
-  const sendRowsHtml = `
-    ${hubNavRow('deadline', ICONS.calendar, ta('labelRSVPDeadline'), deadlineLabel)}
-    ${hubNavRow('info', ICONS.pencil, ta('guestInfoLabel'), ta('guestInfoSubLabel'))}`;
-  const listRowsHtml = `
-    ${hubNavRow('respostas', ICONS.guests, ta('rsvpRespostasNavTitle'), ta('rsvpRespostasNavDesc'))}`;
   return `
   ${defSubHeader(ta('rsvpTitle'))}
-  <div class="segmented">
-    <button type="button" class="${rsvpHomeTab==='send'?'active':''}" data-rsvphometab="send">${ta('rsvpTabSendInvites')}</button>
-    <button type="button" class="${rsvpHomeTab==='list'?'active':''}" data-rsvphometab="list">${ta('rsvpTabGuestList')}</button>
-  </div>
-  <div style="margin-top:10px;">
-    ${rsvpHomeTab==='list' ? listRowsHtml : sendRowsHtml}
-  </div>
-  ${rsvpHomeTab==='list' ? `
   <div class="stats-row" style="margin:0 16px 14px;">
     <div class="stat-card" style="text-align:center;"><div class="l" style="margin:0 0 4px;">${ta('tabGuests')}</div><div class="n">${fmtGuestCount(totalGuests)}</div></div>
     <div class="stat-card" style="text-align:center;"><div class="l" style="margin:0 0 4px;">${ta('respondedLabel')}</div><div class="n">${fmtGuestCount(responded)}</div></div>
     <div class="stat-card" style="text-align:center;"><div class="l" style="margin:0 0 4px;">${ta('lblConfirmed')}</div><div class="n">${fmtGuestCount(confirmedYes)}</div></div>
-  </div>` : ''}
-  <div style="margin:0 16px 28px; padding:16px; border-radius:16px; background:linear-gradient(135deg, rgba(193,88,62,0.1), rgba(216,166,87,0.12)); text-align:center;">
+  </div>
+  ${hubNavRow('deadline', ICONS.sparkle, ta('rsvpLembretesNavTitle'), ta('rsvpLembretesNavDesc'))}
+  ${hubNavRow('respostas', ICONS.guests, ta('rsvpRespostasNavTitle'), ta('rsvpRespostasNavDesc'))}
+  ${hubNavRow('info', ICONS.pencil, ta('guestInfoLabel'), ta('guestInfoSubLabel'))}
+  <div style="margin:16px 16px 28px; padding:16px; border-radius:16px; background:linear-gradient(135deg, rgba(193,88,62,0.1), rgba(216,166,87,0.12)); text-align:center;">
     <div class="l" style="margin:0 0 4px; font-size:14.5px; color:var(--ink); font-weight:600;">${ta('rsvpNoteAutoFreeTitle')}</div>
     <div style="font-size:12px; color:var(--ink-soft); line-height:1.5;">${ta('rsvpNoteAutoFree')}</div>
   </div>
@@ -10672,21 +10702,15 @@ function viewRSVPDeadline(){
   const deadline = weddingSettings.rsvpDeadline || '';
   const deadlinePassed = deadline && deadline < new Date().toISOString().slice(0,10);
   const rustChip = 'background:rgba(193,88,62,0.12); color:var(--rust-dark);';
-  // Fase 9.4 (Set 2026): redesign pedido pela Rita para que este ecrã siga
-  // exatamente o mesmo estilo do resto da app — cartão com ícone+título+
-  // subtítulo, linha de aviso navegável com chevron (como as linhas da
-  // "Central de RSVP"), e o bloco do Autopilot com uma sub-linha clicável
-  // por urgência (atrasados / a precisar de lembrete), em vez do resumo
-  // tudo-numa-linha que tínhamos antes.
-  const deadlineWarnHtml = (deadlinePassed && pending.length)
-    ? `<div class="rsvp-nav-row tappable" data-rsvpgoto="respostas" style="cursor:pointer;">
-        <div class="rsvp-nav-row-icon" style="${rustChip}">${ICONS.warn}</div>
-        <div class="rsvp-nav-row-mid">
-          <div class="rsvp-nav-row-title" style="color:var(--rust-dark);">${ta('deadlinePassedTitle')}</div>
-          <div class="rsvp-nav-row-desc">${ta('deadlinePassedSub')(pending.length)}</div>
-        </div>
-        <span class="rsvp-nav-row-chev">${ICONS.chev}</span>
-      </div>`
+  // Fase 9.5 (Set 2026): a Rita achou estranho o "Prazo" ser dono de um
+  // aviso que saltava para "Respostas" como se essa lista fosse uma
+  // sub-página do prazo. Esta página passa a ser UMA coisa só — "Lembretes
+  // automáticos" — com o prazo, o aviso de atraso (agora só texto, sem
+  // saltar para lado nenhum) e o Autopilot, todos ao mesmo nível, um a
+  // seguir ao outro. Quem quiser ver a lista de convidados vai a
+  // "Respostas" diretamente a partir do hub, não por aqui.
+  const deadlinePassedNoteHtml = (deadlinePassed && pending.length)
+    ? `<div class="empty-note" style="margin:0 0 14px; padding:10px 12px; border-radius:12px; background:rgba(193,88,62,0.08); color:var(--rust-dark); font-style:normal; text-align:left;">${ICONS.warn} ${ta('deadlinePassedSub')(pending.length)}</div>`
     : '';
   const autopilotBucketRow = (list, descKey, countKey)=> list.length ? `
     <div class="rsvp-nav-row tappable" data-autopilot-bucket="${countKey}" style="margin:0 0 8px; box-shadow:none;">
@@ -10698,7 +10722,7 @@ function viewRSVPDeadline(){
       <span class="rsvp-nav-row-chev">${ICONS.chev}</span>
     </div>` : '';
   return `
-  ${defSubHeader(ta('labelRSVPDeadline'), ta('rsvpDeadlineIntro'))}
+  ${defSubHeader(ta('rsvpLembretesNavTitle'), ta('rsvpLembretesIntro'))}
   <div class="rsvp-deadline-card">
     <div class="def-row-icon" style="${rustChip} width:44px; height:44px; flex-shrink:0;">${ICONS.calendar}</div>
     <div style="flex:1; min-width:0;">
@@ -10707,8 +10731,6 @@ function viewRSVPDeadline(){
     </div>
     <button class="rsvp-deadline-save" id="rsvp-deadline-save">${ta('btnSave')}</button>
   </div>
-  ${deadlineWarnHtml}
-  ${autopilot.length ? `
   <div class="stat-card" style="margin:0 16px 12px; padding:16px;">
     <div style="display:flex; align-items:flex-start; gap:12px; margin-bottom:14px;">
       <div class="def-row-icon" style="${rustChip} width:40px; height:40px;">${ICONS.sparkle}</div>
@@ -10717,11 +10739,12 @@ function viewRSVPDeadline(){
         <div class="empty-note" style="margin:0; padding:0; text-align:left; font-style:normal;">${ta('autopilotSubtitle')}</div>
       </div>
     </div>
+    ${deadlinePassedNoteHtml}
     ${autopilotBucketRow(lateList, 'autopilotLateDesc', 'autopilotLateCountPlain')}
     ${autopilotBucketRow(dueList, 'autopilotDueDesc', 'autopilotDueCountPlain')}
     ${!needsAttention.length ? `<div class="empty-note" style="margin:0 0 10px; font-style:normal;">${ta('autopilotAllOnTime')}</div>` : ''}
     <button class="rsvp-deadline-save" id="rsvp-autopilot-prepare" style="width:100%;" ${needsAttention.length? '':'disabled'}>${ICONS.send} ${ta('autopilotPrepareBtn')(needsAttention.length)}</button>
-  </div>` : ''}
+  </div>
   ${autopilotReviewCardHtml()}
   `;
 }
@@ -12402,12 +12425,11 @@ function bindHandlers(){
       _origRender();
     });
   });
-  // Reorganização (Set 2026): navegação dentro do "hub" do RSVP (Prazo,
-  // Informações, Respostas) — mesmo padrão do data-defgoto, mas para os
-  // sub-ecrãs dentro da secção "rsvp".
-  document.querySelectorAll('[data-rsvphometab]').forEach(btn=>{
-    btn.addEventListener('click', e=>{ rsvpHomeTab = e.currentTarget.dataset.rsvphometab; _origRender(); });
-  });
+  // Reorganização (Set 2026): navegação dentro do "hub" do RSVP (Lembretes,
+  // Respostas, Informações) — mesmo padrão do data-defgoto, mas para os
+  // sub-ecrãs dentro da secção "rsvp". Já não há separadores a agrupar
+  // isto em dois grupos (ver viewRSVPHome) — as 3 linhas são todas
+  // acedidas por aqui, ao mesmo nível.
   document.querySelectorAll('[data-rsvpgoto]').forEach(el=>{
     el.addEventListener('click', e=>{
       rsvpSubScreenReturnTo = rsvpSubScreen;
@@ -12448,10 +12470,22 @@ function bindHandlers(){
       if(definicoesSection==='rsvp' && rsvpSubScreen){
         // Volta para onde se veio (ex: "Prazo para responder", se foi de lá
         // que se entrou em "Respostas"), em vez de assumir sempre o hub.
-        rsvpSubScreen = rsvpSubScreenReturnTo;
+        const nextSub = rsvpSubScreenReturnTo;
         rsvpSubScreenReturnTo = null;
         rsvpFaqEditingIndex = null;
         rsvpAutopilotReview = null;
+        if(nextSub===null && rsvpBackToTab){
+          // Entrou-se aqui por um atalho (ex: ícone de RSVP em Convidados)
+          // que saltou o hub do RSVP — o "voltar" também o salta, direto
+          // para o separador de onde veio, em vez de mostrar o hub por um
+          // instante entre os dois.
+          activeTab = rsvpBackToTab;
+          rsvpBackToTab = null;
+          definicoesSection = null;
+          rsvpSubScreen = null;
+        } else {
+          rsvpSubScreen = nextSub;
+        }
         _origRender();
         return;
       }
