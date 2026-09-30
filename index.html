@@ -1753,15 +1753,39 @@ const CURRENT_PRIVACY_VERSION = '2026-09-24';
   // coordenadas do "position:fixed", que não depende de o
   // window.innerHeight mudar ou não) menos a altura REAL do balão
   // (já limitada pelo novo max-height, lida depois de a aplicar).
+  // Bug encontrado ao vivo MAIS UMA VEZ (Set 2026, "o espaço entre o
+  // chatbot e o teclado"): mesmo depois de deixar de usar
+  // "window.innerHeight" para calcular a POSIÇÃO do balão (ver bloco de
+  // comentários acima), a DETEÇÃO de "o teclado está aberto?" continuava a
+  // depender de "window.innerHeight" (keyboardInset = innerHeight -
+  // vv.height - vv.offsetTop). Nesta app instalada como PWA, o próprio
+  // "window.innerHeight" encolhe JUNTO com o visualViewport quando o
+  // teclado abre — os dois diminuem a par — por isso "keyboardInset" saía
+  // sempre perto de 0 e o "if" nunca chegava a disparar: o balão ficava
+  // preso na posição pensada para SEM teclado (o "bottom" fixo do CSS,
+  // pensado para dar espaço à barra de separadores), e o teclado ia
+  // "comendo" o ecrã por baixo sem o balão alguma vez subir — daí o
+  // espaço vazio grande visto entre o balão e o teclado. Correção: em vez
+  // de comparar com "window.innerHeight" (que pode encolher junto com o
+  // teclado), guarda a altura do ecrã QUANDO NÃO HÁ TECLADO (a maior
+  // altura já vista — nunca diminui sozinha, só quando o teclado abre) e
+  // compara sempre com esse valor, nunca com "window.innerHeight".
+  let chatKbBaselineHeight = window.visualViewport ? window.visualViewport.height : window.innerHeight;
   let kbRaf = null;
   function adjustChatPanelForKeyboard(){
     if(kbRaf) cancelAnimationFrame(kbRaf);
     kbRaf = requestAnimationFrame(()=>{
       kbRaf = null;
       const panel = document.getElementById('chat-panel');
-      if(!panel || panel.hidden || !window.visualViewport) return;
+      if(!window.visualViewport) return;
       const vv = window.visualViewport;
-      const keyboardInset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+      // Sem teclado, a altura visível só pode ser igual à baseline guardada
+      // ou maior (ex.: rodar o ecrã, ou o browser esconder a barra de
+      // endereço) — nunca menor por si só. Por isso, sempre que crescer,
+      // atualiza a baseline para essa rotação/estado do browser.
+      if(vv.height > chatKbBaselineHeight) chatKbBaselineHeight = vv.height;
+      if(!panel || panel.hidden) return;
+      const keyboardInset = Math.max(0, chatKbBaselineHeight - vv.height);
       panel.style.bottom = 'auto';
       if(keyboardInset > 60){
         const topMargin = 12; // nunca colar ao notch/barra de estado
