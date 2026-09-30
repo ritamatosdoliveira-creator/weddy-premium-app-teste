@@ -13583,11 +13583,11 @@ function openGuestPhoneSheet(side, cat, idx){
   // wa.me na Fase 9.3, Set 2026) — mostra-se só quando já há telefone
   // gravado, consentimento dado e link de RSVP gerado. A app nunca envia
   // nada sozinha: só abre o WhatsApp pessoal do casal com a mensagem já
-  // escrita (link wa.me), e quem carrega em enviar são eles. Já não
-  // precisa de subscrição ativa nem de conta de negócio na Meta — deixou
-  // de ter qualquer custo por mensagem.
+  // escrita (link wa.me), e quem carrega em enviar são eles. Já não tem
+  // custo por mensagem (não usa a API da Meta), mas continua a ser uma
+  // funcionalidade do Weddy Premium — decisão de produto, não técnica.
   const waBtn = document.getElementById('gp-send-whatsapp');
-  waBtn.style.display = (phoneEl.value.trim() && consentOn && entry.rsvpToken) ? '' : 'none';
+  waBtn.style.display = (phoneEl.value.trim() && consentOn && entry.rsvpToken && hasActiveSubscription()) ? '' : 'none';
   waBtn.disabled = false;
   waBtn.textContent = ta('btnSendWhatsappReminder');
   document.getElementById('guest-phone-sheet').classList.add('show');
@@ -13597,14 +13597,17 @@ function openGuestPhoneSheet(side, cat, idx){
 // Meta — só monta um link wa.me com a mensagem pronta e abre o WhatsApp
 // pessoal do casal, tal como o "Autopilot" de lembretes em massa já fazia
 // para email/SMS (preparar e deixar o envio sempre a cargo do casal).
-// Zero custo, zero Business API. Continua a exigir telefone + consentimento
-// + link de RSVP (o mesmo que o botão só aparece com os 3 preenchidos).
+// Zero custo, zero Business API — mas continua a ser uma funcionalidade do
+// Weddy Premium (o botão já só aparece com subscrição ativa; este check
+// aqui dentro é só uma segunda barreira, caso o botão seja acionado por
+// outra via). Continua a exigir telefone + consentimento + link de RSVP.
 document.getElementById('gp-send-whatsapp').addEventListener('click', ()=>{
   if(!editingGuestPhoneRef) return;
   const errEl = document.getElementById('gp-wa-error');
   const okEl = document.getElementById('gp-wa-success');
   errEl.style.display = 'none';
   okEl.style.display = 'none';
+  if(!hasActiveSubscription()) return;
   const { side, cat, idx } = editingGuestPhoneRef;
   const arr = getGuestNames(side, cat);
   const entry = arr && arr[idx];
