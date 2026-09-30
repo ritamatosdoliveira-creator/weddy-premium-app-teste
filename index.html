@@ -13624,7 +13624,14 @@ document.getElementById('gp-send-whatsapp').addEventListener('click', ()=>{
   const link = `${RSVP_BASE_URL}?g=${entry.rsvpToken}`;
   const texto = ta('waManualMessage')(entry.name||'', couple, link);
   const digits = entry.phone.replace(/[^\d]/g, '');
-  window.open(`https://wa.me/${digits}?text=${encodeURIComponent(texto)}`, '_blank');
+  // Fase 9.3.1 (Set 2026): trocado de window.open(...,'_blank') para
+  // location.href — a Rita reportou que, no iPhone, o "_blank" abre um
+  // separador novo que fica em branco depois de voltar do WhatsApp (só
+  // fecha à mão, com o "X"). Ao navegar na mesma janela, o iOS intercepta
+  // o link wa.me como Universal Link e passa logo para a app do WhatsApp
+  // antes da página chegar a carregar — a Weddy fica exatamente onde
+  // estava, sem separador nenhum a limpar.
+  window.location.href = `https://wa.me/${digits}?text=${encodeURIComponent(texto)}`;
   markRemindersSent([{ item:{ entry }, token: entry.rsvpToken }]);
   okEl.textContent = ta('waSentOk');
   okEl.style.display = '';
@@ -14063,7 +14070,8 @@ function openRSVPAutopilotModal(entries){
       const link = `${RSVP_BASE_URL}?g=${token}`;
       const texto = ta('waManualMessage')(entry.name||'', couple, link);
       const digits = entry.phone.replace(/[^\d]/g, '');
-      window.open(`https://wa.me/${digits}?text=${encodeURIComponent(texto)}`, '_blank');
+      // Ver nota em cima (fix Fase 9.3.1) — mesmo motivo, mesmo fix.
+      window.location.href = `https://wa.me/${digits}?text=${encodeURIComponent(texto)}`;
       markRemindersSent([found]);
       btn.disabled = true;
       btn.textContent = ta('waSentOk');
