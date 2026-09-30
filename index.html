@@ -3403,7 +3403,7 @@ const APP_I18N = {
     subscriptionActiveBadge:'Ativo',
     subscriptionFeatureGuests:'Convidados ilimitados', subscriptionFeatureAISeating:'AI Seating', subscriptionFeatureWeddingHealth:'Wedding Health',
     subscriptionFeatureMemories:'Memórias', subscriptionFeatureRSVP:'RSVP avançado', subscriptionFeatureMore:'E muito mais…',
-    subscriptionCurrentPlanLabel:'Plano atual', subscriptionDefaultPlanName:'Premium — 24 meses', subscriptionPriceText:'29,99€ / 24 meses',
+    subscriptionCurrentPlanLabel:'Plano atual', subscriptionDefaultPlanName:'Premium — 24 meses', subscriptionPriceText:'22,99€ / 24 meses',
     subscriptionRenewsOnLabel:(d)=>`Renova a ${d}`,
     subscriptionNeedHelpTitle:'Precisas de ajuda?', subscriptionNeedHelpDesc:'Fala com a nossa equipa de suporte.',
     confirmCancelSubscriptionText:'Isto cancela já a subscrição Weddy Premium — todas as funcionalidades Premium (RSVP, Wedding Health, Memórias, Documentos, Google Calendar, Assistente) ficam bloqueadas de imediato. Confirmas?',
@@ -4512,7 +4512,7 @@ const APP_I18N = {
     subscriptionActiveBadge:'Active',
     subscriptionFeatureGuests:'Unlimited guests', subscriptionFeatureAISeating:'AI Seating', subscriptionFeatureWeddingHealth:'Wedding Health',
     subscriptionFeatureMemories:'Memories', subscriptionFeatureRSVP:'Advanced RSVP', subscriptionFeatureMore:'And much more…',
-    subscriptionCurrentPlanLabel:'Current plan', subscriptionDefaultPlanName:'Premium — 24 months', subscriptionPriceText:'€29.99 / 24 months',
+    subscriptionCurrentPlanLabel:'Current plan', subscriptionDefaultPlanName:'Premium — 24 months', subscriptionPriceText:'€22.99 / 24 months',
     subscriptionRenewsOnLabel:(d)=>`Renews on ${d}`,
     subscriptionNeedHelpTitle:'Need help?', subscriptionNeedHelpDesc:'Get in touch with our support team.',
     confirmCancelSubscriptionText:'This cancels your Weddy Premium subscription right away — every Premium feature (RSVP, Wedding Health, Memories, Documents, Google Calendar, Assistant) is locked immediately. Confirm?',
@@ -9441,7 +9441,7 @@ function classifyCopilotIntent(pergunta, context){
   // pergunta nova (nunca um atalho que ultrapassa a arquitetura).
   if(context && context.topic){
     const curta = p.split(/\s+/).filter(Boolean).length<=6;
-    const seguimento = /^e\s+/.test(p) || curta;
+    const seguimento = /^e\s+/.test(p) || /^and\s+/.test(p) || curta;
     // "\b" antes de "à" nunca bate em JS sem a flag /u — "à" não conta
     // como carácter de palavra (\w é só [A-Za-z0-9_]), por isso um espaço
     // seguido de "à" nunca é visto como fronteira de palavra e a versão
@@ -9451,10 +9451,10 @@ function classifyCopilotIntent(pergunta, context){
     // isto sem depender de \b.
     const nomeiaAlvoNovo = /(^|\s)(ao|à|a|para)\s+\w/.test(p);
     if(seguimento && !nomeiaAlvoNovo){
-      if(context.topic==='supplier' && context.supplierId && /quanto (j[aá] )?pagu?ei|quanto (ainda )?devo|falta pagar|quanto custa|j[aá] pag/.test(p)){
+      if(context.topic==='supplier' && context.supplierId && /quanto (j[aá] )?pagu?ei|quanto (ainda )?devo|falta pagar|quanto custa|j[aá] pag|how much (have (we|i) paid|(do|did) (we|i) (still )?owe)|still (need|have) to pay|how much does it cost/.test(p)){
         return { intent: WEDDY_COPILOT_INTENTS.GET_SUPPLIER_PAYMENT_INFO, contextOverride:{ supplierId: context.supplierId } };
       }
-      if(context.topic==='table' && context.tableId!=null && /quantas pessoas|quem (mais|est[aá])|s[aã]o quantas/.test(p)){
+      if(context.topic==='table' && context.tableId!=null && /quantas pessoas|quem (mais|est[aá])|s[aã]o quantas|how many people|who(’s| is| else)|are there/.test(p)){
         return { intent: WEDDY_COPILOT_INTENTS.GET_TABLE_GUESTS, value: context.tableId };
       }
     }
@@ -9541,12 +9541,19 @@ function classifyCopilotIntent(pergunta, context){
   }
 
   // "cria uma tarefa para X" / "adiciona tarefa X" / "lembra-me de X"
+  // Bilingue (Set 2026, "tem de funcionar tudo em inglês"): cada bloco desta
+  // função passa a aceitar também a formulação em inglês da mesma pergunta,
+  // como alternativa ORed ao regex PT original — nunca substituindo-o.
   const taskMatch = p.match(/^(?:cria(?:r)?|adiciona(?:r)?)\s+(?:uma\s+)?tarefa\s+(?:para|de)?\s*(.+)$/)
-                  || p.match(/^lembra-?me\s+de\s+(.+)$/);
+                  || p.match(/^lembra-?me\s+de\s+(.+)$/)
+                  || p.match(/^(?:create|add)\s+(?:a\s+)?task\s+(?:to|for|about)?\s*(.+)$/)
+                  || p.match(/^remind\s+me\s+to\s+(.+)$/);
   if(taskMatch && taskMatch[1] && taskMatch[1].trim().length>1){
     let texto = pergunta.trim()
       .replace(/^(?:cria(?:r)?|adiciona(?:r)?)\s+(?:uma\s+)?tarefa\s+(?:para|de)?\s*/i,'')
-      .replace(/^lembra-?me\s+de\s+/i,'');
+      .replace(/^lembra-?me\s+de\s+/i,'')
+      .replace(/^(?:create|add)\s+(?:a\s+)?task\s+(?:to|for|about)?\s*/i,'')
+      .replace(/^remind\s+me\s+to\s+/i,'');
     texto = texto.charAt(0).toUpperCase()+texto.slice(1);
     return { intent: WEDDY_COPILOT_INTENTS.CREATE_TASK, value: texto };
   }
@@ -9562,7 +9569,7 @@ function classifyCopilotIntent(pergunta, context){
   if(/lua de mel|honeymoon/.test(p)){
     return { intent: WEDDY_COPILOT_INTENTS.GET_HONEYMOON_INFO };
   }
-  if(/mem[oó]ria/.test(p)){
+  if(/mem[oó]ria|\bmemories\b|\bmemory\b/.test(p)){
     return { intent: WEDDY_COPILOT_INTENTS.GET_MEMORIES_INFO, value: pergunta };
   }
 
@@ -9577,20 +9584,21 @@ function classifyCopilotIntent(pergunta, context){
   // esta correção) — nunca "falta" sozinha, para não sequestrar perguntas
   // de pagamentos ("quanto falta pagar") nem cair na contagem de dias.
   if(
-    /esta semana|nesta semana|essa semana|this week|agenda da semana|tarefas (desta|da) semana|o que tenho (para )?(esta semana|hoje)|o que tenho (de |para )?fazer|pr[oó]ximos dias/.test(p)
+    /esta semana|nesta semana|essa semana|this week|agenda da semana|tarefas (desta|da) semana|o que tenho (para )?(esta semana|hoje)|o que tenho (de |para )?fazer|pr[oó]ximos dias|what do i have (for |on )?(this week|today)|what'?s left to do|what do (i|we) (still )?need to do|next few days|upcoming tasks|tasks for (this week|today)/.test(p)
     || ((/\bfalta(m)?\b/.test(p) && /\b(fazer|tratar|organizar)\b/.test(p)) || /(que\s+)?tarefas\s+(ainda\s+)?falta(m)?\b/.test(p))
+    || /tasks?\s+(still\s+)?(left|remaining|pending)/.test(p)
   ){
     return { intent: WEDDY_COPILOT_INTENTS.GET_UPCOMING_TASKS };
   }
 
   // "quem está atrasado" / "quem passou o prazo" — subconjunto mais
   // específico dos pendentes (checar antes do "quem ainda não respondeu").
-  if(/atrasad|em atraso|passou o prazo|fora do prazo/.test(p) && /quem|convidad|rsvp/.test(p)){
+  if(/atrasad|em atraso|passou o prazo|fora do prazo|\blate\b|overdue|past (the )?deadline/.test(p) && /quem|convidad|rsvp|who|guest/.test(p)){
     return { intent: WEDDY_COPILOT_INTENTS.GET_LATE_RSVPS };
   }
 
   // "quem precisa de lembrete" / "quem ainda não recebeu lembrete"
-  if(/precisa(m)?\s+de\s+lembrete|lembrete[s]?\s+(em falta|pendentes)|ainda n[aã]o (recebeu|receberam) (o )?lembrete|n[aã]o foi(ram)? lembrad/.test(p)){
+  if(/precisa(m)?\s+de\s+lembrete|lembrete[s]?\s+(em falta|pendentes)|ainda n[aã]o (recebeu|receberam) (o )?lembrete|n[aã]o foi(ram)? lembrad|needs? a reminder|reminders? (pending|missing)|(hasn'?t|haven'?t) (been )?reminded|still needs? to be reminded/.test(p)){
     return { intent: WEDDY_COPILOT_INTENTS.GET_RSVPS_NEEDING_REMINDER };
   }
 
@@ -9609,12 +9617,12 @@ function classifyCopilotIntent(pergunta, context){
   // confirmar quantos convidados?" tem as palavras na ordem inversa e não
   // batia. Duas verificações independentes (E lógico, não uma sequência)
   // resolvem isto sem depender da ordem das palavras.
-  if(/quem|convidad/.test(p) && /(ainda n[aã]o respond|falta(m)?\s*respond|falta(m)?\s*confirmar|falta(m)?\s*contactar|n[aã]o confirmou|n[aã]o respondeu)/.test(p)){
+  if(/quem|convidad|who|guest/.test(p) && /(ainda n[aã]o respond|falta(m)?\s*respond|falta(m)?\s*confirmar|falta(m)?\s*contactar|n[aã]o confirmou|n[aã]o respondeu|(hasn'?t|haven'?t) (responded|confirmed)|still (need(s)? to|haven'?t) (respond|confirm)|not confirmed|no response yet)/.test(p)){
     return { intent: WEDDY_COPILOT_INTENTS.GET_PENDING_RSVPS };
   }
 
   // "quem é vegetariano" / "quem tem restrições alimentares" / "alergias"
-  if(/vegetarian|vegan|alergia/.test(p) || (/restri[cç]/.test(p) && /alimentar/.test(p))){
+  if(/vegetarian|vegan|alergia|allerg|dietary restriction/.test(p) || (/restri[cç]/.test(p) && /alimentar/.test(p))){
     return { intent: WEDDY_COPILOT_INTENTS.GET_DIETARY_LIST };
   }
 
@@ -9626,7 +9634,7 @@ function classifyCopilotIntent(pergunta, context){
   // usam a mesma intent em vez de inventar uma segunda fonte de dados.
   // Vocabulário deliberadamente distinto do de GET_UPCOMING_TASKS (fazer/
   // tratar/organizar) para não colidir com ele.
-  if(/sa[uú]de do (meu |nosso )?casamento|est[aá] tudo em ordem|h[aá] algum problema|o que est[aá] atrasado|o que (falta resolver|precisa da minha aten[cç][aã]o)|o que devo tratar (agora|primeiro)|por onde (come[cç]o|devo come[cç]ar)|o que (est[aá]|tenho) pendente\b/.test(p)){
+  if(/sa[uú]de do (meu |nosso )?casamento|est[aá] tudo em ordem|h[aá] algum problema|o que est[aá] atrasado|o que (falta resolver|precisa da minha aten[cç][aã]o)|o que devo tratar (agora|primeiro)|por onde (come[cç]o|devo come[cç]ar)|o que (est[aá]|tenho) pendente\b|wedding health|is everything (in order|ok)|is there (a|any) problem|what'?s (overdue|late)|what needs my attention|what should i (tackle|handle|do) (first|now)|where (do i|should i) (start|begin)|what'?s pending\b/.test(p)){
     return { intent: WEDDY_COPILOT_INTENTS.GET_WEDDING_HEALTH };
   }
 
@@ -9661,6 +9669,13 @@ function classifyCopilotIntent(pergunta, context){
     || /quanto\s+custa\s+(o|a)\s+/.test(p)
     || /pr[oó]ximo pagamento\s+(do|da|de)\s+/.test(p)
     || /valor (do|da) (contrato|fornecedor)/.test(p)
+    || /still (need|have) to pay\s+(the\s+)?\w/.test(p)
+    || /how much (have (we|i) paid|did (we|i) pay)\s+(the\s+)?\w/.test(p)
+    || /(have|has) (we|i) paid\s+(the\s+)?\w/.test(p)
+    || /payments? (i|we)('ve| have) made to\s+(the\s+)?\w/.test(p)
+    || /how much does\s+(the\s+)?\w+\s+cost/.test(p)
+    || /next payment (for|to)\s+(the\s+)?\w/.test(p)
+    || /contract value (for|of)\s+(the\s+)?\w/.test(p)
   ){
     return { intent: WEDDY_COPILOT_INTENTS.GET_SUPPLIER_PAYMENT_INFO };
   }
@@ -9668,7 +9683,7 @@ function classifyCopilotIntent(pergunta, context){
   // "quanto falta pagar" (sem nomear fornecedor) / "próximos pagamentos" /
   // "pagamentos pendentes" — genérica, por isso vem DEPOIS da verificação
   // específica de fornecedor acima.
-  if(/falta pagar|pagamentos? (pendentes|por pagar|em falta)|quanto (falta|tenho) (ainda )?(a |para )?pagar|quanto (ainda )?devo\b|pr[oó]ximos pagamentos/.test(p)){
+  if(/falta pagar|pagamentos? (pendentes|por pagar|em falta)|quanto (falta|tenho) (ainda )?(a |para )?pagar|quanto (ainda )?devo\b|pr[oó]ximos pagamentos|(what|how much) (do (we|i) )?still (need|have) to pay|outstanding payments|pending payments|upcoming payments|how much do (we|i) (still )?owe/.test(p)){
     return { intent: WEDDY_COPILOT_INTENTS.GET_REMAINING_PAYMENTS };
   }
 
@@ -9687,24 +9702,26 @@ function classifyCopilotIntent(pergunta, context){
   if(
     (/fornecedor/.test(p) && /(n[aã]o est[aã]o contratad|por contratar|ainda n[aã]o contratei|falta(m)?\s+contratar|sem contrat)/.test(p))
     || /falta(m)?\s+contratar\s+(o|a)\s+\w/.test(p)
+    || (/supplier/.test(p) && /(not (yet )?(hired|booked|contracted)|still need to (hire|book)|haven'?t (hired|booked))/.test(p))
+    || /still need to (hire|book)\s+(the\s+)?\w/.test(p)
   ){
     return { intent: WEDDY_COPILOT_INTENTS.GET_UNCONTRACTED_SUPPLIERS };
   }
 
   // "que pagamentos tenho este mês" / "pagamentos do mês"
-  if(/pagamentos?/.test(p) && /(este m[eê]s|deste m[eê]s|do m[eê]s|neste m[eê]s)/.test(p)){
+  if(/pagamentos?|payments?/.test(p) && /(este m[eê]s|deste m[eê]s|do m[eê]s|neste m[eê]s|this month)/.test(p)){
     return { intent: WEDDY_COPILOT_INTENTS.GET_PAYMENTS_THIS_MONTH };
   }
 
   // "há algum fornecedor cujo valor não bate certo com o orçamento?"
-  if(/fornecedor/.test(p) && /(n[aã]o bate|discrep[aâ]nci|n[aã]o coincide|n[aã]o corresponde)/.test(p)){
+  if(/fornecedor|supplier/.test(p) && /(n[aã]o bate|discrep[aâ]nci|n[aã]o coincide|n[aã]o corresponde|doesn'?t match|discrepanc|mismatch)/.test(p)){
     return { intent: WEDDY_COPILOT_INTENTS.GET_SUPPLIER_BUDGET_MISMATCHES };
   }
 
   // "o contrato do fotógrafo diz alguma coisa sobre X" — só dispara se
   // conseguir identificar a QUE fornecedor o contrato pertence; senão cai
   // na verificação seguinte (pesquisa geral de documentos).
-  if(/contrato/.test(p)){
+  if(/contrato|\bcontract\b/.test(p)){
     const supplierGuess = findSupplierByText(pergunta);
     if(supplierGuess) return { intent: WEDDY_COPILOT_INTENTS.SEARCH_SUPPLIER_CONTRACT };
   }
@@ -9725,7 +9742,7 @@ function classifyCopilotIntent(pergunta, context){
   // corre para toda e qualquer pergunta) para não sequestrar perguntas
   // normais de orçamento/convidados/mesas que não tenham nada a ver com
   // documentos.
-  if(/document|contrato|pdf|carreguei|anexei|ficheiro/.test(p)){
+  if(/document|contrato|pdf|carreguei|anexei|ficheiro|contract|\bfile\b|uploaded|attached/.test(p)){
     const found = searchWeddingDocuments(pergunta);
     if(found) return { intent: WEDDY_COPILOT_INTENTS.SEARCH_DOCUMENTS };
   }
@@ -9735,7 +9752,7 @@ function classifyCopilotIntent(pergunta, context){
   // mesas existem. "falta(m)? sentar" foi acrescentada na correção do bug
   // "falta/dias" (Set 2026) — era a Secção 27/28 da bateria de 213 testes
   // (#207 "Quem falta sentar?") que caía, por engano, na contagem de dias.
-  if(/sem mesa|mesa por atribuir|ainda n[aã]o t[eê]m mesa|falta atribuir mesa|falta(m)?\s+sentar|convidados? (ainda )?n[aã]o est[aã]o sentad|quem (ainda )?n[aã]o est[aá] sentad/.test(p)){
+  if(/sem mesa|mesa por atribuir|ainda n[aã]o t[eê]m mesa|falta atribuir mesa|falta(m)?\s+sentar|convidados? (ainda )?n[aã]o est[aã]o sentad|quem (ainda )?n[aã]o est[aá] sentad|no table (assigned|yet)|without a table|still needs? (a )?table|not seated yet|haven'?t been seated/.test(p)){
     return { intent: WEDDY_COPILOT_INTENTS.GET_GUESTS_WITHOUT_TABLE };
   }
 
@@ -9744,8 +9761,8 @@ function classifyCopilotIntent(pergunta, context){
   // identificada pelo número. Vem antes do /mesa/ genérico (GET_TABLE_COUNT,
   // que só conta mesas) porque é mais específica.
   {
-    const mesaMatch = p.match(/mesa\s+(\d+)/);
-    if(mesaMatch && /quem|quantas pessoas|sentad/.test(p)){
+    const mesaMatch = p.match(/mesa\s+(\d+)/) || p.match(/table\s+(\d+)/);
+    if(mesaMatch && /quem|quantas pessoas|sentad|who|how many people|seated/.test(p)){
       return { intent: WEDDY_COPILOT_INTENTS.GET_TABLE_GUESTS, value: Number(mesaMatch[1]) };
     }
   }
@@ -9755,7 +9772,7 @@ function classifyCopilotIntent(pergunta, context){
   // convidado concreto, identificado pelo nome (guestId é a identidade
   // canónica usada dentro da Action, nunca o texto em si — ver
   // findGuestsByName/getGuestTable).
-  if(/onde (se senta|est[aá] sentad[oa])|em que mesa est[aá]|qual (é )?a mesa d[eoa]|quem est[aá] sentad[oa]? com/.test(p)){
+  if(/onde (se senta|est[aá] sentad[oa])|em que mesa est[aá]|qual (é )?a mesa d[eoa]|quem est[aá] sentad[oa]? com|where is .+ sitting|what table is .+ (at|on|in)|which table is .+ (at|on|in)|who'?s sitting with/.test(p)){
     return { intent: WEDDY_COPILOT_INTENTS.GET_GUEST_TABLE, value: pergunta };
   }
 
@@ -9765,31 +9782,31 @@ function classifyCopilotIntent(pergunta, context){
   // ser sequestrada por essas palavras (ex.: "mensagem para o fotógrafo"
   // contém "fotógrafo", mas o pedido é para ESCREVER, não para consultar
   // pagamentos).
-  if(/^escreve(-me)?\s+(uma\s+)?(mensagem|texto|algo)/.test(p) || /^prepara(-me)?\s+(uma\s+)?mensagem/.test(p)){
+  if(/^escreve(-me)?\s+(uma\s+)?(mensagem|texto|algo)/.test(p) || /^prepara(-me)?\s+(uma\s+)?mensagem/.test(p) || /^write\s+(me\s+)?(a\s+)?(message|text|something)/.test(p) || /^draft\s+(me\s+)?(a\s+)?message/.test(p)){
     return { intent: WEDDY_COPILOT_INTENTS.DRAFT_MESSAGE, value: pergunta };
   }
 
   // "Quero ver novas funcionalidades" / "o que é que a app faz" / "o que
   // consegues fazer" — pergunta sobre a própria app/assistente, não sobre
   // dados do casamento. Ver comentário em GET_APP_FEATURES.
-  if(/novas funcionalidades|novidades\b|o que (é que )?(a app|o weddy|tu|voc[eê]s?) (faz|fazes|fazem|consegue|consegues|conseguem)|quais? (s[aã]o )?as funcionalidades|o que (é que )?(eu )?(posso|consigo) fazer (aqui|na app|com (a|o) weddy)/.test(p)){
+  if(/novas funcionalidades|novidades\b|o que (é que )?(a app|o weddy|tu|voc[eê]s?) (faz|fazes|fazem|consegue|consegues|conseguem)|quais? (s[aã]o )?as funcionalidades|o que (é que )?(eu )?(posso|consigo) fazer (aqui|na app|com (a|o) weddy)|new features|what'?s new|what can (this app|the app|weddy|you) do|what (features are there|can i do (here|in the app|with weddy))/.test(p)){
     return { intent: WEDDY_COPILOT_INTENTS.GET_APP_FEATURES };
   }
 
   // "Quero saber sobre fornecedores" — genérica, por isso só dispara DEPOIS
   // de todas as intents específicas de fornecedor acima (pagamento, por
   // contratar, contrato, discrepâncias) não terem batido com nada.
-  if(/fornecedor/.test(p)){
+  if(/fornecedor|supplier/.test(p)){
     return { intent: WEDDY_COPILOT_INTENTS.GET_SUPPLIER_OVERVIEW };
   }
 
   if(/rsvp/.test(p)){
     return { intent: WEDDY_COPILOT_INTENTS.GET_RSVP_INFO };
   }
-  if(/convidad/.test(p)){
+  if(/convidad|\bguest/.test(p)){
     return { intent: WEDDY_COPILOT_INTENTS.GET_GUEST_COUNT };
   }
-  if(/orçamento|orcamento|gast|dinheiro|pago|paguei/.test(p)){
+  if(/orçamento|orcamento|gast|dinheiro|pago|paguei|\bbudget\b|\bspen[dt]|\bmoney\b|\bexpense/.test(p)){
     return { intent: WEDDY_COPILOT_INTENTS.GET_BUDGET };
   }
   // Correção do bug transversal "falta/dias" (achado na bateria de 213
@@ -9807,13 +9824,13 @@ function classifyCopilotIntent(pergunta, context){
   //   1) "quantos dias faltam (para o casamento)?" / "dias que faltam"
   //   2) "quanto falta / quanto tempo falta para o casamento/grande dia"
   //   3) "qual é a data do casamento?" / "quando é o casamento?"
-  const COUNTDOWN_DIAS_RE = /(quant[oa]s?\s+)?dias?\s+(que\s+)?falta(m)?\b|falta(m)?\s+quant[oa]s?\s+dias/;
-  const COUNTDOWN_TEMPO_RE = /quanto\s+(tempo\s+)?falta\s+para\s+o\s+(nosso\s+)?(casamento|grande dia)/;
-  const COUNTDOWN_DATA_RE = /data\s+(do\s+)?(nosso\s+)?casamento|quando\s+[eé]\s+(o\s+)?(nosso\s+)?casamento|quando\s+vai\s+ser\s+(o\s+)?(nosso\s+)?casamento/;
+  const COUNTDOWN_DIAS_RE = /(quant[oa]s?\s+)?dias?\s+(que\s+)?falta(m)?\b|falta(m)?\s+quant[oa]s?\s+dias|how many days (are )?(left|remaining)|days (left|remaining|until the wedding)/;
+  const COUNTDOWN_TEMPO_RE = /quanto\s+(tempo\s+)?falta\s+para\s+o\s+(nosso\s+)?(casamento|grande dia)|how (much|long) (is left |time is left )?until (the|our) (wedding|big day)/;
+  const COUNTDOWN_DATA_RE = /data\s+(do\s+)?(nosso\s+)?casamento|quando\s+[eé]\s+(o\s+)?(nosso\s+)?casamento|quando\s+vai\s+ser\s+(o\s+)?(nosso\s+)?casamento|(what'?s|what is) (the )?(wedding )?date|when is (the|our) wedding/;
   if((COUNTDOWN_DIAS_RE.test(p) || COUNTDOWN_TEMPO_RE.test(p) || COUNTDOWN_DATA_RE.test(p)) && weddingSettings.weddingDate){
     return { intent: WEDDY_COPILOT_INTENTS.GET_COUNTDOWN };
   }
-  if(/mesa/.test(p)){
+  if(/mesa|\btables?\b/.test(p)){
     return { intent: WEDDY_COPILOT_INTENTS.GET_TABLE_COUNT };
   }
   // Correção estrutural (Set 2026, achado nos testes reais da Weddy AI):
@@ -9843,14 +9860,15 @@ function classifyCopilotIntent(pergunta, context){
   // intent PRÓPRIA (não UNKNOWN) para nunca ser passada à IA como
   // segunda opinião — a pergunta já foi entendida como "vaga", pedir para
   // a IA adivinhar na mesma seria o oposto do que se quer aqui.
-  if(/^(quanto|quem|o que)\s+falta\??$/.test(p) || /^ajuda-?me a perceber o que falta\.?$/.test(p)){
+  if(/^(quanto|quem|o que)\s+falta\??$/.test(p) || /^ajuda-?me a perceber o que falta\.?$/.test(p) || /^(how much|who|what)\s+(is\s+)?(left|missing)\??$/.test(p) || /^help me (understand|figure out) what'?s (left|missing)\.?$/.test(p)){
     return { intent: WEDDY_COPILOT_INTENTS.NEEDS_CLARIFICATION };
   }
   // "E o João?" / "E a Maria?" chegar até aqui só acontece quando não há
   // nada mais específico a bater (incluindo o bloco de contexto
   // "guestTable" no topo desta função) — ou seja, é mesmo uma pergunta de
   // seguimento sem contexto suficiente para saber a que se refere "E".
-  if(/^e\s+/.test(p) && p.split(/\s+/).filter(Boolean).length<=5){
+  // "And John?" é o equivalente em inglês (Set 2026, "tudo em inglês").
+  if((/^e\s+/.test(p) || /^and\s+/.test(p)) && p.split(/\s+/).filter(Boolean).length<=5){
     return { intent: WEDDY_COPILOT_INTENTS.NEEDS_CLARIFICATION };
   }
   return { intent: WEDDY_COPILOT_INTENTS.UNKNOWN };
