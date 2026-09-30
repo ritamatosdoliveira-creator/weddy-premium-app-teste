@@ -10600,46 +10600,37 @@ function viewRSVPHome(){
   const deadline = weddingSettings.rsvpDeadline || '';
   const deadlineLabel = deadline ? formatDatePT(deadline) : ta('rsvpDeadlineUnset');
   const rustChip = 'background:rgba(193,88,62,0.12); color:var(--rust-dark);';
+  // Fase 9.4 (Set 2026): a Rita reparou que "Enviar convites"/"Lista de
+  // convidados" apareciam duplicados — uma vez no separador (segmented) e
+  // outra vez como título do cartão logo a seguir. Tirámos esse cartão-
+  // cabeçalho: o separador já diz onde estamos, e cada linha (Prazo,
+  // Informações, Respostas) passa a ser o seu próprio cartão avulso — como
+  // nas imagens que a Rita mandou como referência — em vez de estarem
+  // aninhadas dentro de um único cartão maior.
+  // As três linhas usam sempre o mesmo tom rust (rustChip), não as cores
+  // variadas de chipStyle (essas são para categorias de convidados) — é
+  // assim que aparece na referência que a Rita mandou.
+  const hubNavRow = (key, icon, title, desc)=>`
+    <div class="rsvp-nav-row tappable" data-rsvpgoto="${key}">
+      <div class="rsvp-nav-row-icon" style="${rustChip}">${icon}</div>
+      <div class="rsvp-nav-row-mid">
+        <div class="rsvp-nav-row-title">${title}</div>
+        <div class="rsvp-nav-row-desc">${desc}</div>
+      </div>
+      <span class="rsvp-nav-row-chev">${ICONS.chev}</span>
+    </div>`;
   const sendRowsHtml = `
-    <div class="list-row tappable" data-rsvpgoto="deadline" style="cursor:pointer; padding-left:0; padding-right:0;">
-      <div class="def-row-icon" style="${rustChip} width:38px; height:38px;">${ICONS.calendar}</div>
-      <div class="def-row-mid">
-        <div class="def-row-title">${ta('labelRSVPDeadline')}</div>
-        <div class="def-row-desc">${deadlineLabel}</div>
-      </div>
-      ${ICONS.chev}
-    </div>
-    <div class="list-row tappable" data-rsvpgoto="info" style="cursor:pointer; padding-left:0; padding-right:0;">
-      <div class="def-row-icon" style="${rustChip} width:38px; height:38px;">${ICONS.pencil}</div>
-      <div class="def-row-mid">
-        <div class="def-row-title">${ta('guestInfoLabel')}</div>
-        <div class="def-row-desc">${ta('guestInfoSubLabel')}</div>
-      </div>
-      ${ICONS.chev}
-    </div>`;
+    ${hubNavRow('deadline', ICONS.calendar, ta('labelRSVPDeadline'), deadlineLabel)}
+    ${hubNavRow('info', ICONS.pencil, ta('guestInfoLabel'), ta('guestInfoSubLabel'))}`;
   const listRowsHtml = `
-    <div class="list-row tappable" data-rsvpgoto="respostas" style="cursor:pointer; padding-left:0; padding-right:0;">
-      <div class="def-row-icon" style="${rustChip} width:38px; height:38px;">${ICONS.guests}</div>
-      <div class="def-row-mid">
-        <div class="def-row-title">${ta('rsvpRespostasNavTitle')}</div>
-        <div class="def-row-desc">${ta('rsvpRespostasNavDesc')}</div>
-      </div>
-      ${ICONS.chev}
-    </div>`;
+    ${hubNavRow('respostas', ICONS.guests, ta('rsvpRespostasNavTitle'), ta('rsvpRespostasNavDesc'))}`;
   return `
   ${defSubHeader(ta('rsvpTitle'))}
   <div class="segmented">
     <button type="button" class="${rsvpHomeTab==='send'?'active':''}" data-rsvphometab="send">${ta('rsvpTabSendInvites')}</button>
     <button type="button" class="${rsvpHomeTab==='list'?'active':''}" data-rsvphometab="list">${ta('rsvpTabGuestList')}</button>
   </div>
-  <div class="stat-card" style="margin:10px 16px 12px; padding:16px 16px 2px;">
-    <div style="display:flex; align-items:flex-start; gap:12px; margin-bottom:6px;">
-      <div class="def-row-icon" style="${rustChip} width:40px; height:40px;">${rsvpHomeTab==='list' ? ICONS.guests : ICONS.mail}</div>
-      <div style="flex:1; min-width:0;">
-        <div class="l" style="margin:0 0 3px; font-size:15px; color:var(--ink); font-weight:600; text-align:left;">${rsvpHomeTab==='list' ? ta('rsvpTabGuestList') : ta('rsvpTabSendInvites')}</div>
-        <div class="empty-note" style="margin:0; padding:0; text-align:left; font-style:normal;">${rsvpHomeTab==='list' ? ta('rsvpHubSubtitleList') : ta('rsvpHubSubtitle')}</div>
-      </div>
-    </div>
+  <div style="margin-top:10px;">
     ${rsvpHomeTab==='list' ? listRowsHtml : sendRowsHtml}
   </div>
   ${rsvpHomeTab==='list' ? `
