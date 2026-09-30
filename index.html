@@ -4317,13 +4317,18 @@ const APP_I18N = {
     gpErrNotFound:'Não foi possível encontrar este convidado.',
     gpErrGeneric:'Não foi possível guardar. Tenta novamente.',
     btnSendWhatsappReminder:'Enviar lembrete WhatsApp',
-    waSentOk:'Lembrete enviado.',
+    waSentOk:'WhatsApp aberto — falta só carregar em enviar.',
     waErrNoPhone:'Este convidado ainda não tem telefone guardado.',
     waErrNoConsent:'Este convidado ainda não deu consentimento para receber WhatsApp.',
     waErrNoToken:'Este convidado ainda não tem link de RSVP gerado.',
     waErrUnavailable:'Não foi possível contactar o WhatsApp agora. Tenta outra vez daqui a pouco.',
     waErrNoPremium:'O envio de lembretes por WhatsApp faz parte do Weddy Premium.',
     waErrGeneric:'Não foi possível enviar. Tenta novamente.',
+    // Fase 9.3 (Set 2026): deixámos de usar a API paga da Meta para isto —
+    // este botão agora só abre o WhatsApp pessoal do casal (via wa.me) com
+    // a mensagem já escrita, e quem carrega em enviar são eles. Zero custo,
+    // zero conta de negócio na Meta. Ver handler de #gp-send-whatsapp.
+    waManualMessage:(name, couple, link)=>`Olá ${name}! É só um lembrete simpático de ${couple} — ainda não recebemos a tua confirmação de presença. Podes confirmar aqui: ${link}`,
     gcalErrSyncTooSoon:'Acabaste de sincronizar — espera um bocadinho antes de tentar outra vez.',
     gcalErrSyncRunning:'Já há uma sincronização em curso — aguarda que termine.',
     gcalErrReauth:'A ligação ao Google Calendar expirou. Volta a ligar a tua conta Google.',
@@ -5372,13 +5377,14 @@ const APP_I18N = {
     gpErrNotFound:'Couldn\'t find this guest.',
     gpErrGeneric:'Couldn\'t save. Try again.',
     btnSendWhatsappReminder:'Send WhatsApp reminder',
-    waSentOk:'Reminder sent.',
+    waSentOk:'WhatsApp opened — just hit send.',
     waErrNoPhone:'This guest doesn\'t have a phone number saved yet.',
     waErrNoConsent:'This guest hasn\'t consented to receive WhatsApp messages yet.',
     waErrNoToken:'This guest doesn\'t have an RSVP link generated yet.',
     waErrUnavailable:'Couldn\'t reach WhatsApp right now. Try again shortly.',
     waErrNoPremium:'Sending WhatsApp reminders is a Weddy Premium feature.',
     waErrGeneric:'Couldn\'t send. Try again.',
+    waManualMessage:(name, couple, link)=>`Hi ${name}! Just a friendly reminder from ${couple} — we haven't received your RSVP yet. You can confirm here: ${link}`,
     gcalErrSyncTooSoon:'You just synced — wait a bit before trying again.',
     gcalErrSyncRunning:'A sync is already running — wait for it to finish.',
     gcalErrReauth:'The Google Calendar connection expired. Reconnect your Google account.',
@@ -13573,40 +13579,47 @@ function openGuestPhoneSheet(side, cat, idx){
   document.getElementById('gp-error').style.display = 'none';
   document.getElementById('gp-wa-error').style.display = 'none';
   document.getElementById('gp-wa-success').style.display = 'none';
-  // Botão "Enviar lembrete WhatsApp" (Fase 9.2 parte 3) — mostra-se só
-  // quando já há telefone gravado, consentimento dado e link de RSVP
-  // gerado (os mesmos 3 requisitos que a Cloud Function volta a validar
-  // do lado do servidor). A app nunca envia sozinha — é sempre este clique.
-  // Pedido (Set 2026): cada envio custa dinheiro (API da Meta), por isso
-  // também exige subscrição ativa — só cosmético aqui (esconde o botão),
-  // quem impede mesmo o envio é o assertPremiumWedding() do lado do
-  // servidor (ver sendWhatsappRsvpReminder em functions-deliverable).
+  // Botão "Enviar lembrete WhatsApp" (Fase 9.2 parte 3; trocado para
+  // wa.me na Fase 9.3, Set 2026) — mostra-se só quando já há telefone
+  // gravado, consentimento dado e link de RSVP gerado. A app nunca envia
+  // nada sozinha: só abre o WhatsApp pessoal do casal com a mensagem já
+  // escrita (link wa.me), e quem carrega em enviar são eles. Já não
+  // precisa de subscrição ativa nem de conta de negócio na Meta — deixou
+  // de ter qualquer custo por mensagem.
   const waBtn = document.getElementById('gp-send-whatsapp');
-  waBtn.style.display = (phoneEl.value.trim() && consentOn && entry.rsvpToken && hasActiveSubscription()) ? '' : 'none';
+  waBtn.style.display = (phoneEl.value.trim() && consentOn && entry.rsvpToken) ? '' : 'none';
   waBtn.disabled = false;
   waBtn.textContent = ta('btnSendWhatsappReminder');
   document.getElementById('guest-phone-sheet').classList.add('show');
   document.getElementById('sheet-backdrop').classList.add('show');
 }
-document.getElementById('gp-send-whatsapp').addEventListener('click', async ()=>{
+// Fase 9.3 (Set 2026): já não chama nenhuma Cloud Function nem a API da
+// Meta — só monta um link wa.me com a mensagem pronta e abre o WhatsApp
+// pessoal do casal, tal como o "Autopilot" de lembretes em massa já fazia
+// para email/SMS (preparar e deixar o envio sempre a cargo do casal).
+// Zero custo, zero Business API. Continua a exigir telefone + consentimento
+// + link de RSVP (o mesmo que o botão só aparece com os 3 preenchidos).
+document.getElementById('gp-send-whatsapp').addEventListener('click', ()=>{
   if(!editingGuestPhoneRef) return;
-  const btn = document.getElementById('gp-send-whatsapp');
   const errEl = document.getElementById('gp-wa-error');
   const okEl = document.getElementById('gp-wa-success');
   errEl.style.display = 'none';
   okEl.style.display = 'none';
-  btn.disabled = true;
-  const original = btn.textContent;
-  btn.textContent = ta('msgSendingEllipsis') || original;
-  const { guestId } = editingGuestPhoneRef;
-  const res = await GuestCommsService.sendWhatsappRsvpReminder(guestId);
-  btn.disabled = false;
-  btn.textContent = original;
-  if(!res.ok){
-    errEl.textContent = res.message;
+  const { side, cat, idx } = editingGuestPhoneRef;
+  const arr = getGuestNames(side, cat);
+  const entry = arr && arr[idx];
+  if(!entry || !entry.phone || !entry.rsvpToken){
+    errEl.textContent = ta('waErrGeneric');
     errEl.style.display = '';
     return;
   }
+  const couple = [weddingSettings.coupleName1, weddingSettings.coupleName2].filter(Boolean).join(' & ');
+  const link = `${RSVP_BASE_URL}?g=${entry.rsvpToken}`;
+  const texto = ta('waManualMessage')(entry.name||'', couple, link);
+  const digits = entry.phone.replace(/[^\d]/g, '');
+  window.open(`https://wa.me/${digits}?text=${encodeURIComponent(texto)}`, '_blank');
+  markRemindersSent([{ item:{ entry }, token: entry.rsvpToken }]);
+  okEl.textContent = ta('waSentOk');
   okEl.style.display = '';
 });
 function closeGuestPhoneSheet(){
