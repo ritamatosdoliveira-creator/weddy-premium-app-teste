@@ -2250,7 +2250,9 @@ const ICONS = {
   // Ícone genérico "bolha de chat + telefone" para representar o WhatsApp
   // nos botões de lembrete — não é o logótipo oficial (evitamos reproduzir
   // a marca registada), só uma alusão visual reconhecível em verde.
-  whatsapp:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20.5l1.2-4.2A8.5 8.5 0 1 1 8.4 19Z"/><path d="M9 10.3c0 3 2.4 5.4 5.4 5.4 0-.8-.1-1.4-.4-1.7l-1.9-.6-.7.9c-1-.5-1.8-1.3-2.3-2.3l.9-.7-.6-1.9c-.3-.3-.9-.4-1.7-.4Z" fill="currentColor" stroke="none"/></svg>'
+  whatsapp:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20.5l1.2-4.2A8.5 8.5 0 1 1 8.4 19Z"/><path d="M9 10.3c0 3 2.4 5.4 5.4 5.4 0-.8-.1-1.4-.4-1.7l-1.9-.6-.7.9c-1-.5-1.8-1.3-2.3-2.3l.9-.7-.6-1.9c-.3-.3-.9-.4-1.7-.4Z" fill="currentColor" stroke="none"/></svg>',
+  send:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 3.5 3 10.7l6.7 2.8L12.5 20l8-16.5Z"/><path d="M9.7 13.5 20.5 3.5"/></svg>',
+  clock:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.3v5l3.3 2"/></svg>'
 };
 /* --- ícones da barra de separadores: outline (inativo) vs. preenchido (ativo), como no iOS --- */
 const TAB_ICONS = {
@@ -3736,6 +3738,17 @@ const APP_I18N = {
     rsvpFilterPending:'Por responder',
     rsvpFilterNotGoing:'Não vai',
     deadlinePassedWarn:(dateStr,count)=>`O prazo (${dateStr}) já passou e ${fmtGuestCount(count)} convidado${count===1?'':'s'} ainda não respond${count===1?'eu':'eram'}. Talvez valha a pena enviar um lembrete.`,
+    // Fase 9.4 (Set 2026): redesign do ecrã "Prazo para responder" pedido
+    // pela Rita, para ficar visualmente igual ao resto da app (cartões com
+    // ícone+título+subtítulo, linhas navegáveis com chevron, etc.).
+    rsvpDeadlineIntro:'Acompanhe o prazo de resposta dos seus convidados e não deixe ninguém de fora.',
+    deadlinePassedTitle:'O prazo para resposta já terminou',
+    deadlinePassedSub:(count)=>`Ainda há ${fmtGuestCount(count)} convidado${count===1?'':'s'} que ${count===1?'não respondeu':'não responderam'}.`,
+    autopilotSubtitle:'Envie lembretes automáticos aos convidados que ainda não responderam.',
+    autopilotLateCountPlain:(n)=>`${n} atrasado${n===1?'':'s'}`,
+    autopilotDueCountPlain:(n)=>`${n} a precisar de lembrete${n===1?'':'s'}`,
+    autopilotLateDesc:'Convidados que ainda não responderam e já ultrapassaram o prazo.',
+    autopilotDueDesc:'Convidados que ainda não responderam e o prazo está a aproximar-se.',
     respondedLabel:'Responderam',
     maybeCountLabel:(n)=>`${fmtGuestCount(n)} ainda ${n===1?'não sabe':'não sabem'}`,
     transportCountLabel:(n)=>`${fmtGuestCount(n)} pede${n===1?'':'m'} transporte`,
@@ -4807,6 +4820,14 @@ const APP_I18N = {
     rsvpFilterPending:'Awaiting reply',
     rsvpFilterNotGoing:'Not going',
     deadlinePassedWarn:(dateStr,count)=>`The deadline (${dateStr}) has passed and ${fmtGuestCount(count)} guest${count===1?'':'s'} still ${count===1?'hasn\'t':'haven\'t'} answered. It might be worth sending a reminder.`,
+    rsvpDeadlineIntro:'Track your guests\' RSVP deadline and don\'t leave anyone out.',
+    deadlinePassedTitle:'The RSVP deadline has passed',
+    deadlinePassedSub:(count)=>`There ${count===1?'is':'are'} still ${fmtGuestCount(count)} guest${count===1?'':'s'} who ${count===1?'hasn\'t':'haven\'t'} answered.`,
+    autopilotSubtitle:'Send automatic reminders to guests who haven\'t answered yet.',
+    autopilotLateCountPlain:(n)=>`${n} late`,
+    autopilotDueCountPlain:(n)=>`${n} need${n===1?'s':''} a reminder`,
+    autopilotLateDesc:'Guests who haven\'t answered yet and the deadline has already passed.',
+    autopilotDueDesc:'Guests who haven\'t answered yet and the deadline is approaching.',
     respondedLabel:'Responded',
     maybeCountLabel:(n)=>`${fmtGuestCount(n)} still ${n===1?'isn\'t':'aren\'t'} sure`,
     transportCountLabel:(n)=>`${fmtGuestCount(n)} need${n===1?'s':''} transport`,
@@ -8270,6 +8291,14 @@ let rsvpSubScreen = null; // null | 'deadline' | 'info' | 'faq' | 'respostas'
 // Edição de perguntas frequentes (Concierge): null = nenhuma a editar,
 // 'new' = a criar uma nova, ou o índice (número) da pergunta existente.
 let rsvpFaqEditingIndex = null;
+// Fase 9.4 (Set 2026): redesign pedido pela Rita — o passo de "rever
+// lembrete" do Autopilot deixou de ser um popup flutuante e passou a
+// aparecer diretamente na página "Prazo para responder" (como o resto da
+// app: título+ícone da página continuam visíveis, sem overlay a tapar
+// tudo). null = não estamos a rever nenhum lembrete; caso contrário,
+// { entries, msg, channel, sentTokens (Set de tokens já enviados por
+// WhatsApp aqui) }.
+let rsvpAutopilotReview = null;
 // Pedido (Set 2026): "Informações para os convidados"/"Weddy Concierge"
 // deixaram de mostrar sempre todos os campos vazios de uma vez — só os que
 // já têm conteúdo guardado, mais os que a pessoa foi decidindo adicionar
@@ -8413,7 +8442,7 @@ function flattenAllGuestsForRSVP(){
 // Nunca envia nada sozinho: só deteta convidados pendentes, classifica a
 // urgência (dentro do prazo / precisa de lembrete / atrasado) e prepara
 // um lembrete que o casal revê e confirma antes de copiar (ver
-// openRSVPAutopilotModal, mais abaixo). Não há aqui nenhuma Cloud
+// startRSVPAutopilotReview, mais abaixo). Não há aqui nenhuma Cloud
 // Function nova nem chamada de rede — usa só dados que a app já lê
 // (rsvpDeadline) e o mesmo contador de lembretes que a Cloud Function
 // sendRsvpReminders (quando o casal a configurar) também incrementa —
@@ -10639,12 +10668,36 @@ function viewRSVPDeadline(){
   const needsAttention = [...lateList, ...dueList];
   const deadline = weddingSettings.rsvpDeadline || '';
   const deadlinePassed = deadline && deadline < new Date().toISOString().slice(0,10);
+  const rustChip = 'background:rgba(193,88,62,0.12); color:var(--rust-dark);';
+  // Fase 9.4 (Set 2026): redesign pedido pela Rita para que este ecrã siga
+  // exatamente o mesmo estilo do resto da app — cartão com ícone+título+
+  // subtítulo, linha de aviso navegável com chevron (como as linhas da
+  // "Central de RSVP"), e o bloco do Autopilot com uma sub-linha clicável
+  // por urgência (atrasados / a precisar de lembrete), em vez do resumo
+  // tudo-numa-linha que tínhamos antes.
   const deadlineWarnHtml = (deadlinePassed && pending.length)
-    ? `<div class="rsvp-deadline-warn">${ICONS.warn}<div>${ta('deadlinePassedWarn')(formatDatePT(deadline), pending.length)}</div></div>`
+    ? `<div class="rsvp-nav-row tappable" data-rsvpgoto="respostas" style="cursor:pointer;">
+        <div class="rsvp-nav-row-icon" style="${rustChip}">${ICONS.warn}</div>
+        <div class="rsvp-nav-row-mid">
+          <div class="rsvp-nav-row-title" style="color:var(--rust-dark);">${ta('deadlinePassedTitle')}</div>
+          <div class="rsvp-nav-row-desc">${ta('deadlinePassedSub')(pending.length)}</div>
+        </div>
+        <span class="rsvp-nav-row-chev">${ICONS.chev}</span>
+      </div>`
     : '';
+  const autopilotBucketRow = (list, descKey, countKey)=> list.length ? `
+    <div class="rsvp-nav-row tappable" data-autopilot-bucket="${countKey}" style="margin:0 0 8px; box-shadow:none;">
+      <div class="rsvp-nav-row-icon" style="${rustChip}">${ICONS.clock}</div>
+      <div class="rsvp-nav-row-mid">
+        <div class="rsvp-nav-row-title">${ta(countKey)(list.length)}</div>
+        <div class="rsvp-nav-row-desc">${ta(descKey)}</div>
+      </div>
+      <span class="rsvp-nav-row-chev">${ICONS.chev}</span>
+    </div>` : '';
   return `
-  ${defSubHeader(ta('labelRSVPDeadline'))}
+  ${defSubHeader(ta('labelRSVPDeadline'), ta('rsvpDeadlineIntro'))}
   <div class="rsvp-deadline-card">
+    <div class="def-row-icon" style="${rustChip} width:44px; height:44px; flex-shrink:0;">${ICONS.calendar}</div>
     <div style="flex:1; min-width:0;">
       <div class="l">${ta('labelRSVPDeadline')}</div>
       <input type="date" id="rsvp-deadline-input" value="${escapeHTML(deadline)}">
@@ -10653,14 +10706,20 @@ function viewRSVPDeadline(){
   </div>
   ${deadlineWarnHtml}
   ${autopilot.length ? `
-  <div class="stat-card" style="margin:0 16px 12px;">
-    <div class="l" style="margin:0 0 8px;">${ta('autopilotTitle')}</div>
-    <div class="empty-note" style="margin:0 0 10px; font-style:normal;">${[
-      lateList.length ? ta('autopilotLateCount')(lateList.length) : '',
-      dueList.length ? ta('autopilotDueCount')(dueList.length) : ''
-    ].filter(Boolean).join(' · ') || ta('autopilotAllOnTime')}</div>
-    <button class="rsvp-deadline-save" id="rsvp-autopilot-prepare" style="width:100%;" ${needsAttention.length? '':'disabled'}>${ICONS.bell} ${ta('autopilotPrepareBtn')(needsAttention.length)}</button>
+  <div class="stat-card" style="margin:0 16px 12px; padding:16px;">
+    <div style="display:flex; align-items:flex-start; gap:12px; margin-bottom:14px;">
+      <div class="def-row-icon" style="${rustChip} width:40px; height:40px;">${ICONS.sparkle}</div>
+      <div style="flex:1; min-width:0;">
+        <div class="l" style="margin:0 0 3px; font-size:15px; color:var(--ink); font-weight:600; text-align:left;">${ta('autopilotTitle')}</div>
+        <div class="empty-note" style="margin:0; padding:0; text-align:left; font-style:normal;">${ta('autopilotSubtitle')}</div>
+      </div>
+    </div>
+    ${autopilotBucketRow(lateList, 'autopilotLateDesc', 'autopilotLateCountPlain')}
+    ${autopilotBucketRow(dueList, 'autopilotDueDesc', 'autopilotDueCountPlain')}
+    ${!needsAttention.length ? `<div class="empty-note" style="margin:0 0 10px; font-style:normal;">${ta('autopilotAllOnTime')}</div>` : ''}
+    <button class="rsvp-deadline-save" id="rsvp-autopilot-prepare" style="width:100%;" ${needsAttention.length? '':'disabled'}>${ICONS.send} ${ta('autopilotPrepareBtn')(needsAttention.length)}</button>
   </div>` : ''}
+  ${autopilotReviewCardHtml()}
   `;
 }
 function viewRSVPInfo(){
@@ -12890,14 +12949,79 @@ function bindHandlers(){
     });
   });
   // Fase 5 — RSVP Autopilot: em vez de copiar logo, abre um passo de
-  // revisão/confirmação (openRSVPAutopilotModal) — "Weddy prepara, casal
-  // confirma" — só depois copia o texto e regista o lembrete.
+  // revisão/confirmação (startRSVPAutopilotReview) — "Weddy prepara, casal
+  // confirma" — só depois copia o texto e regista o lembrete. Desde a Fase
+  // 9.4, isto já não é um popup — é um cartão que aparece mais abaixo na
+  // própria página (ver autopilotReviewCardHtml em viewRSVPDeadline).
   const rsvpAutopilotPrepare = document.getElementById('rsvp-autopilot-prepare');
   if(rsvpAutopilotPrepare) rsvpAutopilotPrepare.addEventListener('click', ()=>{
     const entries = rsvpAutopilotList().filter(x=>x.bucket==='due' || x.bucket==='late');
     if(!entries.length) return;
-    openRSVPAutopilotModal(entries);
+    startRSVPAutopilotReview(entries);
   });
+  // Fase 9.4 (Set 2026): as sub-linhas "N atrasados" / "N a precisar de
+  // lembrete" dentro do cartão do Autopilot também são clicáveis — abrem
+  // o mesmo passo de revisão, mas só com aquele grupo específico.
+  document.querySelectorAll('[data-autopilot-bucket]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const key = el.getAttribute('data-autopilot-bucket');
+      const bucket = key==='autopilotLateCountPlain' ? 'late' : 'due';
+      const entries = rsvpAutopilotList().filter(x=>x.bucket===bucket);
+      if(!entries.length) return;
+      startRSVPAutopilotReview(entries);
+    });
+  });
+  // Cartão de revisão do lembrete (Fase 9.4) — ligado aqui só quando está
+  // aberto (rsvpAutopilotReview definido), tal como os outros formulários
+  // inline da app.
+  if(rsvpAutopilotReview){
+    const msgInput = document.getElementById('rsvp-reminder-msg');
+    const charCount = document.getElementById('rsvp-reminder-charcount');
+    if(msgInput) msgInput.addEventListener('input', ()=>{
+      rsvpAutopilotReview.msg = msgInput.value;
+      if(charCount) charCount.textContent = ta('reminderCharCount')(msgInput.value.length);
+    });
+    document.querySelectorAll('[data-autopilot-wa-send]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const token = btn.getAttribute('data-autopilot-wa-send');
+        const found = rsvpAutopilotReview.entries.find(e=>e.token===token);
+        if(!found) return;
+        const entry = found.item.entry;
+        const couple = [weddingSettings.coupleName1, weddingSettings.coupleName2].filter(Boolean).join(' & ');
+        const link = `${RSVP_BASE_URL}?g=${token}`;
+        const texto = ta('waManualMessage')(entry.name||'', couple, link);
+        const digits = entry.phone.replace(/[^\d]/g, '');
+        openWhatsAppLink(digits, texto);
+        markRemindersSent([found]);
+        rsvpAutopilotReview.sentTokens.add(token);
+        // Só ícone, sem texto — um "check" a substituir o ícone do
+        // WhatsApp, sem re-render completo (para não perder o rascunho da
+        // mensagem que a Rita já possa ter começado a escrever).
+        btn.disabled = true;
+        btn.style.color = 'var(--ink-soft)';
+        btn.innerHTML = ICONS.check;
+      });
+    });
+    const confirmBtn = document.getElementById('rsvp-autopilot-confirm');
+    if(confirmBtn) confirmBtn.addEventListener('click', async (e)=>{
+      const btn = e.currentTarget;
+      btn.disabled = true;
+      const { entries, msg } = rsvpAutopilotReview;
+      const finalMsg = (msgInput? msgInput.value.trim() : msg) || ta('reminderDefaultGreeting');
+      const linhas = entries.map(({item, token})=>`${item.name}: ${RSVP_BASE_URL}?g=${token}`);
+      const texto = `${finalMsg}\n\n${linhas.join('\n')}`;
+      try{
+        await navigator.clipboard.writeText(texto);
+      }catch(err){
+        prompt(ta('promptCopyReminderManually'), texto);
+      }
+      await markRemindersSent(entries);
+      rsvpAutopilotReview = null;
+      render();
+    });
+    const cancelBtn = document.getElementById('rsvp-autopilot-cancel');
+    if(cancelBtn) cancelBtn.addEventListener('click', cancelRSVPAutopilotReview);
+  }
   const rsvpExportCsv = document.getElementById('rsvp-export-csv');
   if(rsvpExportCsv) rsvpExportCsv.addEventListener('click', ()=>{ exportRSVPToCSV(); });
   document.querySelectorAll('[data-rsvpemail]').forEach(input=>{
@@ -14049,107 +14173,55 @@ function closeRSVPQRModal(){
 // A Weddy já escolheu quem entra (atrasados + a precisar de lembrete),
 // mas nada é copiado nem marcado como enviado sem o casal carregar em
 // "Confirmar e copiar" aqui — nunca há envio automático nesta versão.
-function openRSVPAutopilotModal(entries){
-  closeRSVPAutopilotModal();
-  const wrap = document.createElement('div');
-  wrap.id = 'rsvp-autopilot-modal';
-  wrap.className = 'rsvp-qr-modal';
-  // Pedido da Rita (Set 2026): além do "preparar e copiar" em massa, dar
-  // também a opção de mandar logo aqui, um a um, por wa.me — para quem já
-  // tem telefone + consentimento de WhatsApp dado. Mesma funcionalidade e
-  // mesma regra de acesso (Weddy Premium) do botão individual na ficha do
-  // convidado; só a via de acesso é que é diferente (aqui, em lote).
+// Fase 9.4 (Set 2026): redesign pedido pela Rita — isto era um popup
+// (openRSVPAutopilotModal) que tapava a página toda; agora é só um estado
+// (rsvpAutopilotReview) que a própria viewRSVPDeadline() desenha como mais
+// um cartão na página, tal como o resto da app (título+ícone continuam
+// visíveis, sem overlay). startRSVPAutopilotReview arranca a revisão;
+// autopilotReviewCardHtml desenha o cartão; os cliques (enviar por
+// WhatsApp uma a uma, confirmar e copiar, cancelar) estão ligados junto
+// dos outros no bloco de eventos da página, mais abaixo.
+function startRSVPAutopilotReview(entries){
+  rsvpAutopilotReview = { entries, msg: ta('reminderDefaultGreeting'), sentTokens: new Set() };
+  render();
+}
+function cancelRSVPAutopilotReview(){
+  rsvpAutopilotReview = null;
+  render();
+}
+function autopilotReviewCardHtml(){
+  if(!rsvpAutopilotReview) return '';
+  const { entries, msg, sentTokens } = rsvpAutopilotReview;
+  const rustChip = 'background:rgba(193,88,62,0.12); color:var(--rust-dark);';
   const canWa = hasActiveSubscription();
   const rows = entries.map(({item, bucket, token})=>{
     const entry = item.entry;
-    const waReady = canWa && !!(entry.phone && token && entry.communicationPreferences && entry.communicationPreferences.whatsapp && entry.communicationPreferences.whatsapp.optedIn);
+    const already = token && sentTokens.has(token);
+    const waReady = canWa && !already && !!(entry.phone && token && entry.communicationPreferences && entry.communicationPreferences.whatsapp && entry.communicationPreferences.whatsapp.optedIn);
     return `
     <div class="list-row" style="padding:8px 0;" data-autopilot-row="${escapeHTML(token||'')}">
       <span style="width:8px; height:8px; border-radius:50%; background:${bucket==='late'?'#C0523F':'#D8A657'}; flex-shrink:0;"></span>
       <div style="flex:1;">${escapeHTML(item.name)}</div>
       ${waReady ? `<button type="button" class="btn-cancel" data-autopilot-wa-send="${escapeHTML(token)}" aria-label="WhatsApp" style="padding:6px; width:32px; height:32px; display:flex; align-items:center; justify-content:center; flex-shrink:0; color:#25D366;">${ICONS.whatsapp}</button>` : ''}
+      ${already ? `<span style="width:32px; height:32px; display:flex; align-items:center; justify-content:center; flex-shrink:0; color:var(--ink-soft);">${ICONS.check}</span>` : ''}
     </div>`;
   }).join('');
-  const defaultMsg = ta('reminderDefaultGreeting');
-  wrap.innerHTML = `
-    <div class="rsvp-qr-card" style="max-width:380px; max-height:85vh; overflow-y:auto;">
-      <button class="rsvp-qr-close" id="rsvp-autopilot-close">${ICONS.close||'&times;'}</button>
-      <div class="reminder-modal-icon">${ICONS.bell}</div>
-      <div class="rsvp-row-name" style="margin-bottom:4px;">${ta('autopilotModalTitle')(entries.length)}</div>
-      <div class="empty-note" style="margin:0 0 4px; font-style:normal; text-align:left;">${ta('autopilotModalHint')}</div>
-      <div class="reminder-field-label">${ta('reminderChannelLabel')}</div>
-      <div class="lang-switch-pills" id="reminder-channel-switch" style="width:100%;">
-        <button type="button" data-reminderchannel="email" class="active" style="flex:1;">Email</button>
-        <button type="button" data-reminderchannel="sms" style="flex:1;">SMS</button>
+  return `
+  <div class="stat-card" style="margin:0 16px 12px; padding:16px;">
+    <div style="display:flex; align-items:flex-start; gap:12px; margin-bottom:10px;">
+      <div class="def-row-icon" style="${rustChip} width:40px; height:40px;">${ICONS.chat}</div>
+      <div style="flex:1; min-width:0;">
+        <div class="l" style="margin:0 0 3px; font-size:15px; color:var(--ink); font-weight:600; text-align:left;">${ta('reminderMsgLabel')}</div>
+        <div class="empty-note" style="margin:0; padding:0; text-align:left; font-style:normal;">${ta('autopilotModalHint')}</div>
       </div>
-      <div class="reminder-field-label">${ta('reminderMsgLabel')}</div>
-      <textarea class="reminder-msg-textarea" id="rsvp-reminder-msg">${escapeHTML(defaultMsg)}</textarea>
-      <div class="reminder-char-count" id="rsvp-reminder-charcount">${ta('reminderCharCount')(defaultMsg.length)}</div>
-      <div class="reminder-recipients-note">${ta('reminderRecipientsLabel')(entries.length)}</div>
-      <div class="list-group" style="text-align:left; margin:8px 0 14px; max-height:120px; overflow-y:auto;">${rows}</div>
-      <button class="rsvp-deadline-save" id="rsvp-autopilot-confirm" style="width:100%;">${ICONS.mail} ${ta('autopilotConfirmBtn')}</button>
     </div>
-  `;
-  document.body.appendChild(wrap);
-  document.getElementById('rsvp-autopilot-close').addEventListener('click', closeRSVPAutopilotModal);
-  wrap.addEventListener('click', e=>{ if(e.target===wrap) closeRSVPAutopilotModal(); });
-  // Botão "WhatsApp" por linha: mesma lógica do botão individual da ficha
-  // do convidado (wa.me, zero API da Meta) — abre já a mensagem escrita e
-  // marca só aquele convidado como lembrado, sem afetar os restantes nem
-  // fechar o modal, para o casal poder ir despachando um a um.
-  wrap.querySelectorAll('[data-autopilot-wa-send]').forEach(btn=>{
-    btn.addEventListener('click', ()=>{
-      const token = btn.getAttribute('data-autopilot-wa-send');
-      const found = entries.find(e=>e.token===token);
-      if(!found) return;
-      const entry = found.item.entry;
-      const couple = [weddingSettings.coupleName1, weddingSettings.coupleName2].filter(Boolean).join(' & ');
-      const link = `${RSVP_BASE_URL}?g=${token}`;
-      const texto = ta('waManualMessage')(entry.name||'', couple, link);
-      const digits = entry.phone.replace(/[^\d]/g, '');
-      openWhatsAppLink(digits, texto);
-      markRemindersSent([found]);
-      // Só ícone, sem texto — um "check" a substituir o ícone do WhatsApp,
-      // para não estragar o alinhamento da linha (era isto que antes
-      // ficava com uma frase comprida a tapar a linha seguinte).
-      btn.disabled = true;
-      btn.style.color = 'var(--ink-soft)';
-      btn.innerHTML = ICONS.check;
-    });
-  });
-  // O canal (Email/SMS) é só uma preferência visual guardada com o lembrete
-  // — o envio em si continua a ser sempre "preparar e copiar", como a Rita
-  // confirmou; não há nenhuma integração real de email/SMS a acionar aqui.
-  wrap.querySelectorAll('[data-reminderchannel]').forEach(btn=>{
-    btn.addEventListener('click', e=>{
-      wrap.querySelectorAll('[data-reminderchannel]').forEach(b=>b.classList.remove('active'));
-      e.currentTarget.classList.add('active');
-    });
-  });
-  const msgInput = document.getElementById('rsvp-reminder-msg');
-  const charCount = document.getElementById('rsvp-reminder-charcount');
-  if(msgInput) msgInput.addEventListener('input', ()=>{
-    if(charCount) charCount.textContent = ta('reminderCharCount')(msgInput.value.length);
-  });
-  document.getElementById('rsvp-autopilot-confirm').addEventListener('click', async (e)=>{
-    const btn = e.currentTarget;
-    btn.disabled = true;
-    const msg = (msgInput? msgInput.value.trim() : '') || defaultMsg;
-    const linhas = entries.map(({item, token})=>`${item.name}: ${RSVP_BASE_URL}?g=${token}`);
-    const texto = `${msg}\n\n${linhas.join('\n')}`;
-    try{
-      await navigator.clipboard.writeText(texto);
-    }catch(err){
-      prompt(ta('promptCopyReminderManually'), texto);
-    }
-    await markRemindersSent(entries);
-    closeRSVPAutopilotModal();
-    render();
-  });
-}
-function closeRSVPAutopilotModal(){
-  const el = document.getElementById('rsvp-autopilot-modal');
-  if(el) el.remove();
+    <textarea class="reminder-msg-textarea" id="rsvp-reminder-msg">${escapeHTML(msg)}</textarea>
+    <div class="reminder-char-count" id="rsvp-reminder-charcount">${ta('reminderCharCount')(msg.length)}</div>
+    <div class="reminder-recipients-note">${ta('reminderRecipientsLabel')(entries.length)}</div>
+    <div class="list-group" style="text-align:left; margin:8px 0 14px; max-height:220px; overflow-y:auto;">${rows}</div>
+    <button class="rsvp-deadline-save" id="rsvp-autopilot-confirm" style="width:100%;">${ICONS.send} ${ta('autopilotConfirmBtn')}</button>
+    <button class="rsvp-copy-btn" id="rsvp-autopilot-cancel" style="width:100%; margin-top:8px;">${ta('btnCancel')}</button>
+  </div>`;
 }
 // Escreve em TODOS os guests/{token} o "programa do dia" — só os momentos
 // que os noivos marcaram como "Mostrar aos convidados" (nunca a agenda
