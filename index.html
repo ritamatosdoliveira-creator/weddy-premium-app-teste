@@ -2246,7 +2246,11 @@ const ICONS = {
   download:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5v12M7.5 11l4.5 4.5L16.5 11"/><path d="M4.5 17v2.3a1.7 1.7 0 0 0 1.7 1.7h11.6a1.7 1.7 0 0 0 1.7-1.7V17"/></svg>',
   bell:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9.5a6 6 0 0 1 12 0c0 4.5 1.5 5.8 1.5 5.8h-15S6 14 6 9.5Z"/><path d="M10 19a2.2 2.2 0 0 0 4 0"/></svg>',
   mascot:'<svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M10 34v-4a22 22 0 0 1 44 0v4"/><rect x="4.5" y="30" width="9" height="14" rx="4"/><rect x="50.5" y="30" width="9" height="14" rx="4"/><circle cx="32" cy="34" r="15" fill="var(--card)"/><path d="M25.5 33.5c0-1.6.9-2.6 2-2.6s2 1 2 2.6M34.5 33.5c0-1.6.9-2.6 2-2.6s2 1 2 2.6" stroke-width="2.3"/><path d="M25.5 40c2 2.2 11 2.2 13 0"/><path d="M44 39c1.8 3.5 1.4 7-1 9.5" opacity=".55"/><g fill="currentColor" stroke="none"><path d="M50 8c.35 2.1 1.3 3.3 3.8 3.8-2.5.5-3.45 1.7-3.8 3.8-.35-2.1-1.3-3.3-3.8-3.8 2.5-.5 3.45-1.7 3.8-3.8Z"/><path d="M56.5 15.5c.2 1.15.7 1.8 2.1 2.1-1.4.3-1.9.95-2.1 2.1-.2-1.15-.7-1.8-2.1-2.1 1.4-.3 1.9-.95 2.1-2.1Z" opacity=".75"/></g></svg>',
-  qrcode:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><rect x="3.5" y="3.5" width="6.5" height="6.5" rx="1"/><rect x="14" y="3.5" width="6.5" height="6.5" rx="1"/><rect x="3.5" y="14" width="6.5" height="6.5" rx="1"/><path d="M14 14h3v3h-3zM19.5 14v3M14 19.5h3M19.5 19.5v0"/></svg>'
+  qrcode:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><rect x="3.5" y="3.5" width="6.5" height="6.5" rx="1"/><rect x="14" y="3.5" width="6.5" height="6.5" rx="1"/><rect x="3.5" y="14" width="6.5" height="6.5" rx="1"/><path d="M14 14h3v3h-3zM19.5 14v3M14 19.5h3M19.5 19.5v0"/></svg>',
+  // Ícone genérico "bolha de chat + telefone" para representar o WhatsApp
+  // nos botões de lembrete — não é o logótipo oficial (evitamos reproduzir
+  // a marca registada), só uma alusão visual reconhecível em verde.
+  whatsapp:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20.5l1.2-4.2A8.5 8.5 0 1 1 8.4 19Z"/><path d="M9 10.3c0 3 2.4 5.4 5.4 5.4 0-.8-.1-1.4-.4-1.7l-1.9-.6-.7.9c-1-.5-1.8-1.3-2.3-2.3l.9-.7-.6-1.9c-.3-.3-.9-.4-1.7-.4Z" fill="currentColor" stroke="none"/></svg>'
 };
 /* --- ícones da barra de separadores: outline (inativo) vs. preenchido (ativo), como no iOS --- */
 const TAB_ICONS = {
@@ -8094,6 +8098,29 @@ function bindFornecedorDetalheHandlers(){
    individual de convidado, nunca para dentro desta app.
 ============================================================ */
 const RSVP_BASE_URL = 'https://ritamatosdoliveira-creator.github.io/weddy-premium-app-teste/rsvp.html';
+// Fase 9.3.2 (Set 2026): a Rita reportou que, mesmo trocando window.open
+// por location.href, continuava a ficar uma página em branco presa depois
+// de voltar do WhatsApp. Motivo: a app Android é uma TWA (Trusted Web
+// Activity) — qualquer navegação para um domínio fora do nosso (como
+// wa.me) abre sempre dentro de uma Chrome Custom Tab por cima da app, e é
+// essa Custom Tab que fica parada em branco à espera de ser fechada à mão.
+// Em Android, saltamos essa Custom Tab por completo indo direto por
+// Intent para a app do WhatsApp (scheme=whatsapp;package=com.whatsapp) —
+// isto é tratado pelo próprio Chrome como uma troca de app nativa, não
+// como uma nova página. Só cai para o link https://wa.me normal (via
+// browser_fallback_url) se o WhatsApp não estiver instalado. No iOS/
+// desktop mantemos o link normal, que já não tem este problema.
+function openWhatsAppLink(digits, texto){
+  const encoded = encodeURIComponent(texto);
+  const waUrl = `https://wa.me/${digits}?text=${encoded}`;
+  const isAndroid = /Android/i.test(navigator.userAgent);
+  if(isAndroid){
+    const fallback = encodeURIComponent(waUrl);
+    window.location.href = `intent://send?phone=${digits}&text=${encoded}#Intent;scheme=whatsapp;package=com.whatsapp;S.browser_fallback_url=${fallback};end`;
+  } else {
+    window.location.href = waUrl;
+  }
+}
 let rsvpResponses = {};
 let rsvpResponsesLoaded = false;
 let rsvpLoadingResponses = false;
@@ -13624,14 +13651,9 @@ document.getElementById('gp-send-whatsapp').addEventListener('click', ()=>{
   const link = `${RSVP_BASE_URL}?g=${entry.rsvpToken}`;
   const texto = ta('waManualMessage')(entry.name||'', couple, link);
   const digits = entry.phone.replace(/[^\d]/g, '');
-  // Fase 9.3.1 (Set 2026): trocado de window.open(...,'_blank') para
-  // location.href — a Rita reportou que, no iPhone, o "_blank" abre um
-  // separador novo que fica em branco depois de voltar do WhatsApp (só
-  // fecha à mão, com o "X"). Ao navegar na mesma janela, o iOS intercepta
-  // o link wa.me como Universal Link e passa logo para a app do WhatsApp
-  // antes da página chegar a carregar — a Weddy fica exatamente onde
-  // estava, sem separador nenhum a limpar.
-  window.location.href = `https://wa.me/${digits}?text=${encodeURIComponent(texto)}`;
+  // Fase 9.3.2 (Set 2026): ver openWhatsAppLink — evita a Custom Tab do
+  // Chrome que ficava presa em branco na app Android.
+  openWhatsAppLink(digits, texto);
   markRemindersSent([{ item:{ entry }, token: entry.rsvpToken }]);
   okEl.textContent = ta('waSentOk');
   okEl.style.display = '';
@@ -14030,7 +14052,7 @@ function openRSVPAutopilotModal(entries){
     <div class="list-row" style="padding:8px 0;" data-autopilot-row="${escapeHTML(token||'')}">
       <span style="width:8px; height:8px; border-radius:50%; background:${bucket==='late'?'#C0523F':'#D8A657'}; flex-shrink:0;"></span>
       <div style="flex:1;">${escapeHTML(item.name)}</div>
-      ${waReady ? `<button type="button" class="btn-cancel" data-autopilot-wa-send="${escapeHTML(token)}" style="padding:4px 10px; font-size:12px; flex-shrink:0;">WhatsApp</button>` : ''}
+      ${waReady ? `<button type="button" class="btn-cancel" data-autopilot-wa-send="${escapeHTML(token)}" aria-label="WhatsApp" style="padding:6px; width:32px; height:32px; display:flex; align-items:center; justify-content:center; flex-shrink:0; color:#25D366;">${ICONS.whatsapp}</button>` : ''}
     </div>`;
   }).join('');
   const defaultMsg = ta('reminderDefaultGreeting');
@@ -14070,11 +14092,14 @@ function openRSVPAutopilotModal(entries){
       const link = `${RSVP_BASE_URL}?g=${token}`;
       const texto = ta('waManualMessage')(entry.name||'', couple, link);
       const digits = entry.phone.replace(/[^\d]/g, '');
-      // Ver nota em cima (fix Fase 9.3.1) — mesmo motivo, mesmo fix.
-      window.location.href = `https://wa.me/${digits}?text=${encodeURIComponent(texto)}`;
+      openWhatsAppLink(digits, texto);
       markRemindersSent([found]);
+      // Só ícone, sem texto — um "check" a substituir o ícone do WhatsApp,
+      // para não estragar o alinhamento da linha (era isto que antes
+      // ficava com uma frase comprida a tapar a linha seguinte).
       btn.disabled = true;
-      btn.textContent = ta('waSentOk');
+      btn.style.color = 'var(--ink-soft)';
+      btn.innerHTML = ICONS.check;
     });
   });
   // O canal (Email/SMS) é só uma preferência visual guardada com o lembrete
