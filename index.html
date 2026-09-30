@@ -4257,7 +4257,21 @@ const APP_I18N = {
     cpTableCount:(n)=>`Tens ${n} mesas configuradas na secção de Mesas.`,
     cpDocFound:(doc,snippet)=>`Encontrei isto em "${doc}":\n\n"${snippet}"`,
     cpDemoFallback:'Ainda estou em modo de demonstração (sem ligação a um modelo de IA real), mas já consigo responder sobre convidados, orçamento, datas, mesas, pagamentos, tarefas da semana e procurar nos documentos que carregaste — pergunta-me, por exemplo, "quantos convidados já confirmaram?".',
+    // Achado (Set 2026): o chip sugerido "Quero ver novas funcionalidades"
+    // caía sempre no fallback genérico acima — não existia nenhuma intent
+    // para perguntas sobre o que a própria app/assistente sabe fazer. Esta
+    // resposta é sempre curada à mão (as ferramentas reais do ecrã
+    // "Ferramentas Weddy"), nunca inventada pela IA — se uma ferramenta
+    // nova for adicionada à app, este texto tem de ser atualizado à mão.
+    cpAppFeatures:'As funcionalidades mais recentes da Weddy: Convites RSVP (um link individual para cada convidado confirmar presença e restrições), Wedding Health (um raio-x rápido ao estado do casamento), Weddy Memories (para reviver os melhores momentos do grande dia), Documentos do casamento (guarda e consulta contratos) e sincronização com o Google Calendar — encontras tudo isto em "Ferramentas Weddy", no ecrã principal. E este assistente: pergunta-me sobre convidados, orçamento, mesas, pagamentos, tarefas ou fornecedores.',
     cpSupplierPaymentNotFound:'Não encontrei nenhum fornecedor que corresponda a essa pergunta — tenta usar o nome dele ou a categoria (ex: "fotógrafo", "espaço").',
+    // Achado (Set 2026): o chip sugerido "Quero saber sobre fornecedores"
+    // também caía no fallback — não havia nenhuma intent "genérica" para
+    // fornecedores, só as específicas (pagamentos, por contratar,
+    // contratos, discrepâncias). Esta dá uma visão geral e sugere as
+    // perguntas mais específicas para quem quiser mais detalhe.
+    cpSupplierOverview:(total,contratados,porContratar,orcado,pago)=>`Tens ${total} fornecedor${total===1?'':'es'}: ${contratados} já contratado${contratados===1?'':'s'} e ${porContratar} por contratar. No total orçaste ${orcado}, dos quais já pagaste ${pago}. Pergunta-me por um em concreto — por exemplo, "quanto já paguei ao fotógrafo?" — para mais detalhe.`,
+    cpNoSuppliers:'Ainda não tens nenhum fornecedor adicionado — podes começar na secção Fornecedores.',
     cpPaidSoFar:(name,paid)=>`${name} — já pago: ${paid}`,
     cpOfContracted:(x)=>` de ${x} contratados`,
     // Correção do achado #72 (Set 2026): a resposta já tinha os dados para
@@ -5334,7 +5348,10 @@ const APP_I18N = {
     cpTableCount:(n)=>`You have ${n} tables set up in the Tables section.`,
     cpDocFound:(doc,snippet)=>`I found this in "${doc}":\n\n"${snippet}"`,
     cpDemoFallback:'I\'m still in demo mode (not connected to a real AI model), but I can already answer about guests, budget, dates, tables, payments, this week\'s tasks, and search the documents you\'ve uploaded — ask me, for example, "how many guests have confirmed?".',
+    cpAppFeatures:'Weddy\'s most recent tools: RSVP Invites (an individual link for each guest to confirm attendance and dietary restrictions), Wedding Health (a quick check-up on your wedding\'s status), Weddy Memories (to relive the big day\'s best moments), Wedding Documents (store and search your contracts) and Google Calendar sync — you\'ll find all of these under "Weddy Tools" on the home screen. And this assistant: ask me about guests, budget, tables, payments, tasks or suppliers.',
     cpSupplierPaymentNotFound:'I couldn\'t find a supplier matching that question — try using their name or category (e.g. "photographer", "venue").',
+    cpSupplierOverview:(total,contracted,toContract,budgeted,paid)=>`You have ${total} supplier${total===1?'':'s'}: ${contracted} already contracted and ${toContract} still to contract. In total you've budgeted ${budgeted}, of which you've already paid ${paid}. Ask me about a specific one — e.g. "how much have I paid the photographer?" — for more detail.`,
+    cpNoSuppliers:'You don\'t have any suppliers added yet — you can start in the Suppliers section.',
     cpPaidSoFar:(name,paid)=>`${name} — paid so far: ${paid}`,
     cpOfContracted:(x)=>` of ${x} contracted`,
     cpSupplierRemaining:(x)=>` Still owed: ${x}.`,
@@ -9230,6 +9247,19 @@ const WEDDY_COPILOT_INTENTS = {
   // esclarecimento. Ver bloco de resolução de contexto no topo de
   // classifyCopilotIntent.
   NEEDS_CLARIFICATION:'NEEDS_CLARIFICATION',
+  // Correção (Set 2026, achado "Continuamos a ter respostas destas"): dois
+  // dos quatro chips sugeridos no ecrã do assistente ("Quero saber sobre
+  // fornecedores" e "Quero ver novas funcionalidades") não batiam em
+  // NENHUMA intent — caíam sempre no fallback genérico de "modo de
+  // demonstração", mesmo sendo sugestões da própria app. GET_APP_FEATURES
+  // responde com uma lista curada à mão do que a app/assistente já sabe
+  // fazer; GET_SUPPLIER_OVERVIEW dá uma visão geral dos fornecedores
+  // (contratados vs por contratar, total orçado/pago) quando a pergunta
+  // menciona fornecedores sem ser específica o suficiente para nenhuma das
+  // intents de fornecedor já existentes (pagamento, por contratar,
+  // contrato, discrepâncias).
+  GET_APP_FEATURES:'GET_APP_FEATURES',
+  GET_SUPPLIER_OVERVIEW:'GET_SUPPLIER_OVERVIEW',
   UNKNOWN:'UNKNOWN'
 };
 // Palavras com menos de 3 letras ("e", "x", "a"...) ficam de fora — são
@@ -9665,6 +9695,20 @@ function classifyCopilotIntent(pergunta, context){
     return { intent: WEDDY_COPILOT_INTENTS.DRAFT_MESSAGE, value: pergunta };
   }
 
+  // "Quero ver novas funcionalidades" / "o que é que a app faz" / "o que
+  // consegues fazer" — pergunta sobre a própria app/assistente, não sobre
+  // dados do casamento. Ver comentário em GET_APP_FEATURES.
+  if(/novas funcionalidades|novidades\b|o que (é que )?(a app|o weddy|tu|voc[eê]s?) (faz|fazes|fazem|consegue|consegues|conseguem)|quais? (s[aã]o )?as funcionalidades|o que (é que )?(eu )?(posso|consigo) fazer (aqui|na app|com (a|o) weddy)/.test(p)){
+    return { intent: WEDDY_COPILOT_INTENTS.GET_APP_FEATURES };
+  }
+
+  // "Quero saber sobre fornecedores" — genérica, por isso só dispara DEPOIS
+  // de todas as intents específicas de fornecedor acima (pagamento, por
+  // contratar, contrato, discrepâncias) não terem batido com nada.
+  if(/fornecedor/.test(p)){
+    return { intent: WEDDY_COPILOT_INTENTS.GET_SUPPLIER_OVERVIEW };
+  }
+
   if(/rsvp/.test(p)){
     return { intent: WEDDY_COPILOT_INTENTS.GET_RSVP_INFO };
   }
@@ -9882,6 +9926,20 @@ const WeddyActions = {
     },
     getUncontractedSuppliers(){
       return (state.suppliers||[]).filter(s=>s.status!=='contratado').map(s=>s.name).filter(Boolean);
+    },
+    // Achado (Set 2026): visão geral, para quando a pergunta menciona
+    // fornecedores sem ser específica o suficiente para nenhuma das
+    // leituras acima (ver GET_SUPPLIER_OVERVIEW em classifyCopilotIntent).
+    getSupplierOverview(){
+      const list = state.suppliers||[];
+      const contratados = list.filter(s=>s.status==='contratado').length;
+      return {
+        total: list.length,
+        contratados,
+        porContratar: list.length - contratados,
+        totalOrcado: list.reduce((sum,s)=>sum+(Number(s.valorTotal)||0), 0),
+        totalPago: list.reduce((sum,s)=>sum+supplierPaidTotal(s), 0)
+      };
     },
     getPaymentsThisMonth(){
       const now = new Date();
@@ -10312,6 +10370,13 @@ async function respondeAssistente(pergunta){
     }
     case I.NEEDS_CLARIFICATION:
       return ta('cpNeedsClarification');
+    case I.GET_APP_FEATURES:
+      return ta('cpAppFeatures');
+    case I.GET_SUPPLIER_OVERVIEW: {
+      const info = WeddyActions.read.getSupplierOverview();
+      if(!info.total) return ta('cpNoSuppliers');
+      return ta('cpSupplierOverview')(info.total, info.contratados, info.porContratar, fmtEUR(info.totalOrcado), fmtEUR(info.totalPago));
+    }
     default:
       return ta('cpDemoFallback');
   }
