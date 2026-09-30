@@ -5916,6 +5916,33 @@ function viewInicio(){
 // Calendar) com cadeado por cima de quem ainda não é Premium, e uma faixa
 // "Tornar Premium" por baixo que só aparece enquanto não houver subscrição
 // ativa — desaparece e os azulejos ficam normais assim que ficar ativa.
+// Achado ao vivo (Rita, Set 2026): mesmo com as caixas dos ícones todas ao
+// mesmo tamanho (26x26, SVG a 20x20) e a tile-title toda à mesma altura
+// (ver .premium-hub-tile-title acima), os 6 ícones continuavam a parecer
+// desalinhados — porque cada um foi desenhado à mão dentro do seu
+// viewBox="0 0 24 24" com um "peso visual" diferente: medido no ícone real
+// (getBBox), o envelope só preenche 58% da altura do viewBox enquanto o
+// triângulo de aviso preenche 69% e não está centrado da mesma forma — por
+// isso um parece maior/mais para baixo que o outro mesmo com o SVG à volta
+// do mesmo tamanho. reframedIcon() recorta uma CÓPIA do viewBox de cada
+// ícone (nunca o ICONS partilhado, que continua igual nos outros sítios da
+// app) para o desenho ficar sempre com o mesmo tamanho relativo e
+// centrado — só usado nesta grelha, onde os 6 ficam lado a lado e a
+// diferença salta à vista.
+function reframedIcon(svgString, box){
+  return svgString.replace(/viewBox="[^"]*"/, `viewBox="${box.x0} ${box.y0} ${box.s} ${box.s}"`);
+}
+// x0/y0/s calculados a partir do bbox real (getBBox) de cada ícone dentro
+// do seu viewBox 24x24 original, para o conteúdo desenhado ficar centrado
+// e a ocupar sempre ~74% do novo viewBox quadrado.
+const ICON_REFRAME = {
+  mail:    { x0:-0.16, y0:-0.16, s:24.32 },
+  chat:    { x0: 1.19, y0: 2.44, s:21.62 },
+  warn:    { x0:-0.84, y0:-1.09, s:25.68 },
+  camera:  { x0: 1.19, y0: 1.69, s:21.62 },
+  docnote: { x0:-0.66, y0: 0.34, s:24.32 },
+  calendar:{ x0:-0.16, y0:-0.16, s:24.32 }
+};
 function premiumHubTile(key, icon, title, desc, locked){
   return `
   <button class="premium-hub-tile${locked?' locked':''}" data-premiumgoto="${key}">
@@ -5943,12 +5970,12 @@ function premiumFeatureGrid(){
       </div>
     </button>
     <div class="premium-hub-grid">
-      ${premiumHubTile('rsvp', ICONS.mail, ta('rsvpTitle'), ta('premiumTileRSVP'), !subscribed)}
-      ${premiumHubTile('chatbot', ICONS.chat, ta('premiumTileChatbot'), ta('premiumTileChatbotDesc'), !subscribed)}
-      ${premiumHubTile('health', ICONS.warn||ICONS.checklist, ta('healthTitle'), ta('premiumTileHealthDesc'), !subscribed)}
-      ${premiumHubTile('memories', ICONS.camera, ta('memoriesTitle'), ta('premiumTileMemoriesDesc'), !subscribed)}
-      ${premiumHubTile('documentos', ICONS.docnote||ICONS.checklist, ta('documentsTitle'), ta('premiumTileDocumentosDesc'), !subscribed)}
-      ${premiumHubTile('googlecalendar', ICONS.calendar, ta('googleCalendarTitle'), ta('premiumTileGoogleCalDesc'), !subscribed)}
+      ${premiumHubTile('rsvp', reframedIcon(ICONS.mail, ICON_REFRAME.mail), ta('rsvpTitle'), ta('premiumTileRSVP'), !subscribed)}
+      ${premiumHubTile('chatbot', reframedIcon(ICONS.chat, ICON_REFRAME.chat), ta('premiumTileChatbot'), ta('premiumTileChatbotDesc'), !subscribed)}
+      ${premiumHubTile('health', ICONS.warn ? reframedIcon(ICONS.warn, ICON_REFRAME.warn) : ICONS.checklist, ta('healthTitle'), ta('premiumTileHealthDesc'), !subscribed)}
+      ${premiumHubTile('memories', reframedIcon(ICONS.camera, ICON_REFRAME.camera), ta('memoriesTitle'), ta('premiumTileMemoriesDesc'), !subscribed)}
+      ${premiumHubTile('documentos', ICONS.docnote ? reframedIcon(ICONS.docnote, ICON_REFRAME.docnote) : ICONS.checklist, ta('documentsTitle'), ta('premiumTileDocumentosDesc'), !subscribed)}
+      ${premiumHubTile('googlecalendar', reframedIcon(ICONS.calendar, ICON_REFRAME.calendar), ta('googleCalendarTitle'), ta('premiumTileGoogleCalDesc'), !subscribed)}
     </div>
     ${subscribed ? '' : `
     <div class="premium-hub-cta">
