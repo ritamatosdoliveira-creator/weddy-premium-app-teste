@@ -3858,7 +3858,11 @@ const APP_I18N = {
     reminderChannelLabel:'Canal', reminderMsgLabel:'Mensagem',
     reminderCharCount: n => `${n} caractere${n===1?'':'s'}`,
     reminderRecipientsLabel: n => `Vai para ${n} convidado${n===1?'':'s'}`,
-    reminderDefaultGreeting:'Olá! É só um lembrete simpático para confirmares presença 💌',
+    // Pedido direto da Rita (Set 2026): o texto por omissão passa a vir já
+    // com os marcadores escritos ([nome], [noivos], [link]), para dar para
+    // editar a toda a volta deles mas manter a personalização por convidado
+    // (ver fillReminderPlaceholders, que os substitui na hora de enviar).
+    reminderDefaultGreeting:'Olá [nome]! É só um lembrete simpático de [noivos] — ainda não recebemos a tua confirmação de presença. Podes confirmar aqui: [link]',
     autopilotBadgeLate:'Atrasado — o prazo já passou',
     autopilotBadgeDue:'Precisa de um lembrete',
     btnExportCSV:'Exportar CSV',
@@ -4427,7 +4431,10 @@ const APP_I18N = {
     // este botão agora só abre o WhatsApp pessoal do casal (via wa.me) com
     // a mensagem já escrita, e quem carrega em enviar são eles. Zero custo,
     // zero conta de negócio na Meta. Ver handler de #gp-send-whatsapp.
-    waManualMessage:(name, couple, link)=>`Olá ${name}! É só um lembrete simpático de ${couple} — ainda não recebemos a tua confirmação de presença. Podes confirmar aqui: ${link}`,
+    // "waManualMessage" (texto fixo) foi substituída por
+    // "reminderDefaultGreeting" + fillReminderPlaceholders (Set 2026,
+    // achado "este texto vem de onde?") — um único texto, editável, em vez
+    // de dois textos separados e desligados um do outro.
     gcalErrSyncTooSoon:'Acabaste de sincronizar — espera um bocadinho antes de tentar outra vez.',
     gcalErrSyncRunning:'Já há uma sincronização em curso — aguarda que termine.',
     gcalErrReauth:'A ligação ao Google Calendar expirou. Volta a ligar a tua conta Google.',
@@ -4953,7 +4960,7 @@ const APP_I18N = {
     reminderChannelLabel:'Channel', reminderMsgLabel:'Message',
     reminderCharCount: n => `${n} character${n===1?'':'s'}`,
     reminderRecipientsLabel: n => `Going to ${n} guest${n===1?'':'s'}`,
-    reminderDefaultGreeting:"Hi! Just a friendly reminder to confirm you're coming 💌",
+    reminderDefaultGreeting:"Hi [name]! Just a friendly reminder from [couple] — we haven't received your RSVP yet. You can confirm here: [link]",
     autopilotBadgeLate:'Late — the deadline has passed',
     autopilotBadgeDue:'Needs a reminder',
     btnExportCSV:'Export CSV',
@@ -5496,7 +5503,6 @@ const APP_I18N = {
     waErrUnavailable:'Couldn\'t reach WhatsApp right now. Try again shortly.',
     waErrNoPremium:'Sending WhatsApp reminders is a Weddy Premium feature.',
     waErrGeneric:'Couldn\'t send. Try again.',
-    waManualMessage:(name, couple, link)=>`Hi ${name}! Just a friendly reminder from ${couple} — we haven't received your RSVP yet. You can confirm here: ${link}`,
     gcalErrSyncTooSoon:'You just synced — wait a bit before trying again.',
     gcalErrSyncRunning:'A sync is already running — wait for it to finish.',
     gcalErrReauth:'The Google Calendar connection expired. Reconnect your Google account.',
@@ -8302,6 +8308,26 @@ function openWhatsAppLink(digits, texto){
   } else {
     window.location.href = waUrl;
   }
+}
+// Pedido direto da Rita (Set 2026, achado ao perguntar "este texto vem de
+// onde?"): o texto enviado pelo ícone individual do WhatsApp vinha sempre
+// de um modelo fixo no código (a antiga "waManualMessage"), completamente
+// à parte da caixa "Mensagem" editável que aparece no ecrã de lembretes —
+// ou seja, editar essa caixa não tinha NENHUM efeito no que era realmente
+// enviado pelo ícone. Corrigido: agora só existe UM texto (o que está,
+// nesse momento, escrito na caixa "Mensagem" — ou o texto por omissão,
+// "reminderDefaultGreeting", que já vem com estes marcadores escritos lá
+// dentro), e esta função substitui os marcadores pelos dados reais de
+// cada convidado. Aceita tanto os marcadores em português como em inglês
+// (para o texto por omissão de cada idioma), para o caso de a pessoa
+// copiar um marcador de um idioma para o texto do outro.
+function fillReminderPlaceholders(template, name, couple, link){
+  return (template||'')
+    .replace(/\[nome\]/gi, name||'')
+    .replace(/\[name\]/gi, name||'')
+    .replace(/\[noivos\]/gi, couple||'')
+    .replace(/\[couple\]/gi, couple||'')
+    .replace(/\[link\]/gi, link||'');
 }
 let rsvpResponses = {};
 let rsvpResponsesLoaded = false;
@@ -13191,7 +13217,12 @@ function bindHandlers(){
         const entry = found.item.entry;
         const couple = [weddingSettings.coupleName1, weddingSettings.coupleName2].filter(Boolean).join(' & ');
         const link = `${RSVP_BASE_URL}?g=${token}`;
-        const texto = ta('waManualMessage')(entry.name||'', couple, link);
+        // Pedido direto da Rita (Set 2026): usa o texto que está NESTE
+        // MOMENTO escrito na caixa "Mensagem" (rsvpAutopilotReview.msg, já
+        // atualizado a cada tecla pelo listener de "input" da caixa),
+        // nunca o modelo fixo de antes — para editar a caixa ter mesmo
+        // efeito no que é enviado a cada convidado.
+        const texto = fillReminderPlaceholders(rsvpAutopilotReview.msg, entry.name||'', couple, link);
         const digits = entry.phone.replace(/[^\d]/g, '');
         openWhatsAppLink(digits, texto);
         markRemindersSent([found]);
@@ -13209,9 +13240,21 @@ function bindHandlers(){
       const btn = e.currentTarget;
       btn.disabled = true;
       const { entries, msg } = rsvpAutopilotReview;
-      const finalMsg = (msgInput? msgInput.value.trim() : msg) || ta('reminderDefaultGreeting');
-      const linhas = entries.map(({item, token})=>`${item.name}: ${RSVP_BASE_URL}?g=${token}`);
-      const texto = `${finalMsg}\n\n${linhas.join('\n')}`;
+      const template = (msgInput? msgInput.value.trim() : msg) || ta('reminderDefaultGreeting');
+      // Pedido direto da Rita (Set 2026): agora que o texto tem marcadores
+      // ([nome], [noivos], [link]), um único texto genérico partilhado por
+      // todos os convidados deixava esses marcadores por preencher e
+      // visíveis tal e qual ("Olá [nome]!...") em vez de substituídos —
+      // por isso este "copiar" passa a gerar um bloco JÁ PERSONALIZADO por
+      // convidado (separados por "---", fáceis de copiar um de cada vez),
+      // em vez de uma mensagem genérica seguida de uma lista nua de
+      // "Nome: link".
+      const couple = [weddingSettings.coupleName1, weddingSettings.coupleName2].filter(Boolean).join(' & ');
+      const blocos = entries.map(({item, token})=>{
+        const link = `${RSVP_BASE_URL}?g=${token}`;
+        return fillReminderPlaceholders(template, item.name||'', couple, link);
+      });
+      const texto = blocos.join('\n\n---\n\n');
       try{
         await navigator.clipboard.writeText(texto);
       }catch(err){
@@ -13990,7 +14033,10 @@ document.getElementById('gp-send-whatsapp').addEventListener('click', ()=>{
   }
   const couple = [weddingSettings.coupleName1, weddingSettings.coupleName2].filter(Boolean).join(' & ');
   const link = `${RSVP_BASE_URL}?g=${entry.rsvpToken}`;
-  const texto = ta('waManualMessage')(entry.name||'', couple, link);
+  // Este envio rápido (a partir da ficha do convidado) não tem nenhuma
+  // caixa de mensagem editável por perto — usa sempre o texto por
+  // omissão (já com os marcadores [nome]/[noivos]/[link] preenchidos).
+  const texto = fillReminderPlaceholders(ta('reminderDefaultGreeting'), entry.name||'', couple, link);
   const digits = entry.phone.replace(/[^\d]/g, '');
   // Fase 9.3.2 (Set 2026): ver openWhatsAppLink — evita a Custom Tab do
   // Chrome que ficava presa em branco na app Android.
