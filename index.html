@@ -14010,11 +14010,22 @@ function openRSVPAutopilotModal(entries){
   const wrap = document.createElement('div');
   wrap.id = 'rsvp-autopilot-modal';
   wrap.className = 'rsvp-qr-modal';
-  const rows = entries.map(({item, bucket})=>`
-    <div class="list-row" style="padding:8px 0;">
+  // Pedido da Rita (Set 2026): além do "preparar e copiar" em massa, dar
+  // também a opção de mandar logo aqui, um a um, por wa.me — para quem já
+  // tem telefone + consentimento de WhatsApp dado. Mesma funcionalidade e
+  // mesma regra de acesso (Weddy Premium) do botão individual na ficha do
+  // convidado; só a via de acesso é que é diferente (aqui, em lote).
+  const canWa = hasActiveSubscription();
+  const rows = entries.map(({item, bucket, token})=>{
+    const entry = item.entry;
+    const waReady = canWa && !!(entry.phone && token && entry.communicationPreferences && entry.communicationPreferences.whatsapp && entry.communicationPreferences.whatsapp.optedIn);
+    return `
+    <div class="list-row" style="padding:8px 0;" data-autopilot-row="${escapeHTML(token||'')}">
       <span style="width:8px; height:8px; border-radius:50%; background:${bucket==='late'?'#C0523F':'#D8A657'}; flex-shrink:0;"></span>
       <div style="flex:1;">${escapeHTML(item.name)}</div>
-    </div>`).join('');
+      ${waReady ? `<button type="button" class="btn-cancel" data-autopilot-wa-send="${escapeHTML(token)}" style="padding:4px 10px; font-size:12px; flex-shrink:0;">WhatsApp</button>` : ''}
+    </div>`;
+  }).join('');
   const defaultMsg = ta('reminderDefaultGreeting');
   wrap.innerHTML = `
     <div class="rsvp-qr-card" style="max-width:380px; max-height:85vh; overflow-y:auto;">
@@ -14038,6 +14049,26 @@ function openRSVPAutopilotModal(entries){
   document.body.appendChild(wrap);
   document.getElementById('rsvp-autopilot-close').addEventListener('click', closeRSVPAutopilotModal);
   wrap.addEventListener('click', e=>{ if(e.target===wrap) closeRSVPAutopilotModal(); });
+  // Botão "WhatsApp" por linha: mesma lógica do botão individual da ficha
+  // do convidado (wa.me, zero API da Meta) — abre já a mensagem escrita e
+  // marca só aquele convidado como lembrado, sem afetar os restantes nem
+  // fechar o modal, para o casal poder ir despachando um a um.
+  wrap.querySelectorAll('[data-autopilot-wa-send]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const token = btn.getAttribute('data-autopilot-wa-send');
+      const found = entries.find(e=>e.token===token);
+      if(!found) return;
+      const entry = found.item.entry;
+      const couple = [weddingSettings.coupleName1, weddingSettings.coupleName2].filter(Boolean).join(' & ');
+      const link = `${RSVP_BASE_URL}?g=${token}`;
+      const texto = ta('waManualMessage')(entry.name||'', couple, link);
+      const digits = entry.phone.replace(/[^\d]/g, '');
+      window.open(`https://wa.me/${digits}?text=${encodeURIComponent(texto)}`, '_blank');
+      markRemindersSent([found]);
+      btn.disabled = true;
+      btn.textContent = ta('waSentOk');
+    });
+  });
   // O canal (Email/SMS) é só uma preferência visual guardada com o lembrete
   // — o envio em si continua a ser sempre "preparar e copiar", como a Rita
   // confirmou; não há nenhuma integração real de email/SMS a acionar aqui.
