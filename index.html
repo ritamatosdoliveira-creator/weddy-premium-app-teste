@@ -252,7 +252,15 @@ html{
 .premium-hub-tile-icon svg{ width:20px; height:20px; display:block; }
 .premium-hub-tile-lock{ width:26px; height:26px; color:var(--ink-soft); opacity:.65; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
 .premium-hub-tile-lock svg{ width:13px; height:13px; display:block; }
-.premium-hub-tile-title{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:14.5px; color:var(--ink); }
+/* Achado ao vivo (Rita, Set 2026): títulos com tamanhos diferentes
+   ("Chatbot" numa linha, "Weddy Memories"/"Documentos do casamento" a
+   quebrar para duas) faziam a descrição de cada azulejo começar numa
+   altura diferente — a grelha ficava toda com o mesmo tamanho de linha
+   (o CSS Grid estica todas as células da mesma fila), mas por dentro o
+   texto não alinhava. Reserva-se sempre o espaço de 2 linhas para o
+   título, quebrando ou não, para a descrição começar sempre no mesmo
+   sítio em todos os azulejos. */
+.premium-hub-tile-title{ font-family:'Cormorant Garamond',serif; font-weight:600; font-size:14.5px; color:var(--ink); line-height:1.25; min-height:2.5em; display:flex; align-items:flex-start; }
 .premium-hub-tile-desc{ font-size:10.3px; color:var(--ink-soft); margin-top:3px; line-height:1.3; }
 .premium-hub-tile.locked .premium-hub-tile-title, .premium-hub-tile.locked .premium-hub-tile-desc{ opacity:.55; }
 .premium-hub-cta{ margin-top:12px; padding:13px 14px; border-radius:16px; background:rgba(255,255,255,0.55); display:flex; flex-wrap:wrap; align-items:center; gap:10px; }
