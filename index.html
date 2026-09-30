@@ -16182,6 +16182,17 @@ function exportToPDF(){
 
 function flushPendingSave(){
   if(!FIREBASE_READY || !auth || !auth.currentUser || !currentWeddingId) return Promise.resolve();
+  // Rede de segurança (Set 2026, incidente de perda de dados real): "state"
+  // começa sempre como seedData() (casamento em branco) enquanto a 1ª
+  // sincronização com o Firestore (attachFirestoreSync/onSnapshot) ainda não
+  // chegou. Se qualquer coisa disparar uma gravação NESSE intervalo — por
+  // exemplo, esta função a ser chamada mesmo antes de recarregar por causa
+  // de uma atualização da app (ver showUpdateBanner) — "state" ainda é o
+  // molde vazio, e gravá-lo apaga o casamento verdadeiro no Firestore. Já
+  // existia uma rede assim para os dados que CHEGAM do Firestore
+  // (looksLikeDataLoss, em attachFirestoreSync), mas faltava o equivalente
+  // para os dados que SAEM — esta linha fecha essa lacuna.
+  if(!firstSyncDone) return Promise.resolve();
   clearTimeout(saveTimer);
   return CURRENT_DOC().set({
     settings: weddingSettings,
@@ -16217,6 +16228,10 @@ function pushRemoteImmediate(){
   if(!FIREBASE_READY || !auth || !auth.currentUser || !currentWeddingId){
     return Promise.reject(new Error('not-ready'));
   }
+  // Ver o comentário em flushPendingSave(): nunca gravar "state" antes da
+  // 1ª sincronização real com o Firestore, para não apagar dados verdadeiros
+  // com o casamento em branco (seedData()) que "state" começa por ser.
+  if(!firstSyncDone) return Promise.reject(new Error('first-sync-pending'));
   clearTimeout(saveTimer);
   return CURRENT_DOC().set({
     settings: weddingSettings,
@@ -16251,6 +16266,10 @@ function logMassPropagationFailures(type, failedTokens){
 }
 function pushRemote(confirmToast){
   if(!FIREBASE_READY || !auth || !auth.currentUser || !currentWeddingId) return;
+  // Ver o comentário em flushPendingSave(): nunca gravar "state" antes da
+  // 1ª sincronização real com o Firestore, para não apagar dados verdadeiros
+  // com o casamento em branco (seedData()) que "state" começa por ser.
+  if(!firstSyncDone) return;
   clearTimeout(saveTimer);
   saveTimer = setTimeout(()=>{
     CURRENT_DOC().set({
