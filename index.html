@@ -781,6 +781,12 @@ html{
 .rsvp-nav-row-desc{ font-size:12px; color:var(--ink-soft); margin-top:2px; }
 .rsvp-nav-row-chev{ color:var(--ink-soft); flex-shrink:0; opacity:.6; }
 .rsvp-nav-row-chev svg{ width:16px; height:16px; }
+/* Botão de WhatsApp e marca de "já enviado" nas linhas do cartão de revisão
+   do Autopilot (ver autopilotReviewCardHtml). Sem isto, o SVG (sem
+   width/height próprios) usava o tamanho intrínseco por omissão do browser
+   (300x150) dentro de uma caixa de 32x32 — ficava cortado pelo overflow do
+   ".list-group" à volta e, na prática, invisível. */
+.autopilot-row-icon svg{ width:18px; height:18px; display:block; }
 /* Editor de "Perguntas personalizadas" (Concierge FAQ) — lista de cartões
    com interruptor on/off por pergunta. */
 .faq-card{ margin:0 16px 10px; padding:12px 14px; background:var(--card); border:1px solid var(--line); border-radius:14px; box-shadow:var(--shadow); }
@@ -8288,6 +8294,12 @@ let rsvpGroupSelection = [];
 // "hub" de navegação em vez de uma página única com tudo — rsvpSubScreen
 // guarda em que sub-ecrã estamos (null = ecrã principal do hub).
 let rsvpSubScreen = null; // null | 'deadline' | 'info' | 'faq' | 'respostas'
+// Achado ao vivo (Rita, Set 2026): o botão "voltar" de dentro de "Respostas
+// dos convidados" ia sempre para o hub (Convidados RSVP), mesmo quando se
+// tinha entrado ali a partir de "Prazo para responder" — devia voltar para
+// onde se estava. Guarda o sub-ecrã de onde se veio, para o botão "voltar"
+// (data-defback) o poder repor em vez de assumir sempre null.
+let rsvpSubScreenReturnTo = null;
 // Edição de perguntas frequentes (Concierge): null = nenhuma a editar,
 // 'new' = a criar uma nova, ou o índice (número) da pergunta existente.
 let rsvpFaqEditingIndex = null;
@@ -11825,6 +11837,12 @@ function bindHandlers(){
       if(target !== activeTab) collapseAllSections();
       closeAllSheets();
       activeTab = target;
+      // Achado ao vivo (Rita, Set 2026): sair de "Prazo para responder" pela
+      // barra de baixo (ex: ir a Convidados adicionar um telefone) deixava a
+      // revisão do Autopilot aberta com a lista antiga — ao voltar, "Preparar
+      // lembretes" tinha de ser tocado de novo para refletir o telefone/
+      // consentimento recém-adicionados. Fechar aqui garante esse refresh.
+      rsvpAutopilotReview = null;
       _origRender();
     });
   });
@@ -12367,6 +12385,8 @@ function bindHandlers(){
       const key = e.currentTarget.dataset.defgoto;
       definicoesSection = key;
       rsvpSubScreen = null;
+      rsvpSubScreenReturnTo = null;
+      rsvpAutopilotReview = null;
       // Fase Feedback (Set 2026): começar sempre com o ecrã "Reporta um
       // problema" limpo — evita mostrar (e reenviar sem querer) capturas de
       // ecrã de uma visita anterior a este ecrã que nunca chegaram a ser
@@ -12390,8 +12410,12 @@ function bindHandlers(){
   });
   document.querySelectorAll('[data-rsvpgoto]').forEach(el=>{
     el.addEventListener('click', e=>{
+      rsvpSubScreenReturnTo = rsvpSubScreen;
       rsvpSubScreen = e.currentTarget.dataset.rsvpgoto;
       rsvpFaqEditingIndex = null;
+      // Sair de "Prazo para responder" fecha a revisão do Autopilot, se
+      // estivesse aberta — ver comentário em startRSVPAutopilotReview.
+      rsvpAutopilotReview = null;
       _origRender();
     });
   });
@@ -12410,6 +12434,8 @@ function bindHandlers(){
       activeTab = 'definicoes';
       definicoesSection = key;
       rsvpSubScreen = null;
+      rsvpSubScreenReturnTo = null;
+      rsvpAutopilotReview = null;
       if(key==='rsvp') setRSVPSeenCount(countRSVPResponded());
       _origRender();
     });
@@ -12420,9 +12446,12 @@ function bindHandlers(){
       // regressa ao hub (não sai logo de "Convites RSVP" para o menu geral
       // de Definições).
       if(definicoesSection==='rsvp' && rsvpSubScreen){
-        if(rsvpSubScreen==='faq'){ rsvpSubScreen = 'info'; }
-        else { rsvpSubScreen = null; }
+        // Volta para onde se veio (ex: "Prazo para responder", se foi de lá
+        // que se entrou em "Respostas"), em vez de assumir sempre o hub.
+        rsvpSubScreen = rsvpSubScreenReturnTo;
+        rsvpSubScreenReturnTo = null;
         rsvpFaqEditingIndex = null;
+        rsvpAutopilotReview = null;
         _origRender();
         return;
       }
@@ -14193,8 +14222,8 @@ function autopilotReviewCardHtml(){
     <div class="list-row" style="padding:8px 0;" data-autopilot-row="${escapeHTML(token||'')}">
       <span style="width:8px; height:8px; border-radius:50%; background:${bucket==='late'?'#C0523F':'#D8A657'}; flex-shrink:0;"></span>
       <div style="flex:1;">${escapeHTML(item.name)}</div>
-      ${waReady ? `<button type="button" class="btn-cancel" data-autopilot-wa-send="${escapeHTML(token)}" aria-label="WhatsApp" style="padding:6px; width:32px; height:32px; display:flex; align-items:center; justify-content:center; flex-shrink:0; color:#25D366;">${ICONS.whatsapp}</button>` : ''}
-      ${already ? `<span style="width:32px; height:32px; display:flex; align-items:center; justify-content:center; flex-shrink:0; color:var(--ink-soft);">${ICONS.check}</span>` : ''}
+      ${waReady ? `<button type="button" class="btn-cancel autopilot-row-icon" data-autopilot-wa-send="${escapeHTML(token)}" aria-label="WhatsApp" style="padding:6px; width:32px; height:32px; display:flex; align-items:center; justify-content:center; flex-shrink:0; color:#25D366;">${ICONS.whatsapp}</button>` : ''}
+      ${already ? `<span class="autopilot-row-icon" style="width:32px; height:32px; display:flex; align-items:center; justify-content:center; flex-shrink:0; color:var(--ink-soft);">${ICONS.check}</span>` : ''}
     </div>`;
   }).join('');
   return `
