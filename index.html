@@ -11318,7 +11318,15 @@ function viewDefinicoes(){
 // aqui — Definições fica só com esta entrada para gerir a subscrição em si.
 function viewDefSubscricao(){
   if(!hasActiveSubscription()) return viewDefPremiumLocked(ta('subscriptionTitle'));
-  const plan = (currentSubscription && currentSubscription.plan) || ta('subscriptionDefaultPlanName');
+  // Correção (Set 2026, achado ao vivo pela Rita): esta linha costumava
+  // mostrar o valor em bruto de currentSubscription.plan quando existia um
+  // (ex.: "premium-24m", um slug interno gravado no Firestore antes desta
+  // app ter um único plano fixo) — nunca foi pensado para aparecer tal e
+  // qual ao utilizador, e ficava dessincronizado do preço/duração mostrados
+  // logo a seguir sempre que esses textos mudassem (como aconteceu ao mudar
+  // de 24 para 12 meses: o slug antigo continuava a dizer "24m"). Agora
+  // mostra sempre o nome traduzido do plano, nunca o slug gravado.
+  const plan = ta('subscriptionDefaultPlanName');
   // Pedido direto da Rita (Fase 4, e reestruturação visual pedida em Set
   // 2026 para ficar igual ao mock "Manage subscription"): mostrar a
   // data-limite (SUBSCRIPTION_MAX_MONTHS, 12 meses) como um selo "Renova
