@@ -6634,7 +6634,7 @@ function viewGastos(){
         <div class="ring-center"><span class="num">${fmtPct(totalValue? Math.round(totalPaid/totalValue*100):0)}</span><span class="sub">${fmtEUR(totalPaid)}</span></div>
       </div>
       <div class="ring-breakdown">
-        <div><div class="n" id="pago-porpagar">${fmtEUR(totalValue-totalPaid)}</div><div class="l">${ta('lblToPay')}</div></div>
+        <div><div class="n" id="pago-porpagar">${fmtEUR(Math.max(0, totalValue-totalPaid))}</div><div class="l">${ta('lblToPay')}</div></div>
       </div>
     </div>
     <div class="ring-card">
@@ -13394,9 +13394,22 @@ function bindHandlers(){
 
   // Orçamento
   const inTotal = document.getElementById('in-total');
-  if(inTotal) inTotal.addEventListener('input', e=>{ state.budget.total = Math.max(0, Number(e.target.value)||0); softUpdateBudget(); });
+  if(inTotal){
+    inTotal.addEventListener('input', e=>{ state.budget.total = Math.max(0, Number(e.target.value)||0); softUpdateBudget(); });
+    // Fix (Out 2026, testes estranhos): escrever um valor negativo
+    // diretamente no teclado já era bem tratado no estado (ficava a 0,
+    // graças ao Math.max acima), mas o campo continuava a MOSTRAR o
+    // "-2500" escrito, dando a ideia de que o orçamento continuava
+    // negativo mesmo com as percentagens/donut já a refletir 0. Ao sair
+    // do campo, corrige o valor apresentado para bater certo com o
+    // estado real.
+    inTotal.addEventListener('change', e=>{ e.target.value = Math.round(Number(state.budget.total)||0); });
+  }
   const inGuests = document.getElementById('in-guests');
-  if(inGuests) inGuests.addEventListener('input', e=>{ state.budget.guestsEstimate = Math.max(0, Number(e.target.value)||0); softUpdateBudget(); });
+  if(inGuests){
+    inGuests.addEventListener('input', e=>{ state.budget.guestsEstimate = Math.max(0, Number(e.target.value)||0); softUpdateBudget(); });
+    inGuests.addEventListener('change', e=>{ e.target.value = Math.round(Number(state.budget.guestsEstimate)||0); });
+  }
   document.querySelectorAll('[data-catvalue]').forEach(inp=>{
     inp.addEventListener('input', e=>{
       const id = e.currentTarget.dataset.catvalue;
@@ -13838,7 +13851,7 @@ function softUpdateGastos(){
   if(pagoWrap) pagoWrap.innerHTML = donutSVG(totalValue? totalPaid/totalValue : 0, 'var(--sage-dark)', 92, 9)
     + `<div class="ring-center"><span class="num">${fmtPct(totalValue? Math.round(totalPaid/totalValue*100):0)}</span><span class="sub">${fmtEUR(totalPaid)}</span></div>`;
   const porPagar = document.getElementById('pago-porpagar');
-  if(porPagar) porPagar.textContent = fmtEUR(totalValue-totalPaid);
+  if(porPagar) porPagar.textContent = fmtEUR(Math.max(0, totalValue-totalPaid));
 
   const orcWrap = document.getElementById('orc-ring-wrap');
   if(orcWrap) orcWrap.innerHTML = donutSVG(budgetTotal? totalPaid/budgetTotal : 0, 'var(--gold)', 92, 9)
@@ -15073,8 +15086,28 @@ function bindSalaTableDrag(el){
     }
     const table = getTable(tableId);
     if(table){
-      table.x = Math.max(0, parseFloat(el.style.left)||0);
-      table.y = Math.max(0, parseFloat(el.style.top)||0);
+      let newX = Math.max(0, parseFloat(el.style.left)||0);
+      let newY = Math.max(0, parseFloat(el.style.top)||0);
+      // Fix (Out 2026, testes estranhos): ao largar uma mesa em cima de
+      // outra, não havia qualquer deteção de colisão — ficavam
+      // perfeitamente sobrepostas, a de baixo totalmente escondida e
+      // impossível de selecionar (o toque ia sempre para a mesa de cima).
+      // Tal como ensureTablePositions() já evita isto na colocação
+      // automática, aqui afasta-se a mesa largada até à distância mínima
+      // de qualquer outra, na direção de onde veio o arrasto.
+      const minDist = 108;
+      state.seating.tables.forEach(other=>{
+        if(other===table || typeof other.x!=='number' || typeof other.y!=='number') return;
+        const dx = newX-other.x, dy = newY-other.y;
+        const dist = Math.hypot(dx, dy);
+        if(dist < minDist){
+          const angle = dist > 0.01 ? Math.atan2(dy,dx) : (Math.random()*Math.PI*2);
+          newX = Math.max(0, other.x + Math.cos(angle)*minDist);
+          newY = Math.max(0, other.y + Math.sin(angle)*minDist);
+        }
+      });
+      table.x = newX;
+      table.y = newY;
     }
     render();
   }
