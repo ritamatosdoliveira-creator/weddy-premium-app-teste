@@ -17038,7 +17038,20 @@ function renderReconsentGate(user, onAccept){
 }
 function findOrCreateFlow(user, isRetry){
   renderLoading(ta('verifyingAccount'));
-  WEDDINGS().where('ownerEmails','array-contains', user.email.toLowerCase()).limit(1).get().then(qs=>{
+  // Correção (Out 2026, achada ao investigar um bug real com a Rita): esta
+  // consulta não tinha nenhum .orderBy(), e a Cloud Function resolveWeddingId
+  // (usada por createSubscriptionCheckout/stripeWebhook e outras) faz
+  // exatamente a mesma pergunta ao Firestore, também sem orderBy. Isso é
+  // inofensivo quando uma conta só tem UM casamento com este email — mas numa
+  // conta com mais do que um (ex.: contas de teste reutilizadas), o Firestore
+  // não garante que a app e a Cloud Function escolham sempre o mesmo dos
+  // vários — cada uma podia escolher um diferente em momentos diferentes.
+  // Foi exatamente isso que causou uma subscrição Stripe a ser ativada num
+  // casamento antigo em vez do que a app estava a mostrar. Acrescentar este
+  // orderBy (idêntico ao que também foi acrescentado em resolveWeddingId, do
+  // lado da Cloud Function) torna a escolha determinística: as duas partes
+  // concordam sempre em qual é "o" casamento desta conta.
+  WEDDINGS().where('ownerEmails','array-contains', user.email.toLowerCase()).orderBy(firebase.firestore.FieldPath.documentId()).limit(1).get().then(qs=>{
     if(!qs.empty){
       const weddingDoc = qs.docs[0];
       currentWeddingId = weddingDoc.id;
