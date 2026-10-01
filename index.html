@@ -3074,9 +3074,15 @@ function fmtFileSize(bytes){
 // para este caso concreto, e n continuava `null` até chegar a
 // n.toLocaleString(...), que `null` não tem. Number(n) primeiro garante
 // que isNaN(n) a seguir vê sempre um número (ou NaN), nunca null/undefined.
-function fmtEUR(n){ n=Number(n); if(isNaN(n)) n=0; return n.toLocaleString('pt-PT',{style:'currency',currency:'EUR',maximumFractionDigits:0}); }
+// Fix (Out 2026): usar moneyNum() aqui em vez de Number(n) nu — Number(true)
+// é 1 e Number(false) é 0, por isso um valor corrompido (ex: um booleano
+// gravado por engano num campo monetário) passava despercebido como "1€"
+// ou "0€" em vez de ser tratado como inválido. moneyNum() está definida
+// mais abaixo neste ficheiro, mas como é `function` (hoisted), já está
+// disponível aqui.
+function fmtEUR(n){ n=moneyNum(n); return n.toLocaleString('pt-PT',{style:'currency',currency:'EUR',maximumFractionDigits:0}); }
 function fmtPct(n){ n=Number(n); if(isNaN(n)||!isFinite(n)) n=0; return n>999 ? '999%+' : `${n}%`; }
-function fmtEUR2(n){ n=Number(n); if(isNaN(n)) n=0; return n.toLocaleString('pt-PT',{style:'currency',currency:'EUR',maximumFractionDigits:2}); }
+function fmtEUR2(n){ n=moneyNum(n); return n.toLocaleString('pt-PT',{style:'currency',currency:'EUR',maximumFractionDigits:2}); }
 function flagRequiredField(el){
   if(!el) return;
   el.classList.add('field-error');
@@ -3212,10 +3218,27 @@ function countConfirmed(side){
   });
   return n;
 }
-function totalExpenseValue(){ return state.expenses.reduce((s,e)=>s+(Number(e.value)||0),0); }
-function totalExpensePaid(){ return state.expenses.reduce((s,e)=>s+(Number(e.paid)||0),0); }
-function spentByCategory(id){ return state.expenses.filter(e=>e.category===id).reduce((s,e)=>s+(Number(e.value)||0),0); }
-function paidByCategory(id){ return state.expenses.filter(e=>e.category===id).reduce((s,e)=>s+(Number(e.paid)||0),0); }
+// Fix (Out 2026, bug reportado: "os valores pagos nas categorias não
+// batem certo com os gráficos e os movimentos"): encontrámos despesas de
+// teste em que e.paid tinha ficado guardado como o booleano `true` em vez
+// de um valor numérico (provavelmente de um import/seed antigo que usou
+// "paid" como uma bandeira "já está pago?" em vez do montante). Number(true)
+// é 1 e Number(false) é 0 — por isso `Number(e.paid)||0` transformava cada
+// uma dessas despesas, silenciosamente, num "1€ pago" que parecia um valor
+// real mas era lixo, e as somas por categoria deixavam de bater certo com
+// a lista de Movimentos (que mostra o valor literal do campo). moneyNum()
+// só aceita números e strings numéricas — qualquer outra coisa (incluindo
+// booleanos) conta como 0, tal como já acontecia quando o campo vinha
+// vazio ou undefined.
+function moneyNum(v){
+  if(typeof v === 'number') return isFinite(v) ? v : 0;
+  if(typeof v === 'string' && v.trim()!=='' && isFinite(Number(v))) return Number(v);
+  return 0;
+}
+function totalExpenseValue(){ return state.expenses.reduce((s,e)=>s+moneyNum(e.value),0); }
+function totalExpensePaid(){ return state.expenses.reduce((s,e)=>s+moneyNum(e.paid),0); }
+function spentByCategory(id){ return state.expenses.filter(e=>e.category===id).reduce((s,e)=>s+moneyNum(e.value),0); }
+function paidByCategory(id){ return state.expenses.filter(e=>e.category===id).reduce((s,e)=>s+moneyNum(e.paid),0); }
 // Usada para atribuir lugares às mesas — inclui todos os convidados de
 // todas as categorias, incluindo Crianças (pagantes ou não, têm lugar à
 // mesa na mesma). As crianças são guardadas como objeto {name,age,paying},
@@ -5726,7 +5749,7 @@ function getUpcomingPayments(){
   const now = new Date(new Date().toDateString());
   const list = [];
   state.expenses.forEach((e,i)=>{
-    const remaining = Math.max(0, Number(e.value)-Number(e.paid||0));
+    const remaining = Math.max(0, moneyNum(e.value)-moneyNum(e.paid));
     if(remaining>0 && e.dueDate){
       const days = Math.ceil((new Date(e.dueDate+'T00:00:00')-now)/86400000);
       if(days>=0 && days<=15) list.push({ label:e.desc||ta('defaultExpenseLabel'), amount:remaining, days, overdue:false });
@@ -6556,7 +6579,7 @@ function viewGastos(){
     const cat = catById(e.category);
     const catIdx = state.categories.findIndex(c=>c.id===e.category);
     const pair = CAT_COLOR_PAIRS[catIdx>=0?catIdx%CAT_COLOR_PAIRS.length:0];
-    const remaining = Math.max(0, Number(e.value)-Number(e.paid||0));
+    const remaining = Math.max(0, moneyNum(e.value)-moneyNum(e.paid));
     let dueWarn = '';
     if(remaining>0 && e.dueDate){
       const days = Math.ceil((new Date(e.dueDate+'T00:00:00') - new Date(new Date().toDateString())) / 86400000);
@@ -6576,7 +6599,7 @@ function viewGastos(){
         <span class="tag-pill" style="background:${pair.bg}; color:${pair.fg};">${cat?cat.name:'—'}</span>
       </div>
       <div class="exp-paid-row">
-        ${ta('labelPaidColon')} <input type="number" min="0" data-exp="paid|${i}" value="${e.paid||0}"> / ${fmtEUR(e.value)}
+        ${ta('labelPaidColon')} <input type="number" min="0" data-exp="paid|${i}" value="${moneyNum(e.paid)}"> / ${fmtEUR(e.value)}
       </div>
       <div class="exp-method-row">
         <span>${ta('labelMethod')}</span>
@@ -7810,7 +7833,7 @@ function migrateLegacySupplierPayments(){
   if(migrated){
     state.suppliers.forEach(s=>{
       const legacyTotal = (s.payments||[]).reduce((sum,p)=>sum+(Number(p.amount)||0),0);
-      const migratedTotal = state.expenses.filter(e=>e.supplierId===s.id && e.migratedFromSupplierPayment).reduce((sum,e)=>sum+(Number(e.paid)||0),0);
+      const migratedTotal = state.expenses.filter(e=>e.supplierId===s.id && e.migratedFromSupplierPayment).reduce((sum,e)=>sum+(moneyNum(e.paid)),0);
       if(Math.abs(legacyTotal - migratedTotal) > 0.001){
         console.error('[Weddy] Migração 6.1.1: total pago do fornecedor', s.id, 'não bate certo depois de migrar.', { legacyTotal, migratedTotal });
       }
@@ -7824,7 +7847,7 @@ function migrateLegacySupplierPayments(){
 // ter no próximo load, uma despesa equivalente). s.payments deixa de ser
 // lido pela UI — fica só como histórico bruto de compatibilidade.
 function supplierPaidTotal(s){
-  return (state.expenses||[]).filter(e=>e.supplierId===s.id).reduce((sum,e)=>sum+(Number(e.paid)||0),0);
+  return (state.expenses||[]).filter(e=>e.supplierId===s.id).reduce((sum,e)=>sum+(moneyNum(e.paid)),0);
 }
 // Fase 9.2 (Google Calendar — prazos) — a sincronização de "prazos de
 // pagamento" precisa de um identificador ESTÁVEL por despesa, para poder
@@ -7853,7 +7876,7 @@ function supplierCombinedPayments(s){
   return (state.expenses||[])
     .map((e,idx)=>({e,idx}))
     .filter(({e})=>e.supplierId===s.id)
-    .map(({e,idx})=>({ date:e.date, amount:Number(e.paid)||0, id:String(idx), desc:e.desc, migrated: !!e.migratedFromSupplierPayment }))
+    .map(({e,idx})=>({ date:e.date, amount:moneyNum(e.paid), id:String(idx), desc:e.desc, migrated: !!e.migratedFromSupplierPayment }))
     .sort((a,b)=>(b.date||'').localeCompare(a.date||''));
 }
 // Fase 6.1 — contrato do fornecedor: passa a ser guardado no Firestore
@@ -10047,7 +10070,7 @@ const WeddyActions = {
       const y = now.getFullYear(), m = now.getMonth();
       const list = [];
       state.expenses.forEach(e=>{
-        const remaining = Math.max(0, Number(e.value)-Number(e.paid||0));
+        const remaining = Math.max(0, moneyNum(e.value)-moneyNum(e.paid));
         if(remaining>0 && e.dueDate){
           const d = new Date(e.dueDate+'T00:00:00');
           if(d.getFullYear()===y && d.getMonth()===m) list.push({ label:e.desc||ta('defaultExpenseLabel'), amount:remaining, dueDate:e.dueDate });
@@ -10085,7 +10108,7 @@ const WeddyActions = {
       return (state.suppliers||[]).map(s=>{
         const contracted = Number(s.valorTotal)||0;
         if(!contracted) return null;
-        const budgeted = state.expenses.filter(e=>e.supplierId===s.id).reduce((sum,e)=>sum+(Number(e.value)||0),0);
+        const budgeted = state.expenses.filter(e=>e.supplierId===s.id).reduce((sum,e)=>sum+(moneyNum(e.value)),0);
         const diff = budgeted - contracted;
         if(Math.abs(diff) < 0.01) return null;
         return { name: s.name, contracted, budgeted, diff };
@@ -13858,7 +13881,7 @@ function softUpdateGastos(){
     + `<div class="ring-center"><span class="num">${fmtPct(budgetTotal? Math.round(totalPaid/budgetTotal*100):0)}</span><span class="sub">${fmtEUR(totalPaid)}</span></div>`;
 
   state.expenses.forEach((e,i)=>{
-    const remaining = Math.max(0, Number(e.value)-Number(e.paid||0));
+    const remaining = Math.max(0, moneyNum(e.value)-moneyNum(e.paid));
     const remEl = document.querySelector(`[data-dueremaining="${i}"]`);
     if(remEl) remEl.textContent = ta('remainingToPayLabel')(fmtEUR(remaining));
     const rowEl = document.querySelector(`[data-duerow="${i}"]`);
@@ -16312,16 +16335,16 @@ function exportToExcel(){
         xlCell(e.desc||'', c),
         xlCell(e.date ? formatDateShortPT(e.date) : '', cc),
         xlCell(cat?cat.name:'', c),
-        xlCell(Number(e.value)||0, m),
-        xlCell(Number(e.paid)||0, m),
-        xlCell(Math.max(0,(Number(e.value)||0)-(Number(e.paid)||0)), m),
+        xlCell(moneyNum(e.value), m),
+        xlCell(moneyNum(e.paid), m),
+        xlCell(Math.max(0, moneyNum(e.value)-moneyNum(e.paid)), m),
         xlCell(e.dueDate ? formatDateShortPT(e.dueDate) : '', cc),
         xlCell(e.method ? (EXPENSE_METHOD_LABELS[e.method]||e.method) : '', cc)
       ];
     });
     if(gastosDataRows.length){
-      const totalValor = state.expenses.reduce((s,e)=>s+(Number(e.value)||0),0);
-      const totalPago = state.expenses.reduce((s,e)=>s+(Number(e.paid)||0),0);
+      const totalValor = state.expenses.reduce((s,e)=>s+(moneyNum(e.value)),0);
+      const totalPago = state.expenses.reduce((s,e)=>s+(moneyNum(e.paid)),0);
       gastosDataRows.push([
         xlCell(ta('xlTotalLabel'), XL_STYLES.total), xlCell('', XL_STYLES.total), xlCell('', XL_STYLES.total),
         xlCell(totalValor, XL_STYLES.totalMoney), xlCell(totalPago, XL_STYLES.totalMoney),
@@ -16481,7 +16504,7 @@ function exportToPDF(){
 
   const gastosBody = state.expenses.length ? state.expenses.map(e=>{
     const cat = catById(e.category);
-    return [e.desc||'', cat?cat.name:'', fmtEUR(Number(e.value)||0), fmtEUR(Number(e.paid)||0), e.method ? (EXPENSE_METHOD_LABELS[e.method]||e.method) : '—'];
+    return [e.desc||'', cat?cat.name:'', fmtEUR(moneyNum(e.value)), fmtEUR(moneyNum(e.paid)), e.method ? (EXPENSE_METHOD_LABELS[e.method]||e.method) : '—'];
   }) : [[ta('xlEmptyExpenses'),'','','','']];
   addSection(ta('xlSheetExpenses'), [ta('xlColDescription'),ta('xlColCategory'),ta('xlColValue'),ta('xlColPaid'),ta('xlColMethod')], gastosBody);
 
